@@ -1,0 +1,76 @@
+[gd_scene format=3 uid="uid://x38648vxi1m4"]
+
+[ext_resource type="Script" uid="uid://dtq1vbas8uu4" path="res://scenes/overworld.gd" id="1_ow"]
+
+[node name="Overworld" type="Control" unique_id=191490666]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ow")
+
+[node name="Background" type="ColorRect" parent="." unique_id=1522317977]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.105882, 1, 1, 1)
+
+[node name="ShopPlaceholder" type="ColorRect" parent="." unique_id=1442380105]
+layout_mode = 0
+offset_left = 180.0
+offset_top = 270.0
+offset_right = 340.0
+offset_bottom = 430.0
+mouse_filter = 2
+color = Color(0.85, 0.2, 0.2, 1)
+
+[node name="ShopLabel" type="Label" parent="." unique_id=1961029197]
+layout_mode = 0
+offset_left = 180.0
+offset_top = 338.0
+offset_right = 340.0
+offset_bottom = 362.0
+text = "BLIMP (Shop)"
+horizontal_alignment = 1
+
+[node name="TrainingPlaceholder" type="ColorRect" parent="." unique_id=727390608]
+layout_mode = 0
+offset_left = 688.0
+offset_top = 270.0
+offset_right = 848.0
+offset_bottom = 430.0
+mouse_filter = 2
+color = Color(0.2, 0.6, 0.85, 1)
+
+[node name="TrainingLabel" type="Label" parent="." unique_id=254184972]
+layout_mode = 0
+offset_left = 688.0
+offset_top = 338.0
+offset_right = 848.0
+offset_bottom = 362.0
+text = "IGLOO (Training)"
+horizontal_alignment = 1
+
+[node name="CampaignPlaceholder" type="ColorRect" parent="." unique_id=2075484932]
+layout_mode = 0
+offset_left = 1060.0
+offset_top = 240.0
+offset_right = 1420.0
+offset_bottom = 460.0
+mouse_filter = 2
+color = Color(0.9, 0.9, 0.95, 1)
+
+[node name="CampaignLabel" type="Label" parent="." unique_id=1759193343]
+layout_mode = 0
+offset_left = 1060.0
+offset_top = 338.0
+offset_right = 1420.0
+offset_bottom = 362.0
+text = "EXPANSE (Campaign Battle)"
+horizontal_alignment = 1

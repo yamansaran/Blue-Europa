@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="Ability" format=3 uid="uid://cstrike000001"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"strike"
+display_name = "Strike"
+description = "Deal 100 + Vigor physical damage to the target."
+max_points = 1
+max_equipped = 2
+kind = 0
+target = 0
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 0
+base_power = 100.0
+power_per_point = 0.0
+scaling_stat = &"vigor"
+scaling_mult = 1.0
+requires = Array[StringName]([])
+required_level = 1

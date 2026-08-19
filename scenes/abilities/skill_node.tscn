@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://bjjgmfgsykrc7"]
+
+[ext_resource type="Script" path="res://scenes/abilities/skill_node.gd" id="1_node"]
+
+[node name="SkillNode" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 68.0
+offset_bottom = 68.0
+script = ExtResource("1_node")
+radius = 34.0

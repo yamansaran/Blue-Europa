@@ -1,0 +1,46 @@
+[gd_scene format=3 uid="uid://bn5q18xklfhqp"]
+
+[node name="Node2D" type="Node2D"]
+
+[node name="SkillTreeRed" type="GraphEdit" parent="."]
+offset_left = 20.0
+offset_top = 15.0
+offset_right = 550.0
+offset_bottom = 524.0
+scroll_offset = Vector2(-311, -363)
+
+[node name="GraphNode" type="GraphNode" parent="SkillTreeRed"]
+layout_mode = 0
+offset_left = 113.0
+offset_top = 244.0
+offset_right = 149.0
+offset_bottom = 299.0
+mouse_filter = 1
+position_offset = Vector2(-198, -119)
+
+[node name="GraphNode2" type="GraphNode" parent="SkillTreeRed"]
+layout_mode = 0
+offset_left = 174.0
+offset_top = 176.0
+offset_right = 230.0
+offset_bottom = 231.0
+mouse_filter = 1
+position_offset = Vector2(-137, -187)
+
+[node name="GraphNode3" type="GraphNode" parent="SkillTreeRed"]
+layout_mode = 0
+offset_left = 252.0
+offset_top = 199.0
+offset_right = 297.0
+offset_bottom = 309.0
+mouse_filter = 1
+position_offset = Vector2(-59, -164)
+
+[node name="GraphNode4" type="GraphNode" parent="SkillTreeRed"]
+layout_mode = 0
+offset_left = 354.0
+offset_top = 216.0
+offset_right = 396.0
+offset_bottom = 271.0
+mouse_filter = 1
+position_offset = Vector2(43, -147)

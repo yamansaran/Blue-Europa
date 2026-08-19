@@ -1,0 +1,170 @@
+[gd_scene load_steps=5 format=3 uid="uid://cskilltreesmpl1"]
+
+[ext_resource type="Script" path="res://scenes/abilities/skill_tree.gd" id="1_tree"]
+[ext_resource type="Script" path="res://scenes/abilities/skill_node.gd" id="2_node"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/do_thing.tres" id="3_ability"]
+
+[sub_resource type="StyleBoxFlat" id="sb_info"]
+bg_color = Color(0.08, 0.08, 0.09, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.8, 0.75, 0.55, 0.9)
+corner_radius_top_left = 3.8
+corner_radius_top_right = 3.8
+corner_radius_bottom_right = 3.8
+corner_radius_bottom_left = 3.8
+
+[node name="SkillTree" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_tree")
+
+[node name="Keter" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "keter"
+center_position = Vector2(300.0, 74.0)
+size_class = 2
+
+[node name="Chokmah" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "chokmah"
+links = Array[NodePath]([NodePath("../Keter")])
+center_position = Vector2(440.0, 184.0)
+size_class = 1
+
+[node name="Binah" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "binah"
+links = Array[NodePath]([NodePath("../Keter"), NodePath("../Chokmah")])
+center_position = Vector2(160.0, 184.0)
+size_class = 1
+
+[node name="Chesed" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "chesed"
+links = Array[NodePath]([NodePath("../Chokmah")])
+center_position = Vector2(440.0, 324.0)
+size_class = 1
+
+[node name="Gevurah" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "gevurah"
+links = Array[NodePath]([NodePath("../Binah"), NodePath("../Chesed")])
+center_position = Vector2(160.0, 324.0)
+size_class = 1
+
+[node name="Tiferet" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "tiferet"
+links = Array[NodePath]([NodePath("../Keter"), NodePath("../Chesed"), NodePath("../Gevurah"), NodePath("../Binah"), NodePath("../Chokmah")])
+center_position = Vector2(300.0, 394.0)
+size_class = 1
+
+[node name="Netzach" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "netzach"
+links = Array[NodePath]([NodePath("../Chesed"), NodePath("../Tiferet")])
+center_position = Vector2(440.0, 464.0)
+size_class = 1
+
+[node name="Hod" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "hod"
+links = Array[NodePath]([NodePath("../Gevurah"), NodePath("../Tiferet"), NodePath("../Netzach")])
+center_position = Vector2(160.0, 464.0)
+size_class = 1
+
+[node name="Yesod" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "yesod"
+links = Array[NodePath]([NodePath("../Tiferet"), NodePath("../Netzach"), NodePath("../Hod")])
+center_position = Vector2(300.0, 534.0)
+size_class = 1
+
+[node name="Malkuth" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+script = ExtResource("2_node")
+ability = ExtResource("3_ability")
+node_id = "malkuth"
+links = Array[NodePath]([NodePath("../Yesod"), NodePath("../Netzach"), NodePath("../Hod")])
+center_position = Vector2(300.0, 644.0)
+size_class = 1
+
+[node name="InfoBox" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 0
+offset_right = 240.0
+offset_bottom = 120.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("sb_info")
+
+[node name="Margin" type="MarginContainer" parent="InfoBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="InfoBox/Margin"]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="NameLabel" type="Label" parent="InfoBox/Margin/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Do Thing"
+
+[node name="PointsLabel" type="Label" parent="InfoBox/Margin/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1.0, 0.86, 0.35, 1)
+theme_override_font_sizes/font_size = 14
+text = "Points: 0 / 1"
+
+[node name="DescLabel" type="Label" parent="InfoBox/Margin/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.85, 0.85, 0.85, 1)
+theme_override_font_sizes/font_size = 14
+text = "do a thing"
+autowrap_mode = 3
