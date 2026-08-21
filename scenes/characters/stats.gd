@@ -84,6 +84,15 @@ const MITIGATION_STIFFNESS_DEFAULT := 0.025
 ## adds this to the per-turn spirit change from any spirit-regen/-drain buffs.
 const SPIRIT_REGEN_DEFAULT := 15.0
 
+# --- action points tuning ---------------------------------------------------
+## The per-turn action-point BUDGET every character starts each of its turns with.
+## It is a real (hidden) base stat ("action_points"), so it is per-character
+## OVERRIDABLE via a spec (stats:{"action_points": ...}) and BUFFABLE like anything
+## else. Combat refills a unit to this value at the start of its turn and spends
+## each ability's action_cost from it; when it hits 0 the turn ends. It is NOT a
+## major, so it never shows in the attribute screen or the debug stat panel.
+const ACTION_POINTS_DEFAULT := 1.0
+
 # ----------------------------------------------------------------------------
 ## A fresh copy of the full base-stat dictionary (majors + hp_base + every
 ## element's pierce/defence/amp). Always returns a NEW dict so callers can mutate
@@ -96,6 +105,7 @@ static func default_base_stats() -> Dictionary:
 	d["crit_damage_mult"] = CRIT_DAMAGE_BASE_DEFAULT
 	d["mitigation_stiffness"] = MITIGATION_STIFFNESS_DEFAULT
 	d["spirit_regen"] = SPIRIT_REGEN_DEFAULT
+	d["action_points"] = ACTION_POINTS_DEFAULT
 	for e in REAL_ELEMENTS:
 		d[e + "_pierce"] = PIERCE_DEFAULT
 		d[e + "_defense"] = DEFENSE_DEFAULT

@@ -34,6 +34,13 @@ var _round: int = 1
 ## Player ability cooldowns: ability id (String) -> turns remaining. Shared by
 ## reference with the wheel so it can grey out abilities that are cooling down.
 var _player_cooldowns: Dictionary = {}
+
+## Action-point economy. The player refills to their `action_points` stat at the
+## start of each turn; every ability spends its action_cost; when the budget hits
+## 0 the turn auto-ends. AP is a HIDDEN stat — no UI, per the design. Floats are
+## compared with a small epsilon so 1.0 - 1.0 reliably reads as "spent".
+const AP_EPSILON := 0.0001
+var _player_ap: float = 0.0
 var _end_turn_btn: Button = null
 var _turn_label: Label = null
 
@@ -351,6 +358,10 @@ func _on_wheel_slot_selected(index: int, ability_id: String) -> void:
 	if ability.spirit_cost() > 0 and CombatBuffs.is_silenced(_player.body):
 		print("[combat] %s is silenced — cannot use %s." % [_player.unit_name, ability.display_name])
 		return
+	# action-point gate: block an ability the player can't afford this turn.
+	if ability.action_cost > _player_ap + AP_EPSILON:
+		print("[combat] not enough action points for %s (need %.2f, have %.2f)." % [ability.display_name, ability.action_cost, _player_ap])
+		return
 	_use_ability(ability, tgt)
 
 func _get_ability(id: String) -> Ability:
@@ -416,11 +427,17 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 		_player.spend_spirit(sp_cost)
 	if ability.cooldown > 0:
 		_player_cooldowns[String(ability.id)] = ability.cooldown
+	# spend action points; when the budget is exhausted the player's turn ends.
+	_player_ap = maxf(0.0, _player_ap - ability.action_cost)
 	_sync_wheel_state()
 	_check_victory()
 	# A "when struck" reaction (e.g. thorns) can damage the player during their own
 	# action, so check for defeat here too — not only on the turn tick.
 	_check_defeat()
+	# Out of action points -> auto-end the turn (unless the fight just ended).
+	if not _battle_over and _player_ap <= AP_EPSILON:
+		print("[combat] %s is out of action points — ending turn." % _player.unit_name)
+		end_player_turn()
 
 ## Apply the ability's buff (if any) to `tgt`. Returns true if a buff was applied.
 func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter) -> bool:
@@ -517,9 +534,17 @@ func _win() -> void:
 func _start_battle() -> void:
 	_round = 1
 	_phase = Phase.PLAYER
+	_reset_player_ap()
 	_refresh_turn_ui()
 	_sync_wheel_state()
 	print("[combat] battle start — %d units. Turn %d (player's turn)." % [_units.size(), _round])
+
+## Refill the player's action-point budget to their (buffable) action_points stat.
+func _reset_player_ap() -> void:
+	if _player and _player.body:
+		_player_ap = maxf(0.0, _player.body.get_effective("action_points"))
+	else:
+		_player_ap = 0.0
 
 ## Player ends their turn: run the (do-nothing) enemy turns, then begin the next
 ## player turn — which is where the start-of-turn tick happens.
@@ -548,6 +573,7 @@ func _begin_player_turn() -> void:
 	if _battle_over:
 		return
 	_phase = Phase.PLAYER
+	_reset_player_ap()
 	_refresh_turn_ui()
 	_sync_wheel_state()
 	print("[combat] Turn %d — player's turn." % _round)

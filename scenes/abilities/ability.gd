@@ -37,6 +37,14 @@ enum CostType {
 ## How many wheel slots a single copy of this ability may occupy at once.
 @export_range(1, 10) var max_equipped: int = 2
 
+# --- action-point economy ---------------------------------------------------
+## Action points this ability spends from the caster's per-turn budget (default
+## 1.0). A character starts each turn with its `action_points` stat (default 1.0),
+## so by default one ability ends the turn; set this to 0.0 for a free action, or
+## higher for an ability that eats more of the budget. Existing .tres pick up the
+## default automatically (no need to re-save them).
+@export var action_cost: float = 1.0
+
 # --- Sonny-style combat stats ----------------------------------------------
 @export var kind: Kind = Kind.ATTACK
 @export var target: Target = Target.ENEMY
