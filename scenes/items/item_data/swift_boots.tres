@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Item" format=3 uid="uid://citemswiftboots"]
+
+[ext_resource type="Script" path="res://scenes/items/item.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"swift_boots"
+display_name = "Swift Boots"
+description = "Light boots that quicken your step in battle."
+flavor = "They practically walk themselves."
+item_type = "Boots"
+level = 2
+rarity = 1
+equippable = true
+slot = 5
+stats = {
+"alacrity": 3.0
+}
+value = 50
+sell_value = 0

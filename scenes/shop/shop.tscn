@@ -2,18 +2,9 @@
 
 [ext_resource type="Script" path="res://scenes/shop/shop.gd" id="1_s"]
 
-[node name="Shop" type="Node2D"]
+[node name="Shop" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 script = ExtResource("1_s")
-
-[node name="Background" type="ColorRect" parent="."]
-offset_right = 1536.0
-offset_bottom = 864.0
-color = Color(0.0, 0.25, 0.1, 1)
-
-[node name="Label" type="Label" parent="."]
-offset_left = 600.0
-offset_top = 400.0
-offset_right = 936.0
-offset_bottom = 464.0
-text = "Shop (placeholder) — click / Esc to return"
-horizontal_alignment = 1

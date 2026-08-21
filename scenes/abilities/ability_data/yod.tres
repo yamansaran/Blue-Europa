@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://beab010"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"yod"
+display_name = "Yod"
+description = "Canal Yod (placeholder)."
+max_points = 1
+kind = 0
+target = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 0
+base_power = 0.0
+power_per_point = 0.0
+requires = Array[StringName]([])
+required_level = 1

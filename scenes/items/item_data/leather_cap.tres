@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Item" format=3 uid="uid://citemleathercap"]
+
+[ext_resource type="Script" path="res://scenes/items/item.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"leather_cap"
+display_name = "Leather Cap"
+description = "Simple boiled-leather headgear. Better than nothing."
+flavor = ""
+item_type = "Helmet"
+level = 1
+rarity = 0
+equippable = true
+slot = 1
+stats = {
+"vitality": 2.0
+}
+value = 25
+sell_value = 0

@@ -43,9 +43,42 @@ const PIERCE_DEFAULT := 15.0
 const DEFENSE_DEFAULT := 45.0
 const AMP_DEFAULT := 0.0
 
+# --- element colours --------------------------------------------------------
+## The per-element display palette now lives in its OWN file — element_colors.gd
+## (class_name ElementColors) — so the colours are defined in exactly one place
+## and every system (the damage numbers, the minor-attribute bars, anything
+## future) reads them from there. This wrapper is kept only so existing callers
+## of Stats.element_color() keep working; new code should call
+## ElementColors.color(element) directly.
+static func element_color(element: String) -> Color:
+	return ElementColors.color(element)
+
 # --- derived-HP tuning ------------------------------------------------------
 const HP_BASE_DEFAULT := 100.0      # flat floor, buffable like any stat
 const HP_PER_VITALITY := 10.0       # max_hp = hp_base + vitality * HP_PER_VITALITY
+
+# --- crit tuning ------------------------------------------------------------
+## Every character's base critical-damage multiplier. Read from the body's
+## base_stats by CombatCrit; a character/enemy spec can override it via
+## stats:{"crit_damage_mult": ...}. The ability's crit_damage_mult and any
+## buff/debuff crit-damage bonus multiply on top of this.
+const CRIT_DAMAGE_BASE_DEFAULT := 3.0
+
+# --- mitigation tuning ------------------------------------------------------
+## Per-character mitigation STIFFNESS (the `m` in the mitigation curve). It scales
+## the (resistance - pierce) gap fed into the squash, so a SMALL value makes the
+## curve gentle — the first points of net pierce/resist aren't oppressively strong
+## and later points keep mattering (the curve saturates slowly). Read from the
+## body's base_stats by CombatMitigation; overridable per character via
+## stats:{"mitigation_stiffness": ...}.
+const MITIGATION_STIFFNESS_DEFAULT := 0.025
+
+# --- spirit regen tuning ----------------------------------------------------
+## Spirit every character restores at the START of each of its turns, by default.
+## It is a real base stat ("spirit_regen"), so it is per-character OVERRIDABLE via
+## a spec (stats:{"spirit_regen": ...}) and BUFFABLE like anything else. Combat
+## adds this to the per-turn spirit change from any spirit-regen/-drain buffs.
+const SPIRIT_REGEN_DEFAULT := 15.0
 
 # ----------------------------------------------------------------------------
 ## A fresh copy of the full base-stat dictionary (majors + hp_base + every
@@ -56,6 +89,9 @@ static func default_base_stats() -> Dictionary:
 	for k in MAJOR_DEFAULTS:
 		d[k] = float(MAJOR_DEFAULTS[k])
 	d["hp_base"] = HP_BASE_DEFAULT
+	d["crit_damage_mult"] = CRIT_DAMAGE_BASE_DEFAULT
+	d["mitigation_stiffness"] = MITIGATION_STIFFNESS_DEFAULT
+	d["spirit_regen"] = SPIRIT_REGEN_DEFAULT
 	for e in REAL_ELEMENTS:
 		d[e + "_pierce"] = PIERCE_DEFAULT
 		d[e + "_defense"] = DEFENSE_DEFAULT

@@ -2,6 +2,13 @@ extends Control
 ## Combat engine, rev6. Every combatant is a CharacterBase: the player is a clone
 ## of Character.body; allies/enemies are built from BattleState specs via
 ## CharacterBase.from_spec(). Damage routes through CombatMath.resolve_damage().
+##
+## BUFF/DEBUFF UPDATE: combat now runs a real per-turn cycle so buffs, DoT, spirit
+## regen, and cooldowns can tick. An "End Turn" button hands off to the enemies
+## and starts the player's next turn; at the START of each player turn every unit
+## processes its buffs (DoT damage, spirit regen/drain, duration countdown +
+## expiry) and the player's ability cooldowns tick down. HEAL / BUFF / DEBUFF
+## abilities now resolve (via CombatBuffs + BuffLibrary), not just ATTACK.
 
 const TOP_FRAC := 0.15
 const MID_FRAC := 0.70
@@ -22,6 +29,19 @@ var _player: BattleCharacter = null
 var _open_target: BattleCharacter = null
 var _battle_over: bool = false
 
+# --- turn cycle --------------------------------------------------------
+var _round: int = 1
+## Player ability cooldowns: ability id (String) -> turns remaining. Shared by
+## reference with the wheel so it can grey out abilities that are cooling down.
+var _player_cooldowns: Dictionary = {}
+var _end_turn_btn: Button = null
+var _turn_label: Label = null
+
+# --- debug (training fight only) ---------------------------------------
+var _debug_panel: DebugStatPanel = null
+var _debug_target: BattleCharacter = null
+var _debug_button: Button = null
+
 enum Phase { PLAYER, RESOLVING }
 var _phase: int = Phase.PLAYER
 
@@ -32,6 +52,8 @@ func _ready() -> void:
 	_build_health_bars()
 	_place_units()
 	_build_wheel()
+	_build_turn_ui()
+	_build_debug_ui()
 	_start_battle()
 
 # ---- layout -----------------------------------------------------------
@@ -109,6 +131,8 @@ func _load_units() -> void:
 		if typeof(e) == TYPE_DICTIONARY:
 			var eu := _spawn_unit(CharacterBase.from_spec(e), TEAM_ENEMY, str(e.get("ai", "none")))
 			eu.size_scale = float(e.get("size_scale", 1.0))
+			if _debug_target == null:
+				_debug_target = eu   # first enemy = the training dummy in debug fights
 
 func _spawn_unit(body: CharacterBase, team: int, ai: String) -> BattleCharacter:
 	var u := BattleCharacter.new()
@@ -146,6 +170,9 @@ func _training_dummy_spec() -> Dictionary:
 	}
 
 # ---- health bars ------------------------------------------------------
+## Each unit gets a health bar AND a visible buff strip. The strip sits on the
+## RIGHT of the bar for the player party, on the LEFT for enemies (they mirror in
+## from their side of the screen). Bar+strip live in a small per-unit HBox.
 func _build_health_bars() -> void:
 	var party_box := HBoxContainer.new()
 	party_box.add_theme_constant_override("separation", 10)
@@ -159,13 +186,26 @@ func _build_health_bars() -> void:
 	_healthbar_row.add_child(enemy_box)
 
 	for u in _units:
+		var cell := HBoxContainer.new()
+		cell.add_theme_constant_override("separation", 4)
+
 		var hb := BattleHealthBar.new()
-		if u.team == TEAM_ENEMY:
-			enemy_box.add_child(hb)
-		else:
-			party_box.add_child(hb)
 		hb.setup(u.unit_name, u.get_max_hp(), u.get_hp(), u.get_max_spirit(), u.get_spirit(), u.body.model_color())
 		u.health_bar = hb
+
+		var bb := BuffBar.new()
+
+		if u.team == TEAM_ENEMY:
+			bb.setup(u.body, BuffBar.SIDE_LEFT)
+			cell.add_child(bb)      # buffs on the LEFT of the enemy's bar
+			cell.add_child(hb)
+			enemy_box.add_child(cell)
+		else:
+			cell.add_child(hb)
+			bb.setup(u.body, BuffBar.SIDE_RIGHT)
+			cell.add_child(bb)      # buffs on the RIGHT of the party's bar
+			party_box.add_child(cell)
+		u.buff_bar = bb
 
 # ---- placement --------------------------------------------------------
 func _place_units() -> void:
@@ -195,6 +235,84 @@ func _build_wheel() -> void:
 	_wheel.set_mode_use()
 	_battle_panel.add_child(_wheel)
 	_wheel.slot_selected.connect(_on_wheel_slot_selected)
+	_sync_wheel_state()
+
+# ---- turn UI (End Turn button + turn counter) -------------------------
+func _build_turn_ui() -> void:
+	_end_turn_btn = Button.new()
+	_end_turn_btn.text = "End Turn"
+	_end_turn_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_end_turn_btn.anchor_left = 1.0
+	_end_turn_btn.anchor_right = 1.0
+	_end_turn_btn.anchor_top = 0.5
+	_end_turn_btn.anchor_bottom = 0.5
+	_end_turn_btn.offset_left = -150.0
+	_end_turn_btn.offset_right = -18.0
+	_end_turn_btn.offset_top = -22.0
+	_end_turn_btn.offset_bottom = 22.0
+	_end_turn_btn.pressed.connect(end_player_turn)
+	_bottom_panel.add_child(_end_turn_btn)
+
+	_turn_label = Label.new()
+	_turn_label.text = "Turn %d" % _round
+	_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_turn_label.add_theme_font_size_override("font_size", 15)
+	_turn_label.anchor_left = 1.0
+	_turn_label.anchor_right = 1.0
+	_turn_label.anchor_top = 0.0
+	_turn_label.anchor_bottom = 0.0
+	_turn_label.offset_left = -150.0
+	_turn_label.offset_right = -18.0
+	_turn_label.offset_top = 6.0
+	_turn_label.offset_bottom = 28.0
+	_bottom_panel.add_child(_turn_label)
+
+# ---- debug (training fight only) --------------------------------------
+## True when this is the IGLOO training fight (GameManager.go_to_training set
+## battle_id "training" with is_campaign false). Only then is the debug UI built.
+func _is_training() -> bool:
+	return typeof(BattleState) != TYPE_NIL and BattleState.battle_id == "training" and not BattleState.is_campaign
+
+## A small "DEBUG" button centred at the top (over the gap between the party and
+## enemy health bars) that toggles the dummy-stat editor. Training fight only.
+func _build_debug_ui() -> void:
+	if not _is_training() or _debug_target == null:
+		return
+	_debug_button = Button.new()
+	_debug_button.text = "DEBUG"
+	_debug_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	_debug_button.anchor_left = 0.5
+	_debug_button.anchor_right = 0.5
+	_debug_button.anchor_top = 0.0
+	_debug_button.anchor_bottom = 0.0
+	_debug_button.offset_left = -38.0
+	_debug_button.offset_right = 38.0
+	_debug_button.offset_top = 4.0
+	_debug_button.offset_bottom = 30.0
+	_debug_button.pressed.connect(_toggle_debug_panel)
+	add_child(_debug_button)   # added last -> drawn above the health-bar band
+
+func _toggle_debug_panel() -> void:
+	if _debug_target == null or _debug_target.body == null:
+		return
+	if _debug_panel == null:
+		_debug_panel = DebugStatPanel.new()
+		add_child(_debug_panel)
+		_debug_panel.applied.connect(_on_debug_applied)
+	if _debug_panel.visible:
+		_debug_panel.hide()
+	else:
+		# Re-read the dummy's current values each time it opens.
+		_debug_panel.setup(_debug_target.body, _debug_target.unit_name)
+		_debug_panel.popup_centered(Vector2i(480, 600))
+
+func _on_debug_applied() -> void:
+	if _debug_target != null:
+		_debug_target.refresh_bar()
+		_debug_target.refresh_buffs()
+	print("[combat][debug] applied new stats to %s (max_hp=%d)" % [
+		_debug_target.unit_name if _debug_target else "?",
+		_debug_target.get_max_hp() if _debug_target else 0])
 
 func _on_unit_hovered(_u: BattleCharacter) -> void:
 	# Hover only reveals the unit's floating name/level label (done inside
@@ -202,12 +320,13 @@ func _on_unit_hovered(_u: BattleCharacter) -> void:
 	pass
 
 func _on_unit_clicked(u: BattleCharacter) -> void:
-	if _battle_over:
+	if _battle_over or _phase != Phase.PLAYER:
 		return
 	_open_wheel_for(u)   # clicking any unit (player / ally / enemy) opens the wheel
 
 func _open_wheel_for(u: BattleCharacter) -> void:
 	_open_target = u
+	_sync_wheel_state()
 	_wheel.open_over(u.position + u.size * 0.5)
 
 func _on_wheel_slot_selected(index: int, ability_id: String) -> void:
@@ -215,10 +334,24 @@ func _on_wheel_slot_selected(index: int, ability_id: String) -> void:
 	var ability := _get_ability(ability_id)
 	if ability == null or _open_target == null:
 		return
-	if not _valid_target(ability, _open_target):
-		print("[combat] %s can't target %s" % [ability.display_name, _open_target.unit_name])
+	# SELF-targeted abilities always act on the player, whatever was clicked.
+	var tgt := _open_target
+	if ability.target == Ability.Target.SELF and _player:
+		tgt = _player
+	if not _valid_target(ability, tgt):
+		print("[combat] %s can't target %s" % [ability.display_name, tgt.unit_name])
 		return
-	_use_ability(ability, _open_target)
+	# gameplay gates (also enforced visually by the wheel graying)
+	if CombatBuffs.is_stunned(_player.body):
+		print("[combat] %s is stunned and cannot act." % _player.unit_name)
+		return
+	if _ability_on_cooldown(ability_id):
+		print("[combat] %s is on cooldown (%d turns)." % [ability.display_name, _cooldown_left(ability_id)])
+		return
+	if ability.spirit_cost() > 0 and CombatBuffs.is_silenced(_player.body):
+		print("[combat] %s is silenced — cannot use %s." % [_player.unit_name, ability.display_name])
+		return
+	_use_ability(ability, tgt)
 
 func _get_ability(id: String) -> Ability:
 	var db := get_node_or_null("/root/AbilityDB")
@@ -235,28 +368,98 @@ func _valid_target(ability: Ability, tgt: BattleCharacter) -> bool:
 		Ability.Target.ALL_ALLIES: return true
 	return true
 
+## Resolve a used ability. Spirit cost is checked/spent for EVERY kind now; the
+## effect branches on kind. On a successful active use the ability's cooldown is
+## started and the wheel state is re-synced.
 func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
-	if ability.kind == Ability.Kind.ATTACK:
-		var sp_cost := ability.spirit_cost()
-		if _player and _player.get_spirit() < sp_cost:
-			print("[combat] not enough spirit for %s (need %d, have %d)" % [ability.display_name, sp_cost, _player.get_spirit()])
-			return
-		var atk: CharacterBase = _player.body if _player else null
-		var dmg := CombatMath.resolve_damage(atk, tgt.body, ability)
-		if _player:
-			_player.spend_spirit(sp_cost)
-		tgt.take_damage(dmg)
-		print("[combat] %s hits %s for %d %s damage" % [ability.display_name, tgt.unit_name, dmg, ability.element_key()])
-		_check_victory()
-	else:
-		print("[combat] %s used on %s (kind %d not yet implemented)" % [ability.display_name, tgt.unit_name, ability.kind])
+	var sp_cost := ability.spirit_cost()
+	if _player and _player.get_spirit() < sp_cost:
+		print("[combat] not enough spirit for %s (need %d, have %d)" % [ability.display_name, sp_cost, _player.get_spirit()])
+		return
+
+	var acted := false
+	match ability.kind:
+		Ability.Kind.ATTACK:
+			var atk: CharacterBase = _player.body if _player else null
+			var hit := CombatMath.resolve(atk, tgt.body, ability)
+			var dmg := int(hit["damage"])
+			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]))
+			# an attack may also drop a buff/debuff on the target (transient effect)
+			_maybe_apply_buff(ability, tgt)
+			var crit_tag := " (CRIT x%.2f)" % float(hit["crit_mult"]) if hit["is_crit"] else ""
+			print("[combat] %s hits %s for %d %s damage%s [chance %.0f%%]" % [
+				ability.display_name, tgt.unit_name, dmg, ability.element_key(), crit_tag, float(hit["crit_chance"])])
+			acted = true
+
+		Ability.Kind.HEAL:
+			var caster: CharacterBase = _player.body if _player else null
+			var heal_amt := int(round(ability.compute_heal(caster.effective_stats() if caster else {})))
+			var restored := tgt.heal(heal_amt)
+			print("[combat] %s heals %s for %d." % [ability.display_name, tgt.unit_name, restored])
+			acted = true
+
+		Ability.Kind.BUFF, Ability.Kind.DEBUFF:
+			if _maybe_apply_buff(ability, tgt):
+				print("[combat] %s applied %s to %s." % [ability.display_name, String(ability.applies_buff), tgt.unit_name])
+				acted = true
+			else:
+				print("[combat] %s has no buff to apply (applies_buff is blank / unknown)." % ability.display_name)
+
+		_:
+			print("[combat] %s used on %s (kind %d not yet implemented)" % [ability.display_name, tgt.unit_name, ability.kind])
+
+	if not acted:
+		return
+	if _player and sp_cost > 0:
+		_player.spend_spirit(sp_cost)
+	if ability.cooldown > 0:
+		_player_cooldowns[String(ability.id)] = ability.cooldown
+	_sync_wheel_state()
+	_check_victory()
+
+## Apply the ability's buff (if any) to `tgt`. Returns true if a buff was applied.
+func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter) -> bool:
+	var bid := String(ability.applies_buff)
+	if bid == "":
+		return false
+	var caster: CharacterBase = _player.body if _player else null
+	var entry := BuffLibrary.build(bid, caster, tgt.body)
+	if entry.is_empty():
+		return false
+	CombatBuffs.apply(tgt.body, entry)
+	tgt.refresh_bar()      # a max-HP / max-Spirit buff can move the ceilings
+	tgt.refresh_buffs()
+	return true
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if _wheel and _wheel.visible:
 			_wheel.close()
 
-# ---- victory ----------------------------------------------------------
+# ---- cooldowns --------------------------------------------------------
+func _ability_on_cooldown(id: String) -> bool:
+	return int(_player_cooldowns.get(id, 0)) > 0
+
+func _cooldown_left(id: String) -> int:
+	return int(_player_cooldowns.get(id, 0))
+
+func _decrement_player_cooldowns() -> void:
+	for id in _player_cooldowns.keys():
+		var v := int(_player_cooldowns[id]) - 1
+		if v <= 0:
+			_player_cooldowns.erase(id)
+		else:
+			_player_cooldowns[id] = v
+
+## Hand the wheel the current caster body + the (shared) cooldown map so it can
+## grey out silenced / cooling-down / stunned abilities.
+func _sync_wheel_state() -> void:
+	if _wheel and _wheel.has_method("set_use_state"):
+		_wheel.set_use_state(_player.body if _player else null, _player_cooldowns)
+	if _wheel:
+		_wheel.queue_redraw()
+
+# ---- victory / defeat -------------------------------------------------
 func _check_victory() -> void:
 	if _battle_over:
 		return
@@ -264,6 +467,18 @@ func _check_victory() -> void:
 		if u.team == TEAM_ENEMY and u.is_alive():
 			return
 	_win()
+
+func _check_defeat() -> void:
+	if _battle_over:
+		return
+	if _player == null:
+		return
+	if not _player.is_alive():
+		_battle_over = true
+		if _wheel:
+			_wheel.close()
+		print("[combat] defeat — %s has fallen." % _player.unit_name)
+		_leave_combat()
 
 func _win() -> void:
 	_battle_over = true
@@ -288,26 +503,79 @@ func _win() -> void:
 	if typeof(GameManager) != TYPE_NIL and GameManager.has_method("go_to_victory"):
 		GameManager.go_to_victory()
 
-# ---- turn skeleton ----------------------------------------------------
+# ---- turn cycle -------------------------------------------------------
 func _start_battle() -> void:
+	_round = 1
 	_phase = Phase.PLAYER
-	print("[combat] battle start — %d units. Player's turn." % _units.size())
+	_refresh_turn_ui()
+	_sync_wheel_state()
+	print("[combat] battle start — %d units. Turn %d (player's turn)." % [_units.size(), _round])
 
+## Player ends their turn: run the (do-nothing) enemy turns, then begin the next
+## player turn — which is where the start-of-turn tick happens.
 func end_player_turn() -> void:
 	if _phase != Phase.PLAYER or _battle_over:
 		return
 	_phase = Phase.RESOLVING
+	if _wheel:
+		_wheel.close()
+	_refresh_turn_ui()
 	for u in _units:
 		if u.team == TEAM_PLAYER:
 			continue
 		_take_ai_turn(u)
+	if _battle_over:
+		return
+	_begin_player_turn()
+
+## Begin a new player turn: advance the round, process every unit's start-of-turn
+## effects (DoT, spirit regen/drain, duration countdown + expiries), tick the
+## player's cooldowns, then hand control back.
+func _begin_player_turn() -> void:
+	_round += 1
+	_process_turn_start_all()
+	_decrement_player_cooldowns()
+	if _battle_over:
+		return
 	_phase = Phase.PLAYER
+	_refresh_turn_ui()
+	_sync_wheel_state()
+	print("[combat] Turn %d — player's turn." % _round)
+
+## Every living unit processes its buffs for the new turn.
+func _process_turn_start_all() -> void:
+	for u in _units:
+		if u.body == null or not u.is_alive():
+			continue
+		var report := CombatBuffs.collect_turn_start(u.body)
+		# 1) DoT damage (routed through take_damage so it animates + handles death)
+		for d in report["dots"]:
+			if u.is_alive():
+				u.take_damage(int(d["amount"]), str(d["element"]), false)
+		# 2) spirit: default per-turn regen + this unit's buff/debuff spirit delta
+		if u.is_alive():
+			var regen := int(round(u.body.get_effective("spirit_regen")))
+			var delta := int(round(float(report["spirit_delta"])))
+			u.change_spirit(regen + delta)
+		# 3) on-expire events for anything that fell off this turn
+		for e in report["expired"]:
+			CombatBuffs.fire_expiry(u, e)
+		u.refresh_bar()
+		u.refresh_buffs()
+	_check_victory()
+	_check_defeat()
 
 func _take_ai_turn(u: BattleCharacter) -> void:
 	if u.ai == "none":
 		print("[combat] %s does nothing." % u.unit_name)
 	else:
 		print("[combat] %s has no AI yet, passing." % u.unit_name)
+
+func _refresh_turn_ui() -> void:
+	if _turn_label:
+		_turn_label.text = "Turn %d" % _round
+	if _end_turn_btn:
+		_end_turn_btn.disabled = _battle_over or _phase != Phase.PLAYER
 
 # ---- leaving ----------------------------------------------------------
 func _unhandled_input(event: InputEvent) -> void:

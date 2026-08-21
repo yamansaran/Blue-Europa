@@ -13,26 +13,33 @@ const SKILL_TREE_Y_OFFSET := -12.0
 
 @onready var _skill_tree_container: Control = $SkillTreePanel/SkillTreeContainer
 @onready var _skill_tree_placeholder: Label = $SkillTreePanel/SkillTreePlaceholder
-@onready var _points_label: Label = $OverviewPanel/SkillPointsLabel
 @onready var _respec_button: Button = $SkillTreePanel/RespecButton
 
 var _wheel: ActionWheel
 var _pool_list: VBoxContainer
 var _attr_list: VBoxContainer
 
+## Overview readout labels (name / level / skill points / attribute points).
+var _ov_name: Label
+var _ov_level: Label
+var _ov_skill: Label
+var _ov_attr: Label
+## Remembered minor-attribute view (Pierce/Defense/Amp) so it survives refreshes.
+var _minor_metric: int = 0
+
 
 func _ready() -> void:
 	_respec_button.pressed.connect(_on_respec_pressed)
 	var ch := _character()
-	if ch and not ch.changed.is_connected(_update_points):
-		ch.changed.connect(_update_points)
+	if ch and not ch.changed.is_connected(_refresh_overview):
+		ch.changed.connect(_refresh_overview)
 	if ch and not ch.changed.is_connected(_refresh_pool):
 		ch.changed.connect(_refresh_pool)
 	if ch and not ch.changed.is_connected(_refresh_attributes):
 		ch.changed.connect(_refresh_attributes)
-	_update_points()
 	if default_skill_tree_scene != null:
 		load_skill_tree(default_skill_tree_scene)
+	_build_overview_readout()
 	_build_combat_action_ui()
 	_build_attributes_readout()
 	_build_close_button()
@@ -62,12 +69,69 @@ func _on_close_pressed() -> void:
 		GameManager.go_to_overworld()
 
 
-func _update_points() -> void:
+# ---------------------------------------------------- overview readout
+## The OverviewPanel (top-left) shows, in order: the character's name, level,
+## skill points available, and attribute points available. Built in code so it
+## stays in sync with Character.changed.
+func _build_overview_readout() -> void:
+	var panel: Control = get_node_or_null("OverviewPanel")
+	if panel == null:
+		return
+	# shrink the "OVERVIEW" title to a top strip so the readout has room below
+	var title := panel.get_node_or_null("Title")
+	if title is Control:
+		(title as Control).anchor_top = 0.0
+		(title as Control).anchor_bottom = 0.22
+
+	var vbox := VBoxContainer.new()
+	vbox.anchor_left = 0.06
+	vbox.anchor_top = 0.26
+	vbox.anchor_right = 0.94
+	vbox.anchor_bottom = 0.98
+	vbox.offset_left = 0.0
+	vbox.offset_top = 0.0
+	vbox.offset_right = 0.0
+	vbox.offset_bottom = 0.0
+	vbox.add_theme_constant_override("separation", 6)
+	panel.add_child(vbox)
+
+	_ov_name = Label.new()
+	_ov_name.add_theme_font_size_override("font_size", 22)
+	_ov_name.add_theme_color_override("font_color", Color(0.95, 0.95, 0.95))
+	_ov_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(_ov_name)
+
+	_ov_level = Label.new()
+	_ov_level.add_theme_font_size_override("font_size", 16)
+	_ov_level.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
+	_ov_level.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(_ov_level)
+
+	_ov_skill = Label.new()
+	_ov_skill.add_theme_font_size_override("font_size", 16)
+	_ov_skill.add_theme_color_override("font_color", Color(1.0, 0.86, 0.35))
+	_ov_skill.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(_ov_skill)
+
+	_ov_attr = Label.new()
+	_ov_attr.add_theme_font_size_override("font_size", 16)
+	_ov_attr.add_theme_color_override("font_color", Color(1.0, 0.86, 0.35))
+	_ov_attr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(_ov_attr)
+
+	_refresh_overview()
+
+
+func _refresh_overview() -> void:
 	var ch := _character()
-	if ch:
-		_points_label.text = "Skill Points: %d" % ch.skill_points
-	else:
-		_points_label.text = "Skill Points: --"
+	if _ov_name:
+		_ov_name.text = str(ch.char_name) if ch else "--"
+	if _ov_level:
+		_ov_level.text = ("Level %d" % int(ch.level)) if ch else "Level --"
+	if _ov_skill:
+		_ov_skill.text = ("Skill Points: %d" % int(ch.skill_points)) if ch else "Skill Points: --"
+	if _ov_attr:
+		_ov_attr.text = ("Attribute Points: %d" % int(ch.get_attribute_points())) if ch else "Attribute Points: --"
 
 
 func _on_respec_pressed() -> void:
@@ -122,8 +186,7 @@ func _refresh_attributes() -> void:
 	if body == null:
 		return
 
-	# --- attribute points + derived vitals ---
-	_add_header("Attribute Points: %d" % ch.get_attribute_points(), Color(1.0, 0.86, 0.35))
+	# --- derived vitals (attribute-points counter now lives in the Overview panel) ---
 	_add_stat_line("Max HP", body.max_hp())
 	_add_stat_line("Spirit (max)", body.max_spirit())
 
@@ -138,13 +201,14 @@ func _refresh_attributes() -> void:
 	respec.pressed.connect(func(): ch.respec_attributes())
 	_attr_list.add_child(respec)
 
-	# --- minor stats (read-only) ---
-	_add_header("RESIST  (Pierce / Def / Amp)", Color(1.0, 0.8, 0.75))
-	for element in Stats.REAL_ELEMENTS:
-		var p := body.get_effective_int(Stats.pierce_key(element))
-		var d := body.get_effective_int(Stats.defense_key(element))
-		var a := body.get_effective_int(Stats.amp_key(element))
-		_add_stat_line(element.capitalize(), 0, "%d / %d / %d" % [p, d, a])
+	# --- minor stats (bar graphs, read-only) ---
+	_add_header("RESIST", Color(1.0, 0.8, 0.75))
+	var bars := MinorAttrBars.new()
+	bars.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_attr_list.add_child(bars)
+	bars.set_metric(_minor_metric)
+	bars.set_body(body)
+	bars.metric_changed.connect(func(m): _minor_metric = m)
 
 
 func _add_header(text: String, col: Color) -> void:

@@ -2,7 +2,7 @@ extends RefCounted
 class_name CampaignModuleC1
 ## Campaign 1 — the start node. Clearing it forks into 2A or 2B.
 ## To customise this campaign later, edit build() (its enemies, fights, training
-## pool and extra data all live here in the module).
+## pool, SHOP STOCK and extra data all live here in the module).
 
 static func build() -> Campaign:
 	var c := Campaign.ice_campaign(
@@ -11,6 +11,8 @@ static func build() -> Campaign:
 		["c2a", "c2b"],
 		Vector2(0.10, 0.5),
 		Color(0.10, 0.55, 0.75))
+	# This campaign's shop stock — a list of Item ids (from scenes/items/item_data/).
+	c.shop_stock = ["iron_sword", "leather_cap", "padded_greaves", "iron_gauntlets", "minor_potion"]
 	# room for extra per-campaign data:
 	c.extra = {"biome": "coast", "intro": true}
 	return c

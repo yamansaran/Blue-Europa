@@ -19,6 +19,11 @@ extends Control
 ## class updates across every tree. A tree can also globally scale all its
 ## nodes via SkillTreeView.node_scale (see skill_tree.gd).
 ##
+## UNLOCKING: investing the FIRST point in a node also UNLOCKS its ability on the
+## Character (so it appears in the ability pool and can be equipped to the wheel).
+## That is how the four new abilities (Alef/Bet/Gimel/Dalet) come online — they
+## start locked and are unlocked by spending a point on their tree node.
+##
 ## @tool makes the circle + counter draw in the editor so you can see the tree
 ## while you build it. Hover shows the tree's info box; left-click invests a
 ## point (up to max_points, while the character has points free).
@@ -28,15 +33,23 @@ enum SizeClass { SMALL, MEDIUM, LARGE }
 
 ## The single source of truth for what each size class means, in pixels.
 const RADII := {
-	SizeClass.SMALL: 14.0,
-	SizeClass.MEDIUM: 20.0,
-	SizeClass.LARGE: 28.0,
+	SizeClass.SMALL: 10.0,
+	SizeClass.MEDIUM: 18.0,
+	SizeClass.LARGE: 26.0,
 }
 
 @export var ability: Ability: set = _set_ability
 @export var node_id: String = ""              ## MUST be unique within a tree
-@export var links: Array[NodePath] = []        ## other SkillNodes to connect to
+@export var links: Array[NodePath] = []        ## legacy visual links (see `parents`)
 @export var size_class: SizeClass = SizeClass.MEDIUM: set = _set_size_class
+
+## UNLOCK PREREQUISITES (rev14b). `parents` = node_ids that must ALL be unlocked
+## (>=1 point) before this node can be invested; a root node leaves it empty.
+## `required_level` = the player level needed to unlock this node (default 1). When
+## any node in a tree defines `parents`, the tree draws its connecting lines from
+## `parents` instead of the legacy `links`.
+@export var parents: Array[String] = []
+@export var required_level: int = 1
 
 ## Where the CENTER of this node sits. This is the authored placement — the
 ## node offsets its own top-left by its radius, so changing size_class keeps
@@ -53,6 +66,8 @@ const COLOR_FILL := Color(0.10, 0.42, 0.16, 1.0)        ## dark-green placeholde
 const COLOR_EMPTY_RING := Color(0.0, 0.0, 0.0, 0.55)
 const COLOR_MAXED_RING := Color(1.0, 0.86, 0.35, 1.0)   ## gold when maxed
 const COLOR_PARTIAL_RING := Color(0.55, 0.85, 0.55, 1.0)
+const COLOR_LOCKED_FILL := Color(0.11, 0.12, 0.13, 1.0) ## prerequisites not met
+const COLOR_LOCKED_RING := Color(0.45, 0.42, 0.45, 0.7)
 
 var _hovered := false
 
@@ -131,6 +146,21 @@ func points() -> int:
 func max_points() -> int:
 	return ability.max_points if ability else 1
 
+## Unlocked = at least one point invested here.
+func is_unlocked() -> bool:
+	return points() > 0
+
+## Prerequisites currently met (player level + every parent unlocked)?
+func can_unlock() -> bool:
+	var ch := _character()
+	if ch and ch.has_method("can_unlock_node"):
+		return ch.can_unlock_node(required_level, parents)
+	return true
+
+## Locked = not yet unlocked AND prerequisites unmet (so it can't be bought yet).
+func is_locked() -> bool:
+	return not is_unlocked() and not can_unlock()
+
 
 # Only the circle is clickable/hoverable at runtime. In the editor the whole
 # box is selectable so it's easy to click on.
@@ -143,33 +173,39 @@ func _has_point(point: Vector2) -> bool:
 func _draw() -> void:
 	var r := radius
 	var c := size * 0.5
-	# --- fill: icon if the ability has one, else a dark-green circle ---
+	var locked := is_locked()
+	# --- fill: icon if the ability has one, else a circle (dimmed when locked) ---
 	if ability and ability.icon:
 		var dest := Rect2(c - Vector2(r, r), Vector2(r, r) * 2.0)
-		draw_texture_rect(ability.icon, dest, false)
+		draw_texture_rect(ability.icon, dest, false, Color(1, 1, 1, 0.35 if locked else 1.0))
 	else:
-		draw_circle(c, r, COLOR_FILL)
+		draw_circle(c, r, COLOR_LOCKED_FILL if locked else COLOR_FILL)
 
-	# --- ring shows how full the node is ---
+	# --- ring: locked (grey) / maxed (gold) / partial (green) / empty ---
 	var pts := points()
 	var maxp := max_points()
 	var ring_col := COLOR_EMPTY_RING
-	if pts > 0:
+	var ring_w := 2.0
+	if locked:
+		ring_col = COLOR_LOCKED_RING
+	elif pts > 0:
 		ring_col = COLOR_MAXED_RING if pts >= maxp else COLOR_PARTIAL_RING
-	draw_arc(c, r, 0.0, TAU, 48, ring_col, (4.0 if pts > 0 else 2.0), true)
+		ring_w = 4.0
+	draw_arc(c, r, 0.0, TAU, 48, ring_col, ring_w, true)
 
 	# --- hover highlight ---
 	if _hovered:
 		draw_arc(c, r + 3.0, 0.0, TAU, 48, Color(1, 1, 1, 0.5), 2.0, true)
 
-	# --- "x/max" counter under the circle ---
+	# --- "x/max" counter under the circle (dim when locked) ---
 	var font := get_theme_default_font()
 	if font:
 		var fs := 14
 		var label := "%d/%d" % [pts, maxp]
 		var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 		var pos := c + Vector2(-tw.x * 0.5, r + float(fs) + 2.0)
-		draw_string(font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.95, 0.95, 0.95, 1))
+		var col := Color(0.55, 0.55, 0.55, 1) if locked else Color(0.95, 0.95, 0.95, 1)
+		draw_string(font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -186,7 +222,14 @@ func _try_invest() -> void:
 	var ch := _character()
 	if ch == null or ability == null or node_id == "":
 		return
-	ch.invest(node_id, ability.max_points)
+	# Gated by the node's level requirement + parent prerequisites (enforced inside
+	# Character.invest). Investing the first point unlocks the ability (idempotent —
+	# unlock_ability ignores an already-unlocked id).
+	if ch.invest(node_id, ability.max_points, required_level, parents):
+		if ch.has_method("unlock_ability"):
+			ch.unlock_ability(String(ability.id))
+	elif is_locked():
+		print("[skilltree] %s is locked — needs level %d and parents %s." % [node_id, required_level, str(parents)])
 
 
 func _on_mouse_entered() -> void:

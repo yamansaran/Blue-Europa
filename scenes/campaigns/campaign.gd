@@ -4,14 +4,15 @@ class_name Campaign
 ## CAMPAIGN  —  one modular campaign in the world-map graph
 ## ============================================================================
 ## A campaign is a self-contained module: an ordered list of fights, a training
-## pool, links to the next campaign(s) in the map, its OWN overworld scene, plus
-## a free-form `extra` dict for future per-campaign data.
+## pool, links to the next campaign(s) in the map, its OWN overworld scene, its
+## SHOP STOCK, plus a free-form `extra` dict for future per-campaign data.
 ##
 ## Campaigns are built in code by their module scripts
 ## (scenes/campaigns/modules/<id>/<id>.gd) and registered in CampaignDB. The
 ## module can either call Campaign.ice_campaign(...) for the standard test layout
 ## (5 ice sprites in a row + one large ice sprite boss) or hand-build `fights`
-## itself for a bespoke campaign later.
+## itself for a bespoke campaign later. The shop that campaign shows is whatever
+## the module puts in `shop_stock` (a list of Item ids from ItemDB).
 ## ----------------------------------------------------------------------------
 
 # --- identity / presentation ------------------------------------------------
@@ -36,6 +37,10 @@ var training_pool: Array = []
 ## Clickable objects on this campaign's overworld. Buttons can be placed
 ## differently per campaign. Each: { "name", "rect":Rect2, "action" }.
 var overworld_objects: Array = []
+## The items this campaign's SHOP sells: a list of Item ids (Strings) that exist
+## in ItemDB. Set per-module in <id>.gd; the shop screen reads this from the
+## current campaign. Empty -> the shop shows nothing for this campaign.
+var shop_stock: Array = []
 ## Free-form room for future per-campaign data (story flags, rewards, etc.).
 var extra: Dictionary = {}
 
@@ -49,6 +54,13 @@ func fight_at(i: int) -> Dictionary:
 	if i < 0 or i >= fights.size():
 		return {}
 	return fights[i]
+
+## The shop stock as a clean Array of String ids (defensive copy).
+func shop_stock_ids() -> Array:
+	var out := []
+	for v in shop_stock:
+		out.append(str(v))
+	return out
 
 # ---------------------------------------------------------------------------
 # Default overworld layout (matches the old single overworld placement)
@@ -110,6 +122,8 @@ static func dummy_training_pool(p_id: String) -> Array:
 # ---------------------------------------------------------------------------
 # Standard test campaign: 5 ice sprites in a row + one large ice sprite boss.
 # ---------------------------------------------------------------------------
+## NOTE: this factory does NOT set shop_stock — each module declares its own so
+## the shop's contents live in that campaign's file, not hard-coded in the shop.
 static func ice_campaign(p_id: String, p_name: String, p_scene: String,
 		p_next: Array, p_map: Vector2,
 		p_bg: Color = Color(0.10, 0.55, 0.75)) -> Campaign:

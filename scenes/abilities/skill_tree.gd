@@ -22,6 +22,7 @@ extends Control
 ## ----------------------------------------------------------------------------
 
 const LINE_COLOR := Color(0.78, 0.74, 0.55, 0.9)
+const LINE_DIM := Color(0.40, 0.38, 0.32, 0.6)   ## parent not yet unlocked
 const LINE_WIDTH := 3.0
 
 ## Global radius multiplier for every SkillNode in this tree. Each node reads
@@ -60,6 +61,11 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		_tooltip = AbilityTooltip.new()
 		add_child(_tooltip)
+		# Redraw the dependency lines when unlock state changes (a parent unlocking
+		# brightens the lines to its children).
+		var ch := get_node_or_null("/root/Character")
+		if ch and ch.has_signal("changed") and not ch.changed.is_connected(queue_redraw):
+			ch.changed.connect(queue_redraw)
 		# Nodes may set their size in their own _ready; redraw once after this
 		# frame so the lines connect to final positions.
 		await get_tree().process_frame
@@ -73,13 +79,38 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
-	# One line per link. Drawn here (in the parent) so child nodes cover the
-	# line ends.
-	for node in _skill_nodes():
-		for link_path in node.links:
-			var other: Node = node.get_node_or_null(link_path)
-			if other is SkillNode:
-				draw_line(node.center(), (other as SkillNode).center(), LINE_COLOR, LINE_WIDTH, true)
+	# Lines connect each node to its dependencies. When ANY node defines `parents`
+	# (the rev14b prerequisite system), draw parent lines — brighter when the parent
+	# is already unlocked, dim when it's still locked. Otherwise fall back to the
+	# legacy `links` (visual-only) so older trees still draw. Drawn here (in the
+	# parent) so the child nodes cover the line ends.
+	var nodes := _skill_nodes()
+	var use_parents := false
+	for n in nodes:
+		if n.parents.size() > 0:
+			use_parents = true
+			break
+
+	if use_parents:
+		var by_id := {}
+		for n in nodes:
+			if n.node_id != "":
+				by_id[n.node_id] = n
+		var ch := get_node_or_null("/root/Character")
+		for n in nodes:
+			for pid in n.parents:
+				var parent = by_id.get(str(pid), null)
+				if parent is SkillNode:
+					var col := LINE_COLOR
+					if ch and ch.has_method("node_unlocked") and not ch.node_unlocked(str(pid)):
+						col = LINE_DIM
+					draw_line(n.center(), (parent as SkillNode).center(), col, LINE_WIDTH, true)
+	else:
+		for node in nodes:
+			for link_path in node.links:
+				var other: Node = node.get_node_or_null(link_path)
+				if other is SkillNode:
+					draw_line(node.center(), (other as SkillNode).center(), LINE_COLOR, LINE_WIDTH, true)
 
 
 func _skill_nodes() -> Array[SkillNode]:

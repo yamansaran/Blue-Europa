@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Item" format=3 uid="uid://citemluckycharm"]
+
+[ext_resource type="Script" path="res://scenes/items/item.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"lucky_charm"
+display_name = "Lucky Charm"
+description = "A worn trinket that sharpens instinct and presence."
+flavor = "Fortune favours the prepared."
+item_type = "Charm"
+level = 4
+rarity = 3
+equippable = true
+slot = 7
+stats = {
+"instinct": 5.0,
+"magnificence": 2.0
+}
+value = 200
+sell_value = 0

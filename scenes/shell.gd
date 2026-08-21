@@ -10,6 +10,8 @@ class_name Shell
 @onready var achievements_btn: Button = $Toolbar/Left/HBox/AchievementsButton
 @onready var world_map_btn: Button    = $Toolbar/Center/WorldMapButton
 @onready var save_dialog: AcceptDialog = $Toolbar/SaveDialog
+@onready var progress_bar: ProgressBar = $Toolbar/Right/ProgressBar
+@onready var progress_label: Label     = $Toolbar/Right/ProgressLabel
 
 func _ready() -> void:
 	GameManager.active_shell = self
@@ -48,9 +50,35 @@ func load_content(scene_path: String) -> void:
 		c.offset_top = 0.0
 		c.offset_right = 0.0
 		c.offset_bottom = 0.0
+	# Keep the persistent toolbar's campaign progression bar current on every
+	# screen swap (after a campaign win, a fork pick, a debug map jump, etc.).
+	refresh_progress()
 
+## Update the toolbar's right-side campaign progression bar from CampaignDB.
+func refresh_progress() -> void:
+	if typeof(CampaignDB) == TYPE_NIL:
+		return
+	var frac: float = CampaignDB.progress_fraction()
+	if progress_bar:
+		progress_bar.value = frac * 100.0
+	if progress_label:
+		var camp = CampaignDB.get_current()
+		var nm: String = camp.display_name if camp else "—"
+		var suffix := ""
+		if CampaignDB.is_current_complete():
+			suffix = "  (cleared)"
+		progress_label.text = "%s   %d/%d%s" % [
+			nm, CampaignDB.fight_index, CampaignDB.fights_total(), suffix]
+
+## DEBUG (temporary): the Save button wipes the save and starts a fresh level-1
+## character rather than persisting the current one. Character.reset_to_defaults()
+## resets every field to its new-game value and overwrites user://character.save.
 func _on_save_pressed() -> void:
-	save_dialog.popup_centered()
+	if typeof(Character) != TYPE_NIL and Character.has_method("reset_to_defaults"):
+		Character.reset_to_defaults()
+	if save_dialog:
+		save_dialog.dialog_text = "DEBUG: save cleared — reset to a fresh Level 1."
+		save_dialog.popup_centered()
 
 func _on_world_map_pressed() -> void:
 	GameManager.go_to_campaign_map()

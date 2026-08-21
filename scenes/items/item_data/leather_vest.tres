@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Item" format=3 uid="uid://citemleathervest"]
+
+[ext_resource type="Script" path="res://scenes/items/item.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"leather_vest"
+display_name = "Leather Vest"
+description = "A layered leather chestpiece. Keeps the vital bits protected."
+flavor = ""
+item_type = "Body Armor"
+level = 2
+rarity = 1
+equippable = true
+slot = 2
+stats = {
+"vitality": 4.0,
+"physical_defense": 10.0
+}
+value = 60
+sell_value = 0

@@ -15,9 +15,10 @@ class_name CampaignOverworld
 ## ----------------------------------------------------------------------------
 
 var _objects: Array = []          # {name, rect, action}
-var _progress: XPProgressBar
-var _progress_label: Label
 var _fork_overlay: Control = null
+# NOTE: the campaign PROGRESSION bar lives in the persistent toolbar (right
+# panel), wired in shell.gd -> refresh_progress(). It is intentionally NOT drawn
+# on this screen.
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -71,51 +72,6 @@ func _build(camp: Campaign) -> void:
 	title.position = Vector2(40, 24)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(title)
-
-	# --- campaign progress bar (bottom strip) ---
-	_progress = XPProgressBar.new()
-	_progress.anchor_left = 0.30
-	_progress.anchor_right = 0.70
-	_progress.anchor_top = 0.90
-	_progress.anchor_bottom = 0.90
-	_progress.offset_top = -16
-	_progress.offset_bottom = 16
-	_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_progress)
-
-	_progress_label = Label.new()
-	_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_progress_label.add_theme_color_override("font_color", Color(1, 1, 1))
-	_progress_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-	_progress_label.add_theme_constant_override("outline_size", 4)
-	_progress_label.anchor_left = 0.30
-	_progress_label.anchor_right = 0.70
-	_progress_label.anchor_top = 0.90
-	_progress_label.anchor_bottom = 0.90
-	_progress_label.offset_top = -42
-	_progress_label.offset_bottom = -18
-	_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_progress_label)
-
-	_refresh_progress()
-
-func _refresh_progress() -> void:
-	if typeof(CampaignDB) == TYPE_NIL:
-		return
-	if _progress:
-		var frac: float = CampaignDB.progress_fraction()
-		_progress.set_progress(frac, int(round(frac * 100.0)))
-	if _progress_label:
-		_progress_label.text = _progress_text()
-
-func _progress_text() -> String:
-	var done: int = CampaignDB.fight_index
-	var total: int = CampaignDB.fights_total()
-	if CampaignDB.is_current_complete():
-		return "Campaign complete — %d / %d fights" % [done, total]
-	var f: Dictionary = CampaignDB.current_fight()
-	var boss := "  (BOSS)" if bool(f.get("is_boss", false)) else ""
-	return "Next: fight %d of %d%s" % [done + 1, total, boss]
 
 # ---------------------------------------------------------------------------
 # Object visuals

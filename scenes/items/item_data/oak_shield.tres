@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Item" format=3 uid="uid://citemoakshield"]
+
+[ext_resource type="Script" path="res://scenes/items/item.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"oak_shield"
+display_name = "Oak Shield"
+description = "A sturdy oaken shield bound in iron. Turns aside physical blows."
+flavor = ""
+item_type = "Shield"
+level = 2
+rarity = 1
+equippable = true
+slot = 6
+stats = {
+"physical_defense": 15.0,
+"vitality": 2.0
+}
+value = 55
+sell_value = 0

@@ -51,11 +51,27 @@ enum CostType {
 ## value at rank R = base_power + power_per_point * (R - 1)
 @export var base_power: float = 0.0
 @export var power_per_point: float = 0.0
-## Optional caster-stat scaling: adds scaling_mult * caster[scaling_stat].
+## Optional caster-stat scaling: adds scaling_mult * caster[scaling_stat]. For a
+## HEAL ability this is the healing scaling (e.g. Alef: instinct * 3.0).
 @export var scaling_stat: StringName = &""
 @export var scaling_mult: float = 0.0
 @export var requires: Array[StringName] = []
 @export var required_level: int = 1
+
+# --- buff / debuff application ----------------------------------------------
+## Id of the buff/debuff this ability applies to its target, resolved through
+## BuffLibrary.build(). Used by BUFF / DEBUFF abilities (and any other kind that
+## should also drop a buff on hit). Blank => this ability applies no buff.
+@export var applies_buff: StringName = &""
+
+# --- crit (see CombatCrit) --------------------------------------------------
+## Multiplies the base crit CHANCE for this ability (base 1.0 = no change).
+@export var crit_chance_mult: float = 1.0
+## Flat percentage points ADDED to this ability's crit chance after the multiply.
+@export var crit_chance_add: float = 0.0
+## Multiplies crit DAMAGE for this ability (base 1.0). Combined with the
+## character's base crit-damage multiplier and any buff/debuff crit-damage bonus.
+@export var crit_damage_mult: float = 1.0
 
 ## Element as its string prefix ("fire", "true", ...) for stat lookups.
 func element_key() -> String:
@@ -102,3 +118,10 @@ func compute_damage(caster_stats: Dictionary, points: int = 1) -> float:
 	if stat != "":
 		dmg += scaling_mult * float(caster_stats.get(stat, 0))
 	return dmg
+
+## Healing an HEAL ability restores (before the target's healing-received
+## multiplier). Same power_at + caster-stat scaling as compute_damage, named
+## separately so the intent reads clearly at the call site.
+##   e.g. Alef: power_at(1)=0  +  3.0 * caster["instinct"]  =  300% of instinct.
+func compute_heal(caster_stats: Dictionary, points: int = 1) -> float:
+	return maxf(0.0, compute_damage(caster_stats, points))

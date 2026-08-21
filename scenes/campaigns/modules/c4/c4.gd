@@ -9,5 +9,6 @@ static func build() -> Campaign:
 		[],                       # end of the map
 		Vector2(0.88, 0.5),
 		Color(0.16, 0.30, 0.55))
+	c.shop_stock = ["ember_ring", "lucky_charm", "oak_shield", "leather_vest", "minor_potion"]
 	c.extra = {"biome": "throne", "finale": true}
 	return c

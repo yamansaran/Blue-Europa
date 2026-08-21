@@ -24,6 +24,25 @@ class_name LevelTable
 
 const MAX_LEVEL := 50
 
+## Skill points granted per level gained (flat).
+const SKILL_POINTS_PER_LEVEL := 2
+
+## Attribute points granted when a level-up brings the player TO `level`.
+## Variable by level bracket: 2 for 1-10, 3 for 11-20, 4 for 21-30, 5 for 31-40,
+## 8 for 41-50. (Level 1 is the start, so this only ever applies to levels 2..50.)
+static func attribute_points_for_level(level: int) -> int:
+	var l := clampi(level, 1, MAX_LEVEL)
+	if l <= 10:
+		return 2
+	elif l <= 20:
+		return 3
+	elif l <= 30:
+		return 4
+	elif l <= 40:
+		return 5
+	else:
+		return 8
+
 ## CUTOFFS[level] = total cumulative XP needed to BE that level.
 ## Index 0 is a dummy; levels run 1..MAX_LEVEL.
 const CUTOFFS := [
