@@ -329,7 +329,7 @@ script = ExtResource("2_node")
 ability = ExtResource("24_peh")
 node_id = "peh"
 parents = Array[String](["netzach", "hod"])
-center_position = Vector2(330.0, 464.0)
+center_position = Vector2(300.0, 464.0)
 size_class = 0
 
 [node name="Tzaddi" type="Control" parent="."]

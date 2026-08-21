@@ -71,6 +71,12 @@ const COLOR_LOCKED_RING := Color(0.45, 0.42, 0.45, 0.7)
 
 var _hovered := false
 
+## Red "unmet dependency" flash. When the player clicks a locked node, each of its
+## still-locked parent nodes pulses this ring (1.0 -> 0.0 over ~1s) so it's obvious
+## which prerequisites are missing. Runtime-only (never in the editor).
+var _red_glow: float = 0.0
+var _glow_tween: Tween
+
 
 ## The effective pixel radius: the class's base size, times the tree's global
 ## scale (if the parent tree defines one). This is what everything draws with.
@@ -197,15 +203,12 @@ func _draw() -> void:
 	if _hovered:
 		draw_arc(c, r + 3.0, 0.0, TAU, 48, Color(1, 1, 1, 0.5), 2.0, true)
 
-	# --- "x/max" counter under the circle (dim when locked) ---
-	var font := get_theme_default_font()
-	if font:
-		var fs := 14
-		var label := "%d/%d" % [pts, maxp]
-		var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		var pos := c + Vector2(-tw.x * 0.5, r + float(fs) + 2.0)
-		var col := Color(0.55, 0.55, 0.55, 1) if locked else Color(0.95, 0.95, 0.95, 1)
-		draw_string(font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+	# --- "unmet dependency" red flash (see flash_red) ---
+	if _red_glow > 0.0:
+		draw_arc(c, r + 3.0, 0.0, TAU, 48, Color(0.95, 0.15, 0.15, _red_glow), 3.0, true)
+
+	# The x/max point count is no longer drawn under the node — it now lives in the
+	# hover tooltip's "Points" line (see skill_tree.show_info / AbilityTooltip).
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -229,7 +232,30 @@ func _try_invest() -> void:
 		if ch.has_method("unlock_ability"):
 			ch.unlock_ability(String(ability.id))
 	elif is_locked():
+		# Blocked by prerequisites — flash the still-locked parent nodes red so the
+		# player can see exactly which dependencies are unmet.
+		var tree := _skill_tree()
+		if tree and tree.has_method("flash_unmet_dependencies"):
+			tree.flash_unmet_dependencies(self)
 		print("[skilltree] %s is locked — needs level %d and parents %s." % [node_id, required_level, str(parents)])
+
+
+## Pulse a red ring on this node (1.0 -> 0.0 over ~1s). Called on each still-locked
+## parent when the player clicks a node whose dependencies aren't met yet.
+func flash_red() -> void:
+	if Engine.is_editor_hint():
+		return
+	_red_glow = 1.0
+	queue_redraw()
+	if _glow_tween and _glow_tween.is_valid():
+		_glow_tween.kill()
+	_glow_tween = create_tween()
+	_glow_tween.tween_method(_set_red_glow, 1.0, 0.0, 1.0)
+
+
+func _set_red_glow(v: float) -> void:
+	_red_glow = v
+	queue_redraw()
 
 
 func _on_mouse_entered() -> void:

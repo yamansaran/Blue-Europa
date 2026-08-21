@@ -129,7 +129,31 @@ func show_info(node: SkillNode) -> void:
 	if node.ability == null:
 		_tooltip.hide_tip()
 		return
-	_tooltip.show_for(node.ability, node.get_global_rect())
+	# The invested/max point count now lives in the tooltip (it used to be drawn
+	# under the node). Re-shown on Character.changed so it stays current on invest.
+	var pts_text := "%d / %d points" % [node.points(), node.max_points()]
+	_tooltip.show_for(node.ability, node.get_global_rect(), pts_text)
+
+
+## Pulse each of `node`'s still-locked parent nodes red. Called by a SkillNode when
+## the player clicks it but its dependencies aren't met, so the missing prerequisites
+## are visually obvious.
+func flash_unmet_dependencies(node: SkillNode) -> void:
+	if node == null:
+		return
+	var by_id := {}
+	for n in _skill_nodes():
+		if n.node_id != "":
+			by_id[n.node_id] = n
+	var ch := get_node_or_null("/root/Character")
+	for pid in node.parents:
+		var p = by_id.get(str(pid), null)
+		if p is SkillNode:
+			var unlocked := true
+			if ch and ch.has_method("node_unlocked"):
+				unlocked = ch.node_unlocked(str(pid))
+			if not unlocked:
+				(p as SkillNode).flash_red()
 
 func hide_info() -> void:
 	if _tooltip:

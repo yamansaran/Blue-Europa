@@ -38,10 +38,20 @@ var _built := false
 var _fraction := 0.0
 var _label_text := "0%"
 
+## A queued XP-gain animation ({from, to, dur}), kicked off in _ready() when the
+## bar is set to animate before it has entered the tree (create_tween needs the
+## node in the tree). Empty when there's nothing pending.
+var _pending_anim := {}
+var _xp_tween: Tween
+
 
 func _ready() -> void:
 	_build()
 	_apply()
+	if not _pending_anim.is_empty():
+		var a := _pending_anim
+		_pending_anim = {}
+		_start_xp_anim(int(a["from"]), int(a["to"]), float(a["dur"]))
 
 
 func _build() -> void:
@@ -145,3 +155,33 @@ func set_xp_level(total_xp: int, level: int) -> void:
 		_fraction = LevelTable.progress_fraction(total_xp, level)
 		_label_text = "%d%%" % LevelTable.progress_percent(total_xp, level)
 	_apply()
+
+
+## Animate the bar from one continuous total-XP value UP to another over
+## `duration` seconds. The level is re-derived each frame from LevelTable, so a
+## gain that crosses a level boundary naturally shows the bar fill, snap back to
+## empty, and keep filling into the next level. Safe to call before the widget is
+## in the tree — the animation is queued and started in _ready().
+func animate_to_xp(from_xp: int, to_xp: int, duration: float = 2.0) -> void:
+	# Show the starting value immediately (paints even before _ready runs).
+	set_from_xp(from_xp)
+	if to_xp <= from_xp or duration <= 0.0:
+		set_from_xp(to_xp)
+		return
+	if not is_inside_tree():
+		_pending_anim = {"from": from_xp, "to": to_xp, "dur": duration}
+		return
+	_start_xp_anim(from_xp, to_xp, duration)
+
+
+func _start_xp_anim(from_xp: int, to_xp: int, duration: float) -> void:
+	set_from_xp(from_xp)
+	if _xp_tween and _xp_tween.is_valid():
+		_xp_tween.kill()
+	_xp_tween = create_tween()
+	_xp_tween.tween_method(_anim_set_xp, float(from_xp), float(to_xp), duration) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _anim_set_xp(v: float) -> void:
+	set_from_xp(int(round(v)))

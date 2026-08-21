@@ -383,7 +383,9 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 			var atk: CharacterBase = _player.body if _player else null
 			var hit := CombatMath.resolve(atk, tgt.body, ability)
 			var dmg := int(hit["damage"])
-			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]))
+			# Pass the attacker as the source so the target's "when struck"
+			# reactions (thorns, ...) can hit back.
+			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]), _player)
 			# an attack may also drop a buff/debuff on the target (transient effect)
 			_maybe_apply_buff(ability, tgt)
 			var crit_tag := " (CRIT x%.2f)" % float(hit["crit_mult"]) if hit["is_crit"] else ""
@@ -416,6 +418,9 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 		_player_cooldowns[String(ability.id)] = ability.cooldown
 	_sync_wheel_state()
 	_check_victory()
+	# A "when struck" reaction (e.g. thorns) can damage the player during their own
+	# action, so check for defeat here too — not only on the turn tick.
+	_check_defeat()
 
 ## Apply the ability's buff (if any) to `tgt`. Returns true if a buff was applied.
 func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter) -> bool:
@@ -500,8 +505,13 @@ func _win() -> void:
 	BattleState.result_items = loot.get("items", [])
 	BattleState.result_party = party
 	print("[combat] victory! +%d money, +%d xp, %d items" % [BattleState.result_money, BattleState.result_xp, BattleState.result_items.size()])
+	# Let the final blow / death animation read for a beat before the results screen
+	# takes over. The battle is already locked (_battle_over = true), so nothing can
+	# act during the wait.
 	if typeof(GameManager) != TYPE_NIL and GameManager.has_method("go_to_victory"):
-		GameManager.go_to_victory()
+		await get_tree().create_timer(2.0).timeout
+		if is_inside_tree():
+			GameManager.go_to_victory()
 
 # ---- turn cycle -------------------------------------------------------
 func _start_battle() -> void:

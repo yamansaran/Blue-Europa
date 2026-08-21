@@ -4,6 +4,11 @@ extends VBoxContainer
 ## the top panel. Spirit sits directly under the HP bar. Both bars carry the
 ## current/max value AS TEXT INSIDE the bar, in black; HP fills green, Spirit
 ## fills a medium (not-too-dark) blue.
+##
+## ANIMATION: a value change SLIDES the bar (and its counting text) to the new
+## value over BAR_ANIM_TIME instead of snapping. The very first fill (during
+## setup(), before the bar is in the tree) is instant; only later changes animate.
+## A new change kills any in-flight tween on that bar so rapid hits don't fight.
 
 const HP_FILL     := Color(0.20, 0.78, 0.32)   # green
 const SPIRIT_FILL := Color(0.20, 0.42, 0.82)   # medium blue (darker than before)
@@ -11,11 +16,22 @@ const HP_BG       := Color(0.15, 0.15, 0.15)
 const SPIRIT_BG   := Color(0.12, 0.12, 0.18)
 const VALUE_TEXT  := Color(0.0, 0.0, 0.0)       # black numbers, inside the bars
 
+## How long a bar takes to slide to a new value.
+const BAR_ANIM_TIME := 0.75
+
 var _name_label: Label
 var _bar: ProgressBar
 var _hp_text: Label
 var _spirit_bar: ProgressBar
 var _spirit_text: Label
+
+# True maxima for the "cur / max" text (the ProgressBar.max_value is floored at 1).
+var _hp_max: int = 1
+var _spirit_max: int = 0
+
+# In-flight fill tweens, killed and replaced on each change.
+var _hp_tween: Tween
+var _spirit_tween: Tween
 
 
 func _ensure_built() -> void:
@@ -75,20 +91,47 @@ func setup(unit_name: String, max_hp: int, current_hp: int, max_spirit: int, cur
 	# Health is always green now; the per-unit tint colours the NAME instead so
 	# units stay distinguishable without recolouring the HP bar.
 	_name_label.add_theme_color_override("font_color", tint)
+	# setup() runs before the bar is added to the tree, so these snap instantly.
 	set_hp(current_hp, max_hp)
 	set_spirit(current_spirit, max_spirit)
 
 
 func set_hp(current_hp: int, max_hp: int) -> void:
 	_ensure_built()
+	_hp_max = maxi(max_hp, 0)
 	_bar.max_value = maxi(max_hp, 1)
-	_bar.value = current_hp
-	_hp_text.text = "%d / %d" % [current_hp, max_hp]
+	if _hp_tween and _hp_tween.is_valid():
+		_hp_tween.kill()
+	if not is_inside_tree():
+		_set_hp_display(float(current_hp))       # instant (initial setup)
+		return
+	_hp_tween = create_tween()
+	_hp_tween.tween_method(_set_hp_display, float(_bar.value), float(current_hp), BAR_ANIM_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func set_spirit(current_spirit: int, max_spirit: int) -> void:
 	_ensure_built()
+	_spirit_max = maxi(max_spirit, 0)
 	_spirit_bar.visible = max_spirit > 0
 	_spirit_bar.max_value = maxi(max_spirit, 1)
-	_spirit_bar.value = current_spirit
-	_spirit_text.text = "%d / %d" % [current_spirit, max_spirit]
+	if _spirit_tween and _spirit_tween.is_valid():
+		_spirit_tween.kill()
+	if not is_inside_tree():
+		_set_spirit_display(float(current_spirit))
+		return
+	_spirit_tween = create_tween()
+	_spirit_tween.tween_method(_set_spirit_display, float(_spirit_bar.value), float(current_spirit), BAR_ANIM_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+# The tweened setters: move the fill and update the counting text together so the
+# number always matches the bar as it slides.
+func _set_hp_display(v: float) -> void:
+	_bar.value = v
+	_hp_text.text = "%d / %d" % [int(round(v)), _hp_max]
+
+
+func _set_spirit_display(v: float) -> void:
+	_spirit_bar.value = v
+	_spirit_text.text = "%d / %d" % [int(round(v)), _spirit_max]

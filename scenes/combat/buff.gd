@@ -22,7 +22,9 @@ class_name Buff
 ##   - an on-expire event hook id
 ## and the metadata the systems around it read: visible vs hidden, duration,
 ## element tag, stackable + max_stacks + current stacks, buff/debuff weight (for
-## future AI targeting), resistible, transient.
+## future AI targeting), resistible, transient, a hidden MAGNITUDE (severity
+## gauge, default 1.0), and a list of ON-STRUCK reactions ("when struck do X",
+## e.g. thorns) fired by CombatBuffs when the bearer takes a hit.
 ##
 ## STACKING. A stackable buff is stored as ONE entry with a `stacks` count. The
 ## PER-STACK values live in entry["per_stack"]; the live top-level fields
@@ -73,6 +75,14 @@ static func make(config: Dictionary) -> Dictionary:
 	per_stack["mods"] = (per_stack["mods"] as Dictionary).duplicate(true)
 	per_stack["resist_mult_by_element"] = (per_stack["resist_mult_by_element"] as Dictionary).duplicate(true)
 
+	# ON-STRUCK reactions: a list of "when this bearer is struck, do X" effect
+	# dicts (see CombatBuffs.fire_on_struck for the dispatch). Deep-copied so two
+	# entries never share the list. Empty = no reaction.
+	var on_struck: Array = []
+	var raw_on_struck = config.get("on_struck", [])
+	if typeof(raw_on_struck) == TYPE_ARRAY:
+		on_struck = (raw_on_struck as Array).duplicate(true)
+
 	var stackable := bool(config.get("stackable", false))
 	var entry := {
 		"id": str(config.get("id", "buff")),
@@ -86,11 +96,15 @@ static func make(config: Dictionary) -> Dictionary:
 		"max_stacks": int(config.get("max_stacks", 1)),
 		"stacks": maxi(1, int(config.get("stacks", 1))),
 		"weight": float(config.get("weight", 1.0)),
+		# HIDDEN severity gauge — how "big" this stack of buff/debuff is. Reserved
+		# for future targeting + character UI; default 1.0, tune per buff.
+		"magnitude": float(config.get("magnitude", 1.0)),
 		"resistible": bool(config.get("resistible", false)),
 		"transient": bool(config.get("transient", false)),
 		"silence": bool(config.get("silence", false)),
 		"stun": bool(config.get("stun", false)),
 		"expire_effect": str(config.get("expire_effect", "")),
+		"on_struck": on_struck,
 		"per_stack": per_stack,
 		# scaled live fields (filled by recompute_scaled below):
 		"mods": {},
@@ -149,6 +163,20 @@ static func remaining(entry: Dictionary) -> int:
 
 static func stacks(entry: Dictionary) -> int:
 	return maxi(1, int(entry.get("stacks", 1)))
+
+## The hidden severity gauge for this entry (default 1.0). Reserved for future
+## targeting + character UI.
+static func magnitude(entry: Dictionary) -> float:
+	return float(entry.get("magnitude", 1.0))
+
+## The list of on-struck reaction dicts on this entry ([] when none).
+static func on_struck(entry: Dictionary) -> Array:
+	var r = entry.get("on_struck", [])
+	return r if typeof(r) == TYPE_ARRAY else []
+
+## True when this entry reacts to its bearer being struck.
+static func has_on_struck(entry: Dictionary) -> bool:
+	return not on_struck(entry).is_empty()
 
 ## The DoT damage this entry deals THIS turn (already stack-scaled), as an int.
 static func dot_damage(entry: Dictionary) -> int:

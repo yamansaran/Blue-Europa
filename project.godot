@@ -33,3 +33,7 @@ CampaignDB="*res://scenes/campaigns/campaign_db.gd"
 window/size/viewport_width=1536
 window/size/viewport_height=864
 window/stretch/mode="canvas_items"
+
+[gui]
+
+theme/custom_font="res://assets/fonts/Inter-VariableFont_opsz,wght.ttf"

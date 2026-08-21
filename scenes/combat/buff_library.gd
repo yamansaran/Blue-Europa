@@ -19,6 +19,11 @@ class_name BuffLibrary
 ## class_name global — RESTART Godot once after adding this script.
 ## ----------------------------------------------------------------------------
 
+## Thorns tuning: per stack, reflect this much flat damage + this fraction of the
+## damage taken back at the attacker. The single tuning spot for thorns.
+const THORNS_FLAT := 20.0
+const THORNS_PCT := 0.15
+
 ## Every real element's defense (resist) stat key, for "all resists" effects.
 static func _all_resist_mods(delta: float) -> Dictionary:
 	var mods := {}
@@ -76,6 +81,27 @@ static func build(id: String, _caster: CharacterBase = null, _target: CharacterB
 				"resistible": true,
 				"mods": _all_resist_mods(-15.0),   # flat resist reduction (additive)
 				"spirit_per_turn": -20.0,          # drain
+			})
+
+		# --- Thorns: when struck, deal damage back to the attacker ------------
+		# The first user of the generic "when struck do X" system (see
+		# CombatBuffs.fire_on_struck). Each stack reflects THORNS_FLAT flat damage
+		# PLUS THORNS_PCT of the damage taken back at the attacker. Stacks up to 5.
+		"thorns":
+			return Buff.make({
+				"id": "thorns",
+				"source": "Thorns",
+				"desc": "When struck, reflects %d (+%d%% of the damage taken) back to the attacker. Stacks up to 5." % [int(THORNS_FLAT), int(round(THORNS_PCT * 100.0))],
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 5,
+				"stackable": true,
+				"max_stacks": 5,
+				"weight": 1.0,
+				"resistible": false,
+				"on_struck": [
+					{"effect": "reflect", "amount": THORNS_FLAT, "percent": THORNS_PCT, "element": "physical"},
+				],
 			})
 
 		_:

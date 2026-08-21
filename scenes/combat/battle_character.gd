@@ -119,8 +119,12 @@ func refresh_buffs() -> void:
 
 # ---- mutations --------------------------------------------------------
 ## Apply damage and float a damage number over this unit. `element` tints the
-## number (via ElementColors); `is_crit` enlarges it and appends a "!".
-func take_damage(amount: int, element: String = "physical", is_crit: bool = false) -> void:
+## number (via ElementColors); `is_crit` enlarges + italicises it and appends "!".
+## `source` is the attacking BattleCharacter, when there is one: it lets "when
+## struck" reactions (thorns, ...) hit back. DoT / environmental damage passes no
+## source and triggers no reaction. Reflected damage is dealt with no source too,
+## so thorns can never recurse.
+func take_damage(amount: int, element: String = "physical", is_crit: bool = false, source = null) -> void:
 	if body == null:
 		return
 	body.current_hp = clampi(body.current_hp - amount, 0, body.max_hp())
@@ -133,6 +137,10 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 		t.tween_property(_rect, "color", base, 0.25)
 	if not is_alive():
 		modulate = Color(0.45, 0.45, 0.45, 0.7)
+	# "When struck do X" — fire this unit's on-struck reactions against the source
+	# of the hit (thorns reflect, etc.). Only for sourced hits, never DoT/reflect.
+	if source != null:
+		CombatBuffs.fire_on_struck(self, source, amount, element)
 
 ## Restore HP, floating a green "+N" over this unit. The amount is scaled by the
 ## target's healing-received multiplier (from its buffs/debuffs) before applying.

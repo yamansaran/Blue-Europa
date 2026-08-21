@@ -153,6 +153,63 @@ static func fire_expiry(unit, entry: Dictionary) -> void:
 			pass
 
 # ============================================================================
+# "When struck" reactions  (thorns, and future on-struck effects)
+# ============================================================================
+## Fire every ON-STRUCK reaction the STRUCK unit carries, in response to being hit
+## by `attacker_unit` for `damage_taken` of `element`. This is the generic
+## "when struck do X" hook: a buff/debuff entry may carry an "on_struck" list of
+## reaction dicts, each dispatched here by its "effect" id. Called by
+## BattleCharacter.take_damage() when a hit has a source.
+##
+## `struck_unit` / `attacker_unit` are BattleCharacters (kept untyped to avoid a
+## class dependency, mirroring fire_expiry). Reactions that deal damage back call
+## attacker_unit.take_damage() WITHOUT a source, so thorns can't recurse.
+##
+## Reaction schema (all keys optional unless noted):
+##   { "effect": "reflect", "amount": float, "percent": float, "element": String }
+##     -> deals amount*stacks + percent*damage_taken back to the attacker.
+##        percent is a fraction (0.25 = 25% of the damage taken). element defaults
+##        to the reaction's, then the entry's, then "physical".
+## Add new "effect" cases below as you build more on-struck effects.
+static func fire_on_struck(struck_unit, attacker_unit, damage_taken: int, element: String) -> void:
+	if struck_unit == null or struck_unit.body == null:
+		return
+	var body: CharacterBase = struck_unit.body
+	for basket in ["buffs", "debuffs"]:
+		if not body.baskets.has(basket):
+			continue
+		for e in body.baskets[basket]:
+			if typeof(e) != TYPE_DICTIONARY:
+				continue
+			var reactions := Buff.on_struck(e)
+			if reactions.is_empty():
+				continue
+			var stacks := Buff.stacks(e)
+			for r in reactions:
+				if typeof(r) != TYPE_DICTIONARY:
+					continue
+				match str(r.get("effect", "")):
+					"reflect":
+						_react_reflect(r, e, stacks, attacker_unit, damage_taken)
+					_:
+						pass
+
+## Reflect (thorns): deal amount*stacks + percent*damage_taken back to the
+## attacker as its own element. No source is passed, so it never re-triggers.
+static func _react_reflect(reaction: Dictionary, entry: Dictionary, stacks: int, attacker_unit, damage_taken: int) -> void:
+	if attacker_unit == null or not attacker_unit.has_method("is_alive") or not attacker_unit.is_alive():
+		return
+	var flat := float(reaction.get("amount", 0.0)) * float(stacks)
+	var pct := float(reaction.get("percent", 0.0)) * float(maxi(damage_taken, 0))
+	var total := int(round(maxf(0.0, flat + pct)))
+	if total <= 0:
+		return
+	var rel := str(reaction.get("element", str(entry.get("element", ""))))
+	if rel == "":
+		rel = "physical"
+	attacker_unit.take_damage(total, rel, false)
+
+# ============================================================================
 # Queries
 # ============================================================================
 ## True if any active buff/debuff silences this body (blocks spirit-cost abilities).

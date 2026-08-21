@@ -134,7 +134,12 @@ func _party_card(member: Dictionary) -> Control:
 	if bool(member.get("is_player", false)):
 		var ch := get_node_or_null("/root/Character")
 		if ch:
-			xpbar.set_xp_level(int(ch.xp), int(ch.level))
+			# Rewards aren't applied until Proceed, so ch.xp is still the PRE-battle
+			# total. Animate from there up to (pre-battle + xp gained) over 2s so the
+			# bar visibly fills in the xp earned this fight (crossing a level if it
+			# earned enough).
+			var cur_xp := int(ch.xp)
+			xpbar.animate_to_xp(cur_xp, cur_xp + _xp, 2.0)
 	else:
 		xpbar.set_xp_level(0, int(member.get("level", 1)))
 	return card

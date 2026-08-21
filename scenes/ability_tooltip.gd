@@ -29,16 +29,20 @@ const TIP_DELAY := 0.25          # hover time before cost + description appear
 const TIP_FADE  := 0.2
 
 const NAME_BG := Color(0.80, 0.80, 0.82)   # light gray
+const POINTS_BG := Color(0.62, 0.55, 0.30)  # muted gold band (skill-tree only)
 const COST_BG := Color(0.34, 0.42, 0.56)   # grayish blue
 const DESC_BG := Color(0.03, 0.03, 0.05)   # black
 const NAME_TX := Color(0.08, 0.08, 0.10)
+const POINTS_TX := Color(0.10, 0.08, 0.02)
 const COST_TX := Color(0.96, 0.96, 0.98)
 const DESC_TX := Color(0.92, 0.92, 0.94)
 
 var _name_panel: PanelContainer
+var _points_panel: PanelContainer
 var _cost_panel: PanelContainer
 var _desc_panel: PanelContainer
 var _name_lbl: Label
+var _points_lbl: Label
 var _cost_lbl: Label
 var _desc_lbl: Label
 var _timer: Timer
@@ -65,6 +69,13 @@ func _ensure_built() -> void:
 	_name_lbl = _label(NAME_TX, false)
 	_name_panel.add_child(_name_lbl)
 	add_child(_name_panel)
+
+	# Optional "Points" line (skill-tree hovers pass it; other hosts leave it blank
+	# and this panel stays hidden). Shows immediately, alongside the name.
+	_points_panel = _panel(POINTS_BG)
+	_points_lbl = _label(POINTS_TX, false)
+	_points_panel.add_child(_points_lbl)
+	add_child(_points_panel)
 
 	_cost_panel = _panel(COST_BG)
 	_cost_lbl = _label(COST_TX, false)
@@ -110,15 +121,19 @@ func _label(col: Color, wrap: bool) -> Label:
 ## Show the tooltip for `ab`, positioned beside `anchor_global` (a Rect2 in
 ## global/viewport coordinates — usually the hovered widget's global rect). Pass
 ## null to hide. Re-calling with the same ability is a cheap no-op.
-func show_for(ab: Ability, anchor_global: Rect2) -> void:
+func show_for(ab: Ability, anchor_global: Rect2, points_text := "") -> void:
 	_ensure_built()
 	if ab == null:
 		hide_tip()
 		return
 	if ab == _ab and visible:
+		# Same ability already shown — but the point count can change on invest, so
+		# refresh that line in place rather than treating it as a no-op.
+		_update_points(points_text)
 		return
 	_ab = ab
 	_name_lbl.text = ab.display_name
+	_update_points(points_text)
 	_cost_lbl.text = ab.cost_text()
 	_desc_lbl.text = ab.description
 
@@ -134,6 +149,18 @@ func show_for(ab: Ability, anchor_global: Rect2) -> void:
 	_place(anchor_global)
 	_timer.stop()
 	_timer.start()
+
+
+## Set (or hide) the optional "Points" line. Blank text hides the panel entirely,
+## so hosts that don't deal in points (combat wheel, ability pool) look unchanged.
+func _update_points(points_text: String) -> void:
+	if _points_panel == null:
+		return
+	if points_text != "":
+		_points_lbl.text = points_text
+		_points_panel.visible = true
+	else:
+		_points_panel.visible = false
 
 
 func hide_tip() -> void:

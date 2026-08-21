@@ -19,7 +19,8 @@ enum Race { HUMAN }
 enum Element { PHYSICAL, SPIRITUAL, ICE, FIRE, LIGHTNING, BLOOD, TOXIC, MENTAL, TRUE }
 
 # --- major stats ------------------------------------------------------------
-## The seven visible majors + hidden luck. spirit doubles as the resource-bar max.
+## The seven visible majors + hidden luck + hidden magnetism. spirit doubles as
+## the resource-bar max.
 const MAJOR_DEFAULTS := {
 	"vigor": 10.0,
 	"vitality": 10.0,
@@ -29,9 +30,12 @@ const MAJOR_DEFAULTS := {
 	"disdain": 10.0,
 	"spirit": 100.0,   # resource-bar maximum
 	"luck": 7.0,       # hidden
+	"magnetism": 100.0, # hidden — reserved for future targeting + character UI
 }
-## Stats the player never sees a raw number for (still fully functional).
-const HIDDEN_MAJORS := ["luck"]
+## Stats the player never sees a raw number for (still fully functional). Because
+## magnetism is hidden it is also excluded from attribute allocation (which draws
+## from allocatable_major_keys(), i.e. visible & allocatable only).
+const HIDDEN_MAJORS := ["luck", "magnetism"]
 ## Majors that exist and buff normally, but CANNOT take attribute points. Spirit
 ## is the resource-bar maximum and is grown by other means, never by points.
 const NON_ALLOCATABLE_MAJORS := ["spirit"]
