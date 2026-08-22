@@ -56,6 +56,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_layout()
 	_load_units()
+	_apply_permanent_buffs()
 	_build_health_bars()
 	_place_units()
 	_build_wheel()
@@ -127,19 +128,44 @@ func _load_units() -> void:
 	_player = _spawn_unit(pbody, TEAM_PLAYER, "player")
 
 	# --- allies ---
+	# Built via CharacterRegistry: a spec that names a "character" module is built
+	# from that module (its own stats + permanent buffs); a plain dict still works.
+	# ai / size_scale now live ON THE BODY (the module sets them), so we read them
+	# from there rather than off the spec.
 	for a in allies:
 		if typeof(a) == TYPE_DICTIONARY:
-			_spawn_unit(CharacterBase.from_spec(a), TEAM_ALLY, str(a.get("ai", "none")))
+			var abody := CharacterRegistry.build(a)
+			var au := _spawn_unit(abody, TEAM_ALLY, abody.ai)
+			au.size_scale = abody.size_scale
 
 	# --- enemies (default: one Training Dummy) ---
 	if enemies.is_empty():
 		enemies = [ _training_dummy_spec() ]
 	for e in enemies:
 		if typeof(e) == TYPE_DICTIONARY:
-			var eu := _spawn_unit(CharacterBase.from_spec(e), TEAM_ENEMY, str(e.get("ai", "none")))
-			eu.size_scale = float(e.get("size_scale", 1.0))
+			var ebody := CharacterRegistry.build(e)
+			var eu := _spawn_unit(ebody, TEAM_ENEMY, ebody.ai)
+			eu.size_scale = ebody.size_scale
 			if _debug_target == null:
 				_debug_target = eu   # first enemy = the training dummy in debug fights
+
+## Auto-apply every unit's PERMANENT buffs at the start of combat. Each character
+## carries a `permanent_buffs` list of BuffLibrary ids (set by its module, or by a
+## spec / the player's PlayerCharacter); we build each one and apply it to the body
+## BEFORE the health + buff bars are built, so the ceilings and the visible buff
+## strip are correct from turn one. A permanent buff should have duration -1 so it
+## never counts down. init_vitals() re-fulls the unit in case a buff moved max HP.
+func _apply_permanent_buffs() -> void:
+	for u in _units:
+		if u.body == null:
+			continue
+		for bid in u.body.permanent_buffs:
+			var entry := BuffLibrary.build(str(bid))
+			if entry.is_empty():
+				push_warning("[combat] %s lists unknown permanent buff '%s'." % [u.unit_name, str(bid)])
+				continue
+			CombatBuffs.apply(u.body, entry)
+		u.body.init_vitals()
 
 func _spawn_unit(body: CharacterBase, team: int, ai: String) -> BattleCharacter:
 	var u := BattleCharacter.new()

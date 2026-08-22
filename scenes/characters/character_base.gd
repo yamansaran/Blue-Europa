@@ -51,6 +51,23 @@ class_name CharacterBase
 ## Blank until a real asset is assigned; the model falls back to a name-hash rect.
 @export var portrait: Texture2D = null
 
+# --- combat presentation / behaviour ---------------------------------------
+## Which AI routine drives this character in combat ("none" = passes its turn).
+## Set by a character module (or a spec's "ai" key); combat reads it off the body.
+@export var ai: String = "none"
+## Visual size multiplier for the on-screen model (bosses are drawn bigger). Set
+## by a character module (or a spec's "size_scale" key); read by the combat engine.
+@export var size_scale: float = 1.0
+
+# --- permanent buffs --------------------------------------------------------
+## BuffLibrary ids that are AUTOMATICALLY applied to this character at the START
+## of combat (e.g. an innate resistance or aura). A character module lists its
+## own here; combat applies each one via CombatBuffs.apply once the fight begins.
+## These are still combat-only buffs — the list is just the character's recipe for
+## which ones to grant itself. Give a permanent buff duration -1 so it never
+## counts down.
+@export var permanent_buffs: Array = []
+
 # --- stats ------------------------------------------------------------------
 ## Untouched base numbers. Defaults come from Stats.default_base_stats().
 var base_stats: Dictionary = Stats.default_base_stats()
@@ -162,6 +179,13 @@ func clamp_vitals() -> void:
 	current_hp = clampi(current_hp, 0, max_hp())
 	current_spirit = clampi(current_spirit, 0, max_spirit())
 
+## Set base HP so that max_hp() returns `value` at the CURRENT vitality. HP is
+## derived (max_hp = hp_base + vitality * HP_PER_VITALITY), so this back-solves
+## hp_base for you — a convenience for character modules that want to think in
+## "this creature has N health" rather than in hp_base. Call before init_vitals().
+func set_max_hp(value: float) -> void:
+	base_stats["hp_base"] = value - get_effective("vitality") * Stats.HP_PER_VITALITY
+
 # ============================================================================
 # Basket API  —  "everything is a hidden buff"
 # ============================================================================
@@ -222,6 +246,9 @@ func clone() -> CharacterBase:
 	cb.incorporeal = incorporeal
 	cb.portrait = portrait
 	cb.color_override = color_override
+	cb.ai = ai
+	cb.size_scale = size_scale
+	cb.permanent_buffs = permanent_buffs.duplicate()
 	cb.base_stats = base_stats.duplicate(true)
 	cb.baskets = baskets.duplicate(true)
 	cb.init_vitals()
@@ -231,19 +258,42 @@ func clone() -> CharacterBase:
 # Factory  —  build a CharacterBase from a plain spec Dictionary
 # ============================================================================
 ## Spec keys (all optional): name, level, type ("character"/"ally"/"enemy" or int),
-## race, organic, incorporeal, color, stats{stat_key: value overrides onto base}.
-## Legacy bridges: "max_hp" sets hp_base so the derived HP matches; "focus" maps
-## onto spirit. This keeps the old dict-based enemy defs working while everything
-## migrates onto the base + vitality model.
+## race, organic, incorporeal, ai, size_scale, color, permanent_buffs[],
+## stats{stat_key: value overrides onto base}. Legacy bridges: "max_hp" sets
+## hp_base so the derived HP matches; "focus" maps onto spirit. This keeps the old
+## dict-based enemy defs working alongside the character-module system.
+##
+## NOTE: a spec that names a "character" (a module id) is built by CharacterRegistry
+## — it instantiates the module and then calls apply_spec_overrides() below to layer
+## any per-fight tweaks on top. from_spec() is the plain-dictionary path (no module).
 static func from_spec(spec: Dictionary) -> CharacterBase:
 	var cb := CharacterBase.new()
-	cb.char_name = str(spec.get("name", "Character"))
-	cb.level = int(spec.get("level", 1))
-	cb.char_type = _parse_type(spec.get("type", Stats.CharType.CHARACTER))
-	cb.race = int(spec.get("race", Stats.Race.HUMAN))
-	cb.organic = bool(spec.get("organic", true))
-	cb.incorporeal = bool(spec.get("incorporeal", false))
 	cb.base_stats = Stats.default_base_stats()
+	apply_spec_overrides(cb, spec)
+	return cb
+
+## Layer a spec's OPTIONAL override keys onto an already-built body. Only keys that
+## are actually present change anything, so it is safe to pass a spec that names a
+## character module plus a few tweaks — the module's own identity/stats/buffs stay
+## unless the spec overrides them. Used by from_spec (a bare body) and by
+## CharacterRegistry.build (a character-module instance). Re-inits vitals at the end.
+static func apply_spec_overrides(cb: CharacterBase, spec: Dictionary) -> void:
+	if spec.has("name"):
+		cb.char_name = str(spec["name"])
+	if spec.has("level"):
+		cb.level = int(spec["level"])
+	if spec.has("type"):
+		cb.char_type = _parse_type(spec["type"])
+	if spec.has("race"):
+		cb.race = int(spec["race"])
+	if spec.has("organic"):
+		cb.organic = bool(spec["organic"])
+	if spec.has("incorporeal"):
+		cb.incorporeal = bool(spec["incorporeal"])
+	if spec.has("ai"):
+		cb.ai = str(spec["ai"])
+	if spec.has("size_scale"):
+		cb.size_scale = float(spec["size_scale"])
 
 	var overrides = spec.get("stats", {})
 	if typeof(overrides) == TYPE_DICTIONARY:
@@ -255,15 +305,20 @@ static func from_spec(spec: Dictionary) -> CharacterBase:
 		cb.base_stats["spirit"] = float(spec["focus"])
 	if spec.has("max_hp"):
 		# back-solve hp_base so max_hp() reproduces the requested value
-		cb.base_stats["hp_base"] = float(spec["max_hp"]) - cb.get_effective("vitality") * Stats.HP_PER_VITALITY
+		cb.set_max_hp(float(spec["max_hp"]))
 
 	if spec.has("color") and spec["color"] is Color:
 		cb.color_override = spec["color"]
 
+	if spec.has("permanent_buffs") and typeof(spec["permanent_buffs"]) == TYPE_ARRAY:
+		var pb := []
+		for b in spec["permanent_buffs"]:
+			pb.append(str(b))
+		cb.permanent_buffs = pb
+
 	cb.init_vitals()
 	if spec.has("current_hp"):
 		cb.current_hp = clampi(int(spec["current_hp"]), 0, cb.max_hp())
-	return cb
 
 static func _parse_type(v) -> int:
 	if typeof(v) == TYPE_INT:
@@ -284,6 +339,9 @@ func to_dict() -> Dictionary:
 		"race": race,
 		"organic": organic,
 		"incorporeal": incorporeal,
+		"ai": ai,
+		"size_scale": size_scale,
+		"permanent_buffs": permanent_buffs,
 		"base_stats": base_stats,
 		"baskets": baskets,
 	}
@@ -295,6 +353,13 @@ func from_dict(d: Dictionary) -> void:
 	race = int(d.get("race", race))
 	organic = bool(d.get("organic", organic))
 	incorporeal = bool(d.get("incorporeal", incorporeal))
+	ai = str(d.get("ai", ai))
+	size_scale = float(d.get("size_scale", size_scale))
+	var pb = d.get("permanent_buffs", null)
+	if typeof(pb) == TYPE_ARRAY:
+		permanent_buffs = []
+		for b in pb:
+			permanent_buffs.append(str(b))
 
 	var bs = d.get("base_stats", null)
 	if typeof(bs) == TYPE_DICTIONARY:

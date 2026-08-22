@@ -32,7 +32,11 @@ const ATTRIBUTE_STEP := 1.0
 const DEFAULT_SELL_VALUE := 10
 
 # --- the shared stat body ---------------------------------------------------
-var body: CharacterBase = CharacterBase.new()
+## The player's body is a PlayerCharacter (a thin CharacterBase module) so the
+## player is a character module like every other unit and has a home for
+## player-wide permanent buffs. Its STATS are still driven entirely by this
+## autoload (levels / attributes / items / passives rebuilt into the baskets).
+var body: CharacterBase = PlayerCharacter.new()
 
 # --- identity / progression -------------------------------------------------
 var char_name: String = "Sonny"

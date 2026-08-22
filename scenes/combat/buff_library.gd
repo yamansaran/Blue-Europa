@@ -104,6 +104,47 @@ static func build(id: String, _caster: CharacterBase = null, _target: CharacterB
 				],
 			})
 
+		# --- Frost Ward: a PERMANENT innate ice resistance -------------------
+		# Used as a PERMANENT buff (duration -1, so it never counts down): a
+		# character module lists "frost_ward" in its permanent_buffs and combat
+		# auto-applies it at battle start. Flat +40 ice defence via mods, so it
+		# shows in the stat readouts like any flat resist.
+		"frost_ward":
+			return Buff.make({
+				"id": "frost_ward",
+				"source": "Frost Ward",
+				"desc": "Wreathed in frost: +40 ice resistance. Permanent.",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": -1,              # -1 => permanent, never expires
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				"element": "ice",
+				"mods": {"ice_defense": 40.0},
+			})
+
+		# --- Frost Mantle: a PERMANENT reflect aura --------------------------
+		# The boss's extra permanent buff: reflects a little ice damage back
+		# whenever it is struck (via the generic on_struck "reflect" system —
+		# see CombatBuffs.fire_on_struck). Permanent (duration -1).
+		"frost_mantle":
+			return Buff.make({
+				"id": "frost_mantle",
+				"source": "Frost Mantle",
+				"desc": "A permanent mantle of frost: reflects 15 (+10% of the damage taken) as ice when struck.",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": -1,              # -1 => permanent, never expires
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				"element": "ice",
+				"on_struck": [
+					{"effect": "reflect", "amount": 15.0, "percent": 0.10, "element": "ice"},
+				],
+			})
+
 		_:
 			return {}
 

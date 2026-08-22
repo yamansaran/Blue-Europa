@@ -75,21 +75,17 @@ static func default_objects() -> Array:
 # ---------------------------------------------------------------------------
 # Enemy / fight builders  (the standard "ice" content for now)
 # ---------------------------------------------------------------------------
-static func ice_sprite_spec(hp: int = 150) -> Dictionary:
-	return {
-		"name": "Ice Sprite", "type": "enemy",
-		"max_hp": hp, "ai": "none",
-		"color": Color(0.55, 0.75, 0.95),
-	}
+## Enemy specs now just NAME a character module (see scenes/characters/units/).
+## The creature's stats, colour, size, AI and permanent buffs all live in its
+## module file — CharacterRegistry.build() instantiates it. A fight can still add
+## per-fight overrides to the returned dict (e.g. {"character":"ice_spirit",
+## "level":3, "stats":{"vigor":20}}) and apply_spec_overrides layers them on top.
+static func ice_sprite_spec() -> Dictionary:
+	return { "character": "ice_spirit" }
 
-## The boss: the same ice sprite but BIGGER (size_scale) and with more health.
-static func large_ice_sprite_spec(hp: int = 600, scale: float = 2.2) -> Dictionary:
-	return {
-		"name": "Large Ice Sprite", "type": "enemy",
-		"max_hp": hp, "ai": "none",
-		"color": Color(0.40, 0.66, 0.95),
-		"size_scale": scale,   # read by the combat engine to enlarge the model
-	}
+## The boss: its own module (LargeIceSpirit) — the same creature, bigger + tougher.
+static func large_ice_sprite_spec() -> Dictionary:
+	return { "character": "large_ice_spirit" }
 
 static func normal_loot() -> Dictionary:
 	return {
