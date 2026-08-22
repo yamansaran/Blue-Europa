@@ -20,6 +20,7 @@ func _ready() -> void:
 	options_btn.pressed.connect(func(): load_content(GameManager.SCENE_OPTIONS))
 	achievements_btn.pressed.connect(func(): load_content(GameManager.SCENE_ACHIEVEMENTS))
 	save_btn.pressed.connect(_on_save_pressed)
+	_add_studio_button()
 	world_map_btn.pressed.connect(_on_world_map_pressed)
 	# Boot into a requested content panel (e.g. the victory screen) if one was
 	# staged; otherwise into the CURRENT campaign's overworld (via GameManager,
@@ -82,3 +83,37 @@ func _on_save_pressed() -> void:
 
 func _on_world_map_pressed() -> void:
 	GameManager.go_to_campaign_map()
+
+## DEBUG (temporary): a small "CS" button overlaid on the top-left corner of the
+## Save button that opens the Creation Studio (the tool for authoring ability /
+## item .tres files). It's parented to the Save button, so it rides along wherever
+## the toolbar HBox positions it. The overlap is intentional and the Save button's
+## own size/position are left untouched.
+func _add_studio_button() -> void:
+	var b := Button.new()
+	b.text = "CS"
+	b.tooltip_text = "Open Creation Studio (debug)"
+	b.focus_mode = Control.FOCUS_NONE              # don't steal spacebar / keyboard focus
+	b.mouse_filter = Control.MOUSE_FILTER_STOP     # consume its own clicks so Save doesn't also fire
+	b.add_theme_font_size_override("font_size", 10)
+	b.pressed.connect(_open_creation_studio)
+	save_btn.add_child(b)
+	b.set_anchors_preset(Control.PRESET_TOP_LEFT)  # pin to the Save button's top-left corner
+	b.position = Vector2(2, 2)
+	b.size = Vector2(30, 18)
+
+## DEBUG: instance the Creation Studio window over the shell. It frees itself on
+## close (see creation_studio.gd _on_close). Guarded so a second click is a no-op
+## while it's already open.
+func _open_creation_studio() -> void:
+	if has_node("CreationStudioPopup"):
+		return
+	var packed: PackedScene = load("res://scenes/tools/creation_studio.tscn")
+	if packed == null:
+		push_error("Shell: could not load res://scenes/tools/creation_studio.tscn")
+		return
+	var studio := packed.instantiate()
+	studio.name = "CreationStudioPopup"
+	add_child(studio)
+	if studio is Window:
+		(studio as Window).popup_centered(Vector2i(780, 860))
