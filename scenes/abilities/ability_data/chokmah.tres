@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="Ability" format=3]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_hkkc0"]
+
+[resource]
+script = ExtResource("1_hkkc0")
+id = &"chokmah"
+display_name = "Chokmah"

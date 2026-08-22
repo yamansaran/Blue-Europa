@@ -1,46 +1,51 @@
-[gd_scene load_steps=43 format=3 uid="uid://cskilltreesmpl1"]
+[gd_scene load_steps=48 format=3 uid="uid://cskilltreesmpl1"]
 
 [ext_resource type="Script" path="res://scenes/abilities/skill_tree.gd" id="1_tree"]
 [ext_resource type="Script" path="res://scenes/abilities/skill_node.gd" id="2_node"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/do_thing.tres" id="3_ability"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/hod.tres" id="4_hod"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/netzach.tres" id="5_netzach"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/yesod.tres" id="6_yesod"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/malkuth.tres" id="7_malkuth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/aleph.tres" id="8_aleph"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/beth.tres" id="9_beth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/gimel.tres" id="10_gimel"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/daleth.tres" id="11_daleth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/heh.tres" id="12_heh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/vav.tres" id="13_vav"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/zayin.tres" id="14_zayin"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/cheth.tres" id="15_cheth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/teth.tres" id="16_teth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/yod.tres" id="17_yod"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/kaph.tres" id="18_kaph"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/lamed.tres" id="19_lamed"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/mem.tres" id="20_mem"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/nun.tres" id="21_nun"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/samekh.tres" id="22_samekh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/ayin.tres" id="23_ayin"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/peh.tres" id="24_peh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/tzaddi.tres" id="25_tzaddi"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/qoph.tres" id="26_qoph"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/resh.tres" id="27_resh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/shin.tres" id="28_shin"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/tav.tres" id="29_tav"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/severity.tres" id="30_severity"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/mercy.tres" id="31_mercy"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/negative.tres" id="32_negative"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/affirmative.tres" id="33_affirmative"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/altar_of_fire.tres" id="34_altar_of_fire"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/altar_of_water.tres" id="35_altar_of_water"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/bread.tres" id="36_bread"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/menorah.tres" id="37_menorah"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/misericordia.tres" id="38_misericordia"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/severitas.tres" id="39_severitas"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/nomen_ordinis.tres" id="40_nomen_ordinis"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/interpretatio.tres" id="41_interpretatio"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/keter.tres" id="3_keter"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/chokmah.tres" id="4_chokmah"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/binah.tres" id="5_binah"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/chesed.tres" id="6_chesed"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/geburah.tres" id="7_geburah"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/tiphareth.tres" id="8_tiphareth"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/netzach.tres" id="9_netzach"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/hod.tres" id="10_hod"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/yesod.tres" id="11_yesod"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/malkuth.tres" id="12_malkuth"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/aleph.tres" id="13_aleph"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/beth.tres" id="14_beth"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/gimel.tres" id="15_gimel"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/daleth.tres" id="16_daleth"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/heh.tres" id="17_heh"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/vav.tres" id="18_vav"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/zayin.tres" id="19_zayin"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/cheth.tres" id="20_cheth"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/teth.tres" id="21_teth"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/yod.tres" id="22_yod"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/kaph.tres" id="23_kaph"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/lamed.tres" id="24_lamed"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/mem.tres" id="25_mem"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/nun.tres" id="26_nun"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/samekh.tres" id="27_samekh"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/ayin.tres" id="28_ayin"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/peh.tres" id="29_peh"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/tzaddi.tres" id="30_tzaddi"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/qoph.tres" id="31_qoph"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/resh.tres" id="32_resh"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/shin.tres" id="33_shin"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/tav.tres" id="34_tav"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/severity.tres" id="35_severity"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/mercy.tres" id="36_mercy"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/negative.tres" id="37_negative"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/affirmative.tres" id="38_affirmative"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/altar_of_fire.tres" id="39_altar_of_fire"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/altar_of_water.tres" id="40_altar_of_water"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/bread.tres" id="41_bread"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/menorah.tres" id="42_menorah"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/misericordia.tres" id="43_misericordia"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/severitas.tres" id="44_severitas"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/nomen_ordinis.tres" id="45_nomen_ordinis"]
+[ext_resource type="Resource" path="res://scenes/abilities/ability_data/interpretatio.tres" id="46_interpretatio"]
 
 [sub_resource type="StyleBoxFlat" id="sb_info"]
 bg_color = Color(0.08, 0.08, 0.09, 0.96)
@@ -67,7 +72,7 @@ script = ExtResource("1_tree")
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("3_ability")
+ability = ExtResource("3_keter")
 node_id = "keter"
 parents = Array[String](["aleph", "beth", "gimel"])
 center_position = Vector2(300.0, 74.0)
@@ -77,7 +82,7 @@ size_class = 2
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("3_ability")
+ability = ExtResource("4_chokmah")
 node_id = "chokmah"
 parents = Array[String](["heh", "vav"])
 center_position = Vector2(440.0, 184.0)
@@ -87,7 +92,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("3_ability")
+ability = ExtResource("5_binah")
 node_id = "binah"
 parents = Array[String](["zayin", "cheth"])
 center_position = Vector2(160.0, 184.0)
@@ -97,7 +102,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("3_ability")
+ability = ExtResource("6_chesed")
 node_id = "chesed"
 parents = Array[String](["yod", "kaph"])
 center_position = Vector2(440.0, 324.0)
@@ -107,7 +112,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("3_ability")
+ability = ExtResource("7_geburah")
 node_id = "gevurah"
 parents = Array[String](["lamed", "mem"])
 center_position = Vector2(160.0, 324.0)
@@ -117,7 +122,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("3_ability")
+ability = ExtResource("8_tiphareth")
 node_id = "tiferet"
 parents = Array[String](["nun", "samekh", "ayin"])
 center_position = Vector2(300.0, 394.0)
@@ -127,7 +132,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("5_netzach")
+ability = ExtResource("9_netzach")
 node_id = "netzach"
 parents = Array[String](["tzaddi", "qoph"])
 center_position = Vector2(440.0, 464.0)
@@ -137,7 +142,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("4_hod")
+ability = ExtResource("10_hod")
 node_id = "hod"
 parents = Array[String](["resh", "shin"])
 center_position = Vector2(160.0, 464.0)
@@ -147,7 +152,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("6_yesod")
+ability = ExtResource("11_yesod")
 node_id = "yesod"
 parents = Array[String](["tav"])
 center_position = Vector2(300.0, 534.0)
@@ -157,7 +162,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("7_malkuth")
+ability = ExtResource("12_malkuth")
 node_id = "malkuth"
 center_position = Vector2(300.0, 644.0)
 size_class = 1
@@ -166,7 +171,7 @@ size_class = 1
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("8_aleph")
+ability = ExtResource("13_aleph")
 node_id = "aleph"
 parents = Array[String](["chokmah"])
 center_position = Vector2(370.0, 129.0)
@@ -176,7 +181,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("9_beth")
+ability = ExtResource("14_beth")
 node_id = "beth"
 parents = Array[String](["binah"])
 center_position = Vector2(230.0, 129.0)
@@ -186,7 +191,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("10_gimel")
+ability = ExtResource("15_gimel")
 node_id = "gimel"
 parents = Array[String](["tiferet"])
 center_position = Vector2(300.0, 234.0)
@@ -196,7 +201,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("11_daleth")
+ability = ExtResource("16_daleth")
 node_id = "daleth"
 parents = Array[String](["chokmah", "binah"])
 center_position = Vector2(300.0, 184.0)
@@ -206,7 +211,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("12_heh")
+ability = ExtResource("17_heh")
 node_id = "heh"
 parents = Array[String](["tiferet"])
 center_position = Vector2(370.0, 289.0)
@@ -216,7 +221,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("13_vav")
+ability = ExtResource("18_vav")
 node_id = "vav"
 parents = Array[String](["chesed"])
 center_position = Vector2(440.0, 254.0)
@@ -226,7 +231,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("14_zayin")
+ability = ExtResource("19_zayin")
 node_id = "zayin"
 parents = Array[String](["tiferet"])
 center_position = Vector2(230.0, 289.0)
@@ -236,7 +241,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("15_cheth")
+ability = ExtResource("20_cheth")
 node_id = "cheth"
 parents = Array[String](["gevurah"])
 center_position = Vector2(160.0, 254.0)
@@ -246,7 +251,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("16_teth")
+ability = ExtResource("21_teth")
 node_id = "teth"
 parents = Array[String](["chesed", "gevurah"])
 center_position = Vector2(300.0, 324.0)
@@ -256,7 +261,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("17_yod")
+ability = ExtResource("22_yod")
 node_id = "yod"
 parents = Array[String](["tiferet"])
 center_position = Vector2(370.0, 359.0)
@@ -266,7 +271,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("18_kaph")
+ability = ExtResource("23_kaph")
 node_id = "kaph"
 parents = Array[String](["netzach"])
 center_position = Vector2(440.0, 394.0)
@@ -276,7 +281,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("19_lamed")
+ability = ExtResource("24_lamed")
 node_id = "lamed"
 parents = Array[String](["tiferet"])
 center_position = Vector2(230.0, 359.0)
@@ -286,7 +291,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("20_mem")
+ability = ExtResource("25_mem")
 node_id = "mem"
 parents = Array[String](["hod"])
 center_position = Vector2(160.0, 394.0)
@@ -296,7 +301,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("21_nun")
+ability = ExtResource("26_nun")
 node_id = "nun"
 parents = Array[String](["netzach"])
 center_position = Vector2(370.0, 429.0)
@@ -306,7 +311,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("22_samekh")
+ability = ExtResource("27_samekh")
 node_id = "samekh"
 parents = Array[String](["yesod"])
 center_position = Vector2(300.0, 434.0)
@@ -316,7 +321,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("23_ayin")
+ability = ExtResource("28_ayin")
 node_id = "ayin"
 parents = Array[String](["hod"])
 center_position = Vector2(230.0, 429.0)
@@ -326,7 +331,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("24_peh")
+ability = ExtResource("29_peh")
 node_id = "peh"
 parents = Array[String](["netzach", "hod"])
 center_position = Vector2(300.0, 464.0)
@@ -336,7 +341,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("25_tzaddi")
+ability = ExtResource("30_tzaddi")
 node_id = "tzaddi"
 parents = Array[String](["yesod"])
 center_position = Vector2(370.0, 499.0)
@@ -346,7 +351,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("26_qoph")
+ability = ExtResource("31_qoph")
 node_id = "qoph"
 parents = Array[String](["malkuth"])
 center_position = Vector2(370.0, 554.0)
@@ -356,7 +361,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("27_resh")
+ability = ExtResource("32_resh")
 node_id = "resh"
 parents = Array[String](["yesod"])
 center_position = Vector2(230.0, 499.0)
@@ -366,7 +371,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("28_shin")
+ability = ExtResource("33_shin")
 node_id = "shin"
 parents = Array[String](["malkuth"])
 center_position = Vector2(230.0, 554.0)
@@ -376,7 +381,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("29_tav")
+ability = ExtResource("34_tav")
 node_id = "tav"
 parents = Array[String](["malkuth"])
 center_position = Vector2(300.0, 589.0)
@@ -386,7 +391,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("30_severity")
+ability = ExtResource("35_severity")
 node_id = "severity"
 parents = Array[String](["gevurah"])
 center_position = Vector2(60.0, 324.0)
@@ -396,7 +401,7 @@ size_class = 2
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("31_mercy")
+ability = ExtResource("36_mercy")
 node_id = "mercy"
 parents = Array[String](["chesed"])
 center_position = Vector2(540.0, 324.0)
@@ -406,7 +411,7 @@ size_class = 2
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("32_negative")
+ability = ExtResource("37_negative")
 node_id = "negative"
 parents = Array[String](["mem"])
 center_position = Vector2(60.0, 394.0)
@@ -416,7 +421,7 @@ size_class = 2
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("33_affirmative")
+ability = ExtResource("38_affirmative")
 node_id = "affirmative"
 parents = Array[String](["kaph"])
 center_position = Vector2(540.0, 394.0)
@@ -426,7 +431,7 @@ size_class = 2
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("34_altar_of_fire")
+ability = ExtResource("39_altar_of_fire")
 node_id = "altar_of_fire"
 center_position = Vector2(270.0, 570.0)
 size_class = 0
@@ -435,7 +440,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("35_altar_of_water")
+ability = ExtResource("40_altar_of_water")
 node_id = "altar_of_water"
 center_position = Vector2(330.0, 570.0)
 size_class = 0
@@ -444,7 +449,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("36_bread")
+ability = ExtResource("41_bread")
 node_id = "bread"
 center_position = Vector2(230.0, 394.0)
 size_class = 0
@@ -453,7 +458,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("37_menorah")
+ability = ExtResource("42_menorah")
 node_id = "menorah"
 center_position = Vector2(370.0, 394.0)
 size_class = 0
@@ -462,7 +467,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("38_misericordia")
+ability = ExtResource("43_misericordia")
 node_id = "misericordia"
 center_position = Vector2(265.0, 262.0)
 size_class = 0
@@ -471,7 +476,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("39_severitas")
+ability = ExtResource("44_severitas")
 node_id = "severitas"
 center_position = Vector2(335.0, 262.0)
 size_class = 0
@@ -480,7 +485,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("40_nomen_ordinis")
+ability = ExtResource("45_nomen_ordinis")
 node_id = "nomen_ordinis"
 center_position = Vector2(255.0, 160.0)
 size_class = 0
@@ -489,7 +494,7 @@ size_class = 0
 layout_mode = 1
 anchors_preset = 0
 script = ExtResource("2_node")
-ability = ExtResource("41_interpretatio")
+ability = ExtResource("46_interpretatio")
 node_id = "interpretatio"
 center_position = Vector2(345.0, 160.0)
 size_class = 0
