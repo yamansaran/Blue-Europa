@@ -93,6 +93,18 @@ const SPIRIT_REGEN_DEFAULT := 15.0
 ## major, so it never shows in the attribute screen or the debug stat panel.
 const ACTION_POINTS_DEFAULT := 1.0
 
+# --- vulnerability tuning ---------------------------------------------------
+## A hidden per-character MULTIPLIER on the damage-over-time (DoT) this character
+## TAKES from debuffs (bleed / poison / drain, etc.). Default 1.0 = no change; 1.5
+## = takes 50% more DoT; 0.5 = takes half. It is a real base stat ("vulnerability")
+## so it is per-character OVERRIDABLE via a spec (stats:{"vulnerability": ...}) and
+## BUFFABLE like anything else (a debuff can raise it, a buff can lower it). Applied
+## by CombatBuffs when a DoT entry computes its damage for the bearer, BEFORE that
+## damage is dealt (see CombatBuffs.collect_turn_start). It is NOT a major, so —
+## exactly like spirit_regen / action_points — it never shows in the attribute
+## screen. (The debug stat panel adds a field for it so it can be tested.)
+const VULNERABILITY_DEFAULT := 1.0
+
 # ----------------------------------------------------------------------------
 ## A fresh copy of the full base-stat dictionary (majors + hp_base + every
 ## element's pierce/defence/amp). Always returns a NEW dict so callers can mutate
@@ -106,6 +118,7 @@ static func default_base_stats() -> Dictionary:
 	d["mitigation_stiffness"] = MITIGATION_STIFFNESS_DEFAULT
 	d["spirit_regen"] = SPIRIT_REGEN_DEFAULT
 	d["action_points"] = ACTION_POINTS_DEFAULT
+	d["vulnerability"] = VULNERABILITY_DEFAULT
 	for e in REAL_ELEMENTS:
 		d[e + "_pierce"] = PIERCE_DEFAULT
 		d[e + "_defense"] = DEFENSE_DEFAULT

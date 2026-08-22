@@ -13,9 +13,8 @@ class_name CombatBuffs
 ##
 ## Everything is static (like CombatMath / CombatCrit). A buff is the rich entry
 ## dict built by Buff.make (see buff.gd); it lives in the same baskets the
-## additive stat model already sums, so a buff's "mods" apply to effective stats
-## for free — this engine only handles the parts that AREN'T a plain additive
-## stat.
+## additive stat model already sums, so a buff's "mods"/"mult" apply to effective
+## stats for free — this engine only handles the parts that AREN'T a plain stat.
 ##
 ## class_name global — RESTART Godot once after adding this script.
 ## ----------------------------------------------------------------------------
@@ -90,6 +89,11 @@ static func remove(body: CharacterBase, id: String) -> bool:
 ## entry (including an entry that expires this turn — it still ticks once more),
 ## THEN durations are decremented and any that hit 0 are removed.
 ##
+## VULNERABILITY: each DoT's damage is multiplied by the BEARER's effective
+## `vulnerability` stat (default 1.0) as it is collected — i.e. when the buff
+## computes how much damage it will deal, BEFORE that number is handed off to be
+## applied. A debuff can raise vulnerability (more DoT taken); a buff can lower it.
+##
 ## Returns a report for combat to apply the VISIBLE parts of:
 ##   {
 ##     "dots":        [ {amount:int, element:String}, ... ],  # one per DoT entry
@@ -105,6 +109,10 @@ static func collect_turn_start(body: CharacterBase) -> Dictionary:
 	if body == null:
 		return report
 
+	# The bearer's DoT vulnerability multiplier (clamped >= 0). Applied to every
+	# DoT this turn as it is computed, before the damage is dealt.
+	var vuln := maxf(0.0, body.get_effective("vulnerability"))
+
 	for basket in ["buffs", "debuffs"]:
 		if not body.baskets.has(basket):
 			continue
@@ -113,10 +121,12 @@ static func collect_turn_start(body: CharacterBase) -> Dictionary:
 			if typeof(e) != TYPE_DICTIONARY:
 				continue
 			# --- effects for this turn (full current stack) ---
-			var dmg := Buff.dot_damage(e)
-			if dmg > 0:
-				report["dots"].append({"amount": dmg, "element": str(e.get("dot_element", "physical"))})
-				report["dot_total"] = int(report["dot_total"]) + dmg
+			var raw_dmg := Buff.dot_damage(e)
+			if raw_dmg > 0:
+				var dmg := int(round(float(raw_dmg) * vuln))   # vulnerability applied here
+				if dmg > 0:
+					report["dots"].append({"amount": dmg, "element": str(e.get("dot_element", "physical"))})
+					report["dot_total"] = int(report["dot_total"]) + dmg
 			report["spirit_delta"] = float(report["spirit_delta"]) + float(e.get("spirit_per_turn", 0.0))
 
 			# --- advance duration ---

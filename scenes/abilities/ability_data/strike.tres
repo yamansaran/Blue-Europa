@@ -6,7 +6,7 @@
 script = ExtResource("1_ability")
 id = &"strike"
 display_name = "Strike"
-description = "Deal 100 + Vigor physical damage to the target."
+description = "Deal 100 + Vigor Physical damage to the target."
 base_power = 50.0
 scaling_stat = &"vigor"
 scaling_mult = 1.5

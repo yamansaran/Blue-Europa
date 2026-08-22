@@ -7,15 +7,16 @@ extends HBoxContainer
 ## A row of thin vertical "chips", one per VISIBLE buff/debuff on a unit. It sits
 ## next to the unit's health bar in the top band — combat places it on the RIGHT
 ## of the bar for the player party and on the LEFT for enemies. Chips stack side
-## by side; hovering one fades in a small description panel; each chip shows a
-## turns-until-expiry counter at its bottom-right (an "inf" for permanent effects)
-## and a small "xN" stack badge at its top-left when stacked.
+## by side; hovering one pops a description card; each chip shows a turns-until-
+## expiry counter at its bottom-right (an "inf" for permanent effects) and a small
+## "xN" stack badge at its top-left when stacked.
+##
+## The hover card is now the SHARED HoverPanel (same core the ability tooltip
+## uses), so buff descriptions get the same look, placement, and element-name
+## KEYWORD COLOURING as everything else. Chip drawing is unchanged.
 ##
 ## Chip colour = the effect's element colour (ElementColors) when it has an
 ## element tag, otherwise green for a buff / red for a debuff.
-##
-## Rebuild it with refresh() whenever a unit's buffs change (combat calls this via
-## BattleCharacter.refresh_buffs()).
 ##
 ## class_name global — RESTART Godot once after adding this script.
 ## ----------------------------------------------------------------------------
@@ -25,6 +26,7 @@ enum { SIDE_RIGHT, SIDE_LEFT }
 const CHIP_W := 12.0
 const CHIP_H := 34.0
 const CHIP_SEP := 3
+const TIP_WIDTH := 210.0
 
 const BUFF_COLOR := Color(0.28, 0.70, 0.34)     # green
 const DEBUFF_COLOR := Color(0.78, 0.28, 0.30)   # red
@@ -33,12 +35,14 @@ const HOVER_BORDER := Color(1, 1, 1, 0.9)
 const COUNTER_COLOR := Color(1, 1, 1)
 const COUNTER_OUTLINE := Color(0, 0, 0)
 
+# Row colours for the hover card (title reads like an ability name).
+const TITLE_BG := Color(0.80, 0.80, 0.82)
+const TITLE_TX := Color(0.08, 0.08, 0.10)
+const META_TX := Color(1.0, 0.86, 0.35)         # gold meta line
+
 var _body: CharacterBase = null
 var _side: int = SIDE_RIGHT
-var _tooltip: PanelContainer = null
-var _tip_title: Label = null
-var _tip_meta: Label = null
-var _tip_desc: Label = null
+var _tooltip: HoverPanel = null
 
 
 func setup(body: CharacterBase, side: int) -> void:
@@ -74,69 +78,29 @@ func refresh() -> void:
 func _ensure_tooltip() -> void:
 	if _tooltip != null and is_instance_valid(_tooltip):
 		return
-	_tooltip = PanelContainer.new()
-	_tooltip.set_as_top_level(true)          # position in canvas space, no clipping
-	_tooltip.z_index = 200
-	_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_tooltip.visible = false
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.08, 0.09, 0.97)
-	sb.set_border_width_all(2)
-	sb.border_color = Color(0.8, 0.75, 0.55, 0.9)
-	sb.set_corner_radius_all(4)
-	sb.set_content_margin_all(8)
-	_tooltip.add_theme_stylebox_override("panel", sb)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 3)
-	vb.custom_minimum_size = Vector2(200, 0)
-	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_tooltip.add_child(vb)
-
-	_tip_title = Label.new()
-	_tip_title.add_theme_font_size_override("font_size", 15)
-	_tip_title.add_theme_color_override("font_color", Color(1, 1, 1))
-	vb.add_child(_tip_title)
-
-	_tip_meta = Label.new()
-	_tip_meta.add_theme_font_size_override("font_size", 12)
-	_tip_meta.add_theme_color_override("font_color", Color(1.0, 0.86, 0.35))
-	vb.add_child(_tip_meta)
-
-	_tip_desc = Label.new()
-	_tip_desc.add_theme_font_size_override("font_size", 12)
-	_tip_desc.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
-	_tip_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_tip_desc.custom_minimum_size = Vector2(200, 0)
-	vb.add_child(_tip_desc)
-
+	_tooltip = HoverPanel.new()
+	_tooltip.content_width = TIP_WIDTH
 	add_child(_tooltip)
 
 
+## Pop the shared hover card for `entry`, anchored to the chip's global rect.
 func show_tip(entry: Dictionary, anchor_global: Rect2) -> void:
 	_ensure_tooltip()
-	_tip_title.text = str(entry.get("source", "Buff"))
-	_tip_meta.text = _meta_line(entry)
-	_tip_desc.text = str(entry.get("desc", ""))
-	_tip_desc.visible = _tip_desc.text != ""
-	_tooltip.reset_size()
-	# place below the chip; nudge left/up to stay on screen
-	var pos := anchor_global.position + Vector2(0, anchor_global.size.y + 4)
-	var vp := get_viewport_rect().size
-	var tip_size := _tooltip.size
-	pos.x = clampf(pos.x, 4.0, maxf(4.0, vp.x - tip_size.x - 4.0))
-	if pos.y + tip_size.y > vp.y - 4.0:
-		pos.y = anchor_global.position.y - tip_size.y - 4.0
-	_tooltip.global_position = pos
-	_tooltip.visible = true
-	_tooltip.modulate.a = 0.0
-	var t := create_tween()
-	t.tween_property(_tooltip, "modulate:a", 1.0, 0.15)
+	var desc := str(entry.get("desc", ""))
+	var rows := [
+		{"text": str(entry.get("source", "Buff")), "bg": TITLE_BG, "fg": TITLE_TX, "stage": 0},
+		# meta is rich so an element tag ("Fire", ...) colours to match the chip.
+		{"text": _meta_line(entry), "bg": HoverPanel.META_BG, "fg": META_TX, "stage": 0, "rich": true},
+		{"text": desc, "bg": HoverPanel.DESC_BG, "fg": HoverPanel.DESC_TX,
+			"stage": 0, "wrap": true, "rich": true, "visible": desc != ""},
+	]
+	# instant reveal (reveal_delay 0); key on the id so a re-hover refreshes in place
+	_tooltip.show_rows(rows, anchor_global, 0.0, "buff:" + str(entry.get("id", "")))
 
 
 func hide_tip() -> void:
 	if _tooltip and is_instance_valid(_tooltip):
-		_tooltip.visible = false
+		_tooltip.hide_panel()
 
 
 func _meta_line(entry: Dictionary) -> String:

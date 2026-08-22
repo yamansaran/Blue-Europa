@@ -9,6 +9,7 @@ extends Node
 ##   - levels     : one entry per level gained         (rebuilt from `level`)
 ##   - attributes : points spent into major stats      (rebuilt, refundable)
 ##   - items      : per-EQUIPPED-item stat mods         (rebuilt from equipped_items)
+##   - passives   : per-PASSIVE-ability stat mods       (rebuilt from the wheel)
 ##   - buffs/debuffs : combat-only, not persisted here
 ## The autoload keeps the progression bookkeeping (xp, money, skill tree, wheel,
 ## ability pool, bag + equipped gear) and drives the body; `base_stats`/`get_stat`
@@ -79,6 +80,21 @@ func _item_db() -> Node:
 	return get_node_or_null("/root/ItemDB")
 
 
+func _ability_db() -> Node:
+	return get_node_or_null("/root/AbilityDB")
+
+
+## Resolve an ability id to its Ability resource via AbilityDB (null if unknown).
+func _resolve_ability(id) -> Ability:
+	var s := str(id)
+	if s == "":
+		return null
+	var db := _ability_db()
+	if db and db.has_method("get_ability"):
+		return db.get_ability(s)
+	return null
+
+
 ## Resolve a bag/equip entry (or a raw id) to its Item resource via ItemDB.
 func _resolve_item(id_or_entry) -> Item:
 	var iid := ""
@@ -104,6 +120,7 @@ func _rebuild_body() -> void:
 	_rebuild_level_basket()
 	_rebuild_attribute_basket()
 	_rebuild_item_basket()
+	_rebuild_passive_basket()
 	body.init_vitals()
 
 
@@ -181,6 +198,39 @@ func _rebuild_item_basket() -> void:
 		if not mods.is_empty():
 			var iname := str(entry.get("name", iid))
 			body.add_entry("items", CharacterBase.make_entry("equip_%s" % slot_key, iname, mods))
+
+
+## The passives basket reflects PASSIVE abilities currently sitting in the combat
+## wheel. Each wheel slot holding a PASSIVE with a stat bonus contributes ONE entry
+## (flat `passive_mods` + multiplier `passive_mult`). Two copies of the same passive
+## in two slots stack (two entries). Rebuilt whenever the wheel changes, so a passive
+## only affects stats WHILE it is slotted — removing it from the wheel drops its
+## entry. This basket is PERSISTENT (never cleared at end of combat).
+func _rebuild_passive_basket() -> void:
+	body.clear_basket("passives")
+	for i in equipped_abilities.size():
+		var id := str(equipped_abilities[i])
+		if id == "":
+			continue
+		var ab := _resolve_ability(id)
+		if ab == null or not ab.has_passive_bonus():
+			continue
+		var mods := {}
+		if typeof(ab.passive_mods) == TYPE_DICTIONARY:
+			mods = (ab.passive_mods as Dictionary).duplicate(true)
+		var mult := {}
+		if typeof(ab.passive_mult) == TYPE_DICTIONARY:
+			mult = (ab.passive_mult as Dictionary).duplicate(true)
+		# id keyed by slot so multiple copies stack and removing one is clean.
+		body.add_entry("passives",
+			CharacterBase.make_entry("passive_slot_%d" % i, ab.display_name, mods, mult))
+
+
+## Re-apply passive bonuses after the wheel changed, then re-clamp vitals (a
+## passive could move max HP / max Spirit) and notify listeners.
+func _refresh_passives_after_wheel_change() -> void:
+	_rebuild_passive_basket()
+	body.clamp_vitals()
 
 
 # ============================================================================
@@ -289,7 +339,7 @@ func get_body() -> CharacterBase:
 
 
 # ============================================================================
-# Ability API (unchanged)
+# Ability API (unchanged except: wheel changes now rebuild the passives basket)
 # ============================================================================
 func is_unlocked(id) -> bool:
 	return unlocked_abilities.has(str(id))
@@ -313,11 +363,9 @@ func count_equipped(id) -> int:
 	return n
 
 func _max_equipped_for(id) -> int:
-	var db := get_node_or_null("/root/AbilityDB")
-	if db and db.has_method("get_ability"):
-		var ab = db.get_ability(id)
-		if ab != null:
-			return int(ab.max_equipped)
+	var ab := _resolve_ability(id)
+	if ab != null:
+		return int(ab.max_equipped)
 	return 2
 
 func can_equip(slot: int, id) -> bool:
@@ -334,6 +382,7 @@ func equip_ability(slot: int, id) -> bool:
 	if not can_equip(slot, id):
 		return false
 	equipped_abilities[slot] = str(id)
+	_refresh_passives_after_wheel_change()
 	changed.emit()
 	save_game()
 	return true
@@ -344,6 +393,7 @@ func unequip_slot(slot: int) -> void:
 	if str(equipped_abilities[slot]) == "":
 		return
 	equipped_abilities[slot] = ""
+	_refresh_passives_after_wheel_change()
 	changed.emit()
 	save_game()
 
@@ -357,6 +407,9 @@ func move_equipped(from_slot: int, to_slot: int) -> bool:
 	var tmp = equipped_abilities[from_slot]
 	equipped_abilities[from_slot] = equipped_abilities[to_slot]
 	equipped_abilities[to_slot] = tmp
+	# Passive entries are keyed by slot index, so a move can change which slot a
+	# passive occupies — rebuild so the basket matches the wheel.
+	_refresh_passives_after_wheel_change()
 	changed.emit()
 	save_game()
 	return true

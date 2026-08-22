@@ -7,23 +7,38 @@ class_name CharacterBase
 ## Player, ally, and enemy are all built from this. It holds:
 ##   - identity (name, level, type, race, organic/incorporeal, portrait)
 ##   - BASE stats (never mutated after setup)
-##   - BASKETS of bonus entries (items / levels / attributes / buffs / debuffs)
+##   - BASKETS of bonus entries (items / levels / attributes / passives / buffs / debuffs)
 ##   - runtime vitals (current_hp, current_spirit)
 ##
 ## THE STAT MODEL
 ## --------------
 ## base_stats holds the untouched base numbers. Every bonus lives in a basket as
 ## an individual, labelled entry. An effective stat is:
-##       base + sum of every matching mod across every basket entry.
-## "Everything is a hidden buff": equipping an item adds an entry to the items
-## basket, gaining a level adds one to the levels basket, spending an attribute
-## point adds one to the attributes basket, and combat buffs/debuffs add to
-## theirs. Removing the source removes its entry; the base never changes, so a
-## respec / unequip / buff-expiry is just "drop that entry".
+##       (base + sum of every FLAT mod)  ×  (1 + sum of every MULTIPLIER)
+## i.e. flat bonuses ("mods") are added first, then every multiplicative bonus
+## ("mult") is applied on top — and all multipliers are ADDITIVE with each other
+## (two +20% sources give ×1.40, not ×1.44). "Everything is a hidden buff":
+## equipping an item adds an entry to the items basket, gaining a level adds one
+## to the levels basket, spending an attribute point adds one to the attributes
+## basket, a PASSIVE ability slotted in the wheel adds one to the passives basket,
+## and combat buffs/debuffs add to theirs. Removing the source removes its entry;
+## the base never changes, so a respec / unequip / passive-removal / buff-expiry is
+## just "drop that entry".
 ##
 ## An entry is a plain Dictionary (JSON-friendly for saving):
-##       { "id": String, "source": String, "mods": { stat_key: float, ... } }
-## Use CharacterBase.make_entry(...) to build one.
+##       { "id": String, "source": String,
+##         "mods": { stat_key: float, ... },      # FLAT, added
+##         "mult": { stat_key: float, ... } }     # MULTIPLIER, e.g. 0.2 = +20%
+## Use CharacterBase.make_entry(...) to build one. `mult` is optional — an entry
+## with no "mult" (or an old 3-arg entry) is a pure flat bonus, exactly as before.
+##
+## TWO KINDS OF "MULTIPLIER", DON'T CONFUSE THEM:
+##   - entry["mult"] (THIS layer) scales a BASE STAT (vigor, fire_defense, ...) and
+##     SHOWS in get_effective() / the ability & inventory readouts. Used by
+##     equipment, passive abilities, and any buff that should visibly scale a stat.
+##   - the combat-only keys resist_mult / damage_dealt_mult (stored elsewhere and
+##     read by CombatMath/CombatBuffs) are separate damage-pipeline multipliers and
+##     do NOT go through this layer.
 ## ----------------------------------------------------------------------------
 
 # --- identity ---------------------------------------------------------------
@@ -41,10 +56,15 @@ class_name CharacterBase
 var base_stats: Dictionary = Stats.default_base_stats()
 
 ## Bonus baskets. Each value is an Array of entry Dictionaries (see header).
+## PERSISTENT baskets (items / levels / attributes / passives) survive combat;
+## the combat-only buffs / debuffs baskets live on the battle clone and are gone
+## when the fight ends. `passives` is fed by PASSIVE abilities sitting in the
+## combat wheel (rebuilt by Character, like items).
 var baskets: Dictionary = {
 	"items": [],
 	"levels": [],
 	"attributes": [],
+	"passives": [],
 	"buffs": [],
 	"debuffs": [],
 }
@@ -62,7 +82,7 @@ var color_override = null
 func get_base(stat: String) -> float:
 	return float(base_stats.get(stat, 0.0))
 
-## Sum of every mod for `stat` across every basket entry.
+## Sum of every FLAT mod for `stat` across every basket entry.
 func get_bonus(stat: String) -> float:
 	var total := 0.0
 	for basket_name in baskets:
@@ -72,7 +92,7 @@ func get_bonus(stat: String) -> float:
 				total += float(mods[stat])
 	return total
 
-## Bonus contributed by a single basket (e.g. just "items").
+## Flat bonus contributed by a single basket (e.g. just "items").
 func get_basket_bonus(basket_name: String, stat: String) -> float:
 	var total := 0.0
 	if not baskets.has(basket_name):
@@ -83,14 +103,40 @@ func get_basket_bonus(basket_name: String, stat: String) -> float:
 			total += float(mods[stat])
 	return total
 
+## Sum of every MULTIPLIER for `stat` across every basket entry (an entry's
+## optional "mult" dict). All multipliers are ADDITIVE with each other, so the
+## total applied is (1 + this). A stat with no multipliers returns 0.0 -> ×1.0.
+func get_mult_bonus(stat: String) -> float:
+	var total := 0.0
+	for basket_name in baskets:
+		for entry in baskets[basket_name]:
+			var mult = entry.get("mult", null)
+			if typeof(mult) == TYPE_DICTIONARY and mult.has(stat):
+				total += float(mult[stat])
+	return total
+
+## Multiplier from a single basket only (e.g. just "buffs"), as (sum of mult).
+func get_basket_mult(basket_name: String, stat: String) -> float:
+	var total := 0.0
+	if not baskets.has(basket_name):
+		return total
+	for entry in baskets[basket_name]:
+		var mult = entry.get("mult", null)
+		if typeof(mult) == TYPE_DICTIONARY and mult.has(stat):
+			total += float(mult[stat])
+	return total
+
+## Effective stat: flat bonuses added to the base, then every multiplier applied
+## on top:  (base + flat) × (1 + sum of multipliers).  With no multipliers this is
+## exactly base + flat, so existing behaviour is unchanged.
 func get_effective(stat: String) -> float:
-	return get_base(stat) + get_bonus(stat)
+	return (get_base(stat) + get_bonus(stat)) * (1.0 + get_mult_bonus(stat))
 
 func get_effective_int(stat: String) -> int:
 	return int(round(get_effective(stat)))
 
-## Flat stat snapshot (base+bonus) for systems that still want a plain Dictionary
-## (e.g. the current Ability.compute_damage(caster_stats)).
+## Flat stat snapshot (fully effective, incl. multipliers) for systems that still
+## want a plain Dictionary (e.g. Ability.compute_damage(caster_stats)).
 func effective_stats() -> Dictionary:
 	var out := {}
 	for stat in base_stats:
@@ -119,8 +165,10 @@ func clamp_vitals() -> void:
 # ============================================================================
 # Basket API  —  "everything is a hidden buff"
 # ============================================================================
-static func make_entry(id: String, source: String, mods: Dictionary) -> Dictionary:
-	return {"id": id, "source": source, "mods": mods}
+## Build an entry. `mods` are FLAT stat changes; `mult` are MULTIPLIERS (0.2 =
+## +20%), and defaults to empty so a plain flat entry is just make_entry(id,src,mods).
+static func make_entry(id: String, source: String, mods: Dictionary, mult: Dictionary = {}) -> Dictionary:
+	return {"id": id, "source": source, "mods": mods, "mult": mult}
 
 func add_entry(basket_name: String, entry: Dictionary) -> void:
 	if not baskets.has(basket_name):
@@ -255,7 +303,7 @@ func from_dict(d: Dictionary) -> void:
 			base_stats[str(k)] = float(bs[k])
 
 	var bk = d.get("baskets", null)
-	baskets = {"items": [], "levels": [], "attributes": [], "buffs": [], "debuffs": []}
+	baskets = {"items": [], "levels": [], "attributes": [], "passives": [], "buffs": [], "debuffs": []}
 	if typeof(bk) == TYPE_DICTIONARY:
 		for name in bk:
 			if typeof(bk[name]) == TYPE_ARRAY:
@@ -283,10 +331,13 @@ static func debug_demo() -> String:
 	# equip an item and gain a level, both as hidden baskets
 	cb.add_entry("items", make_entry("iron_sword", "Iron Sword", {"vigor": 5.0, "fire_amp": 20.0}))
 	cb.add_entry("levels", make_entry("lvl_2", "Level 2", {"vigor": 1.0, "vitality": 2.0}))
+	# a passive that gives +20% vigor (multiplier) — shows in the effective value
+	cb.add_entry("passives", make_entry("demo_passive", "Demo Passive", {}, {"vigor": 0.20}))
 	cb.init_vitals()
-	lines.append("AFTER Iron Sword + Level 2:")
-	lines.append("  vig  base=%d + bonus=%d = eff=%d" % [
-		int(cb.get_base("vigor")), int(cb.get_bonus("vigor")), int(cb.get_effective("vigor"))])
+	lines.append("AFTER Iron Sword + Level 2 + (+20% vigor passive):")
+	lines.append("  vig  base=%d + flat=%d, ×%.2f -> eff=%d" % [
+		int(cb.get_base("vigor")), int(cb.get_bonus("vigor")),
+		1.0 + cb.get_mult_bonus("vigor"), int(cb.get_effective("vigor"))])
 	lines.append("  vit  eff=%d -> max_hp=%d ; fire_amp eff=%d" % [
 		int(cb.get_effective("vitality")), cb.max_hp(), int(cb.get_effective("fire_amp"))])
 	lines.append("  model colour = %s" % str(cb.model_color()))

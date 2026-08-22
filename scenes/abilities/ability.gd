@@ -72,6 +72,21 @@ enum CostType {
 ## should also drop a buff on hit). Blank => this ability applies no buff.
 @export var applies_buff: StringName = &""
 
+# --- PASSIVE stat bonus (kind == PASSIVE) -----------------------------------
+## A PASSIVE ability grants a CONSTANT stat bonus while it sits in a combat-wheel
+## slot — no activation, no cost, no cooldown. Character rebuilds a "passives"
+## basket from every PASSIVE ability currently in the wheel (exactly like the
+## items basket is rebuilt from equipped gear), so the bonus applies in AND out of
+## combat and is removed the moment the ability leaves the wheel. Because it lives
+## in a PERSISTENT basket it is NOT cleared at the end of combat.
+##   passive_mods : FLAT stat mods,      { stat_key: amount }   e.g. {"vigor": 5}
+##   passive_mult : MULTIPLIER stat mods, { stat_key: fraction } e.g. {"vigor": 0.2}
+##                  (0.2 = +20%; multipliers from all sources are additive)
+## Keys come from the Stats vocabulary. Only read when kind == PASSIVE; existing
+## .tres inherit the empty defaults with no re-save.
+@export var passive_mods: Dictionary = {}
+@export var passive_mult: Dictionary = {}
+
 # --- crit (see CombatCrit) --------------------------------------------------
 ## Multiplies the base crit CHANCE for this ability (base 1.0 = no change).
 @export var crit_chance_mult: float = 1.0
@@ -84,6 +99,15 @@ enum CostType {
 ## Element as its string prefix ("fire", "true", ...) for stat lookups.
 func element_key() -> String:
 	return Stats.element_key(element)
+
+## True when this ability is a PASSIVE that carries a constant stat bonus.
+func is_passive() -> bool:
+	return kind == Kind.PASSIVE
+
+## True when this passive actually contributes something to the passives basket.
+func has_passive_bonus() -> bool:
+	return is_passive() and ((typeof(passive_mods) == TYPE_DICTIONARY and not passive_mods.is_empty()) \
+		or (typeof(passive_mult) == TYPE_DICTIONARY and not passive_mult.is_empty()))
 
 ## The cost as a human phrase WITHOUT the "Cost:" prefix (e.g. "20 spirit",
 ## "10% of maximum health", "nothing"). Add new cases here as CostType grows.
@@ -98,8 +122,10 @@ func cost_phrase() -> String:
 		_:                       return "nothing"
 
 ## The full text for the tooltip cost panel: "Cost: <phrase>", plus a second
-## line "CD: <n>" when the ability has a cooldown.
+## line "CD: <n>" when the ability has a cooldown. A PASSIVE shows "Passive".
 func cost_text() -> String:
+	if is_passive():
+		return "Passive"
 	var t := "Cost: " + cost_phrase()
 	if cooldown > 0:
 		t += "\nCD: %d" % cooldown

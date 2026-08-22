@@ -92,6 +92,9 @@ func _build_form() -> void:
 	var misc_grid := _grid(form)
 	_add_field(misc_grid, "crit_damage_mult", "Crit Dmg Mult", _body.get_base("crit_damage_mult"), 0.0, 100.0, 0.05)
 	_add_field(misc_grid, "mitigation_stiffness", "Mit. Stiffness (m)", _body.get_base("mitigation_stiffness"), 0.0, 10.0, 0.005)
+	# Hidden DoT-vulnerability multiplier (1.0 = normal). Editable here so DoT +
+	# debuff interactions can be tested against the dummy.
+	_add_field(misc_grid, "vulnerability", "Vulnerability", _body.get_base("vulnerability"), 0.0, 100.0, 0.05)
 
 	# --- PER-ELEMENT defense / pierce / amp ---
 	for e in Stats.REAL_ELEMENTS:

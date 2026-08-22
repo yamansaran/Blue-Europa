@@ -7,35 +7,34 @@ class_name Buff
 ## A buff or debuff is a persistent combat effect. It is stored as a plain
 ## Dictionary ENTRY inside a CharacterBase basket ("buffs" or "debuffs"), so it
 ## rides the SAME "everything is a basket of stat mods" model everything else
-## uses — CharacterBase.get_bonus() / get_basket_bonus() sum an entry's "mods"
-## dict with no knowledge that it is a buff. That is deliberate: any stat
-## augment a buff carries (a +5 vigor buff, Dalet's -15 resists, a
-## damage_dealt_mult, a healing_received_mult, a hp_base / spirit change for
-## temporary max-HP / max-Spirit) is just a key in "mods" and works for free.
+## uses — CharacterBase.get_bonus() sums an entry's "mods" (flat) and
+## get_mult_bonus() sums its "mult" (multiplier) with no knowledge that it is a
+## buff. That is deliberate: any stat augment a buff carries (a +5 vigor buff, a
+## +20% vigor buff, Malkuth's -15 resists, a temporary max-HP via hp_base) is just
+## a key in "mods" / "mult" and works for free — AND now shows in the effective
+## stat readouts, then clears when the fight ends (buffs live on the battle clone).
 ##
-## On TOP of "mods", a buff entry carries extra fields for the mechanics that are
-## NOT a plain additive stat:
+## On TOP of "mods" / "mult", a buff entry carries extra fields for the mechanics
+## that are NOT a plain stat:
 ##   - a per-turn DoT (bleed / poison), with its own element and flat multiplier
 ##   - a per-turn spirit change (regen buff / drain debuff)
 ##   - a MULTIPLICATIVE resist multiplier (read by CombatMath as a real layer)
 ##   - silence / stun gameplay flags
 ##   - an on-expire event hook id
 ## and the metadata the systems around it read: visible vs hidden, duration,
-## element tag, stackable + max_stacks + current stacks, buff/debuff weight (for
-## future AI targeting), resistible, transient, a hidden MAGNITUDE (severity
-## gauge, default 1.0), and a list of ON-STRUCK reactions ("when struck do X",
-## e.g. thorns) fired by CombatBuffs when the bearer takes a hit.
+## element tag, stackable + max_stacks + current stacks, weight, magnitude,
+## resistible, transient, and a list of ON-STRUCK reactions.
 ##
 ## STACKING. A stackable buff is stored as ONE entry with a `stacks` count. The
 ## PER-STACK values live in entry["per_stack"]; the live top-level fields
-## ("mods", "dot", "spirit_per_turn", "resist_mult", ...) are the per-stack
-## values times `stacks`, recomputed by recompute_scaled(). That way the additive
-## stat reads (which see the top-level "mods") automatically reflect the stack
-## count, and CombatBuffs only has to bump `stacks` and re-scale.
+## ("mods", "mult", "dot", "spirit_per_turn", "resist_mult", ...) are the per-stack
+## values times `stacks`, recomputed by recompute_scaled(). That way the stat reads
+## (which see the top-level "mods"/"mult") automatically reflect the stack count.
 ##
-## Storage is a Dictionary (not an Object) ON PURPOSE: CharacterBase.get_bonus()
-## does entry.get("mods", {}), which only works on a Dictionary. Buff is a bag of
-## STATIC helpers over that dict, mirroring CombatMath / CombatCrit.
+## NOTE — TWO different "mult"s: entry["mult"] here is the BASE-STAT multiplier
+## layer (scales vigor, defenses, ... and shows in readouts). The separate
+## per-stack "resist_mult" is the combat-only damage-pipeline resist layer read by
+## CombatMath. They are unrelated; keep them straight.
 ##
 ## class_name global — RESTART Godot once after adding this script.
 ## ----------------------------------------------------------------------------
@@ -46,7 +45,8 @@ const KIND_DEBUFF := "debuff"
 ## A fresh per-stack payload with every field at its neutral default.
 static func _default_per_stack() -> Dictionary:
 	return {
-		"mods": {},                 # additive stat mods (per stack)
+		"mods": {},                 # FLAT additive stat mods (per stack)
+		"mult": {},                 # MULTIPLIER stat mods, 0.2 = +20% (per stack)
 		"dot": 0.0,                 # damage-over-time per turn (per stack)
 		"dot_element": "physical",  # element the DoT is dealt as
 		"dot_mult": 1.0,            # flat DoT multiplier (future buffs tune this)
@@ -58,7 +58,7 @@ static func _default_per_stack() -> Dictionary:
 ## Build a full buff/debuff entry from a partial `config`. Everything not given
 ## falls back to a sane default. `config` may set any metadata field directly and
 ## supplies the per-stack payload under whatever of these keys it wants:
-##   mods, dot, dot_element, dot_mult, spirit_per_turn, resist_mult,
+##   mods, mult, dot, dot_element, dot_mult, spirit_per_turn, resist_mult,
 ##   resist_mult_by_element
 ## (they are copied into per_stack), OR pass a ready "per_stack" dict.
 static func make(config: Dictionary) -> Dictionary:
@@ -73,6 +73,7 @@ static func make(config: Dictionary) -> Dictionary:
 				per_stack[k] = config[k]
 	# deep-copy the nested dicts so two entries never share a reference
 	per_stack["mods"] = (per_stack["mods"] as Dictionary).duplicate(true)
+	per_stack["mult"] = (per_stack["mult"] as Dictionary).duplicate(true)
 	per_stack["resist_mult_by_element"] = (per_stack["resist_mult_by_element"] as Dictionary).duplicate(true)
 
 	# ON-STRUCK reactions: a list of "when this bearer is struck, do X" effect
@@ -108,6 +109,7 @@ static func make(config: Dictionary) -> Dictionary:
 		"per_stack": per_stack,
 		# scaled live fields (filled by recompute_scaled below):
 		"mods": {},
+		"mult": {},
 		"dot": 0.0,
 		"dot_element": str(per_stack["dot_element"]),
 		"dot_mult": float(per_stack["dot_mult"]),
@@ -119,8 +121,8 @@ static func make(config: Dictionary) -> Dictionary:
 	return entry
 
 ## Recompute the live (scaled) fields from per_stack * stacks. Call after `stacks`
-## changes. The additive stat system reads entry["mods"], so this is what makes a
-## stack actually change the effective stats.
+## changes. The stat system reads entry["mods"] (flat) and entry["mult"]
+## (multiplier), so this is what makes a stack actually change the effective stats.
 static func recompute_scaled(entry: Dictionary) -> void:
 	var per_stack: Dictionary = entry.get("per_stack", _default_per_stack())
 	var s := float(maxi(1, int(entry.get("stacks", 1))))
@@ -130,6 +132,12 @@ static func recompute_scaled(entry: Dictionary) -> void:
 	for k in base_mods:
 		scaled_mods[k] = float(base_mods[k]) * s
 	entry["mods"] = scaled_mods
+
+	var scaled_mult := {}
+	var base_mult: Dictionary = per_stack.get("mult", {})
+	for k in base_mult:
+		scaled_mult[k] = float(base_mult[k]) * s
+	entry["mult"] = scaled_mult
 
 	entry["dot"] = float(per_stack.get("dot", 0.0)) * s
 	entry["dot_element"] = str(per_stack.get("dot_element", "physical"))
@@ -178,7 +186,9 @@ static func on_struck(entry: Dictionary) -> Array:
 static func has_on_struck(entry: Dictionary) -> bool:
 	return not on_struck(entry).is_empty()
 
-## The DoT damage this entry deals THIS turn (already stack-scaled), as an int.
+## The RAW DoT damage this entry deals THIS turn (already stack-scaled), as an int.
+## NOTE: this is BEFORE the bearer's `vulnerability` multiplier — CombatBuffs
+## applies vulnerability when it collects the turn's DoT (see collect_turn_start).
 static func dot_damage(entry: Dictionary) -> int:
 	var raw := float(entry.get("dot", 0.0)) * float(entry.get("dot_mult", 1.0))
 	return int(round(maxf(0.0, raw)))

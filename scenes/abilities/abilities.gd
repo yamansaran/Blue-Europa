@@ -243,6 +243,7 @@ func _add_major_row(ch: Node, body: CharacterBase, major: String) -> void:
 
 	var base_v := int(round(body.get_base(major)))
 	var bonus_v := int(round(body.get_bonus(major)))
+	var mult := body.get_mult_bonus(major)      # fraction: 0.20 = +20%
 	var eff_v := body.get_effective_int(major)
 
 	var n := Label.new()
@@ -251,10 +252,17 @@ func _add_major_row(ch: Node, body: CharacterBase, major: String) -> void:
 	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(n)
 
+	# Show base, the flat bonus, and the multiplier so the effective value reads as
+	# "base (+flat) ×mult = eff". Each modifier segment only appears when present.
 	var v := Label.new()
-	if bonus_v != 0:
-		var sgn := "+" if bonus_v > 0 else ""
-		v.text = "%d (%s%d) %d" % [base_v, sgn, bonus_v, eff_v]
+	if bonus_v != 0 or not is_zero_approx(mult):
+		var t := str(base_v)
+		if bonus_v != 0:
+			t += " (%s%d)" % ["+" if bonus_v > 0 else "", bonus_v]
+		if not is_zero_approx(mult):
+			t += " ×%.2f" % (1.0 + mult)
+		t += " = %d" % eff_v
+		v.text = t
 	else:
 		v.text = str(eff_v)
 	v.add_theme_font_size_override("font_size", 12)
