@@ -324,8 +324,45 @@ func respec() -> void:
 		refunded += int(v)
 	skill_points += refunded
 	allocations.clear()
+	# Refunding the points also re-locks every node, so the abilities those nodes
+	# granted must leave the pool — otherwise they linger as unlocked forever.
+	_resync_unlocked_from_allocations()
 	changed.emit()
 	save_game()
+
+
+## Rebuild `unlocked_abilities` to exactly what the player currently earns: the
+## always-free defaults (strike) plus every ability granted by a node that STILL
+## has at least one point invested. Anything else — e.g. an ability from a node
+## whose points were just refunded by respec() — is dropped from the pool, and any
+## wheel slot holding a now-locked ability is cleared (rebuilding passives). Safe to
+## call any time allocations change; it only ever removes abilities that no invested
+## node backs, never adds one.
+func _resync_unlocked_from_allocations() -> void:
+	var kept := {"strike": true}
+	for nid in allocations.keys():
+		if int(allocations[nid]) > 0:
+			var aid := str(node_abilities.get(nid, ""))
+			if aid != "":
+				kept[aid] = true
+	var new_unlocked: Array = []
+	for id in unlocked_abilities:
+		var s := str(id)
+		if kept.has(s) and not new_unlocked.has(s):
+			new_unlocked.append(s)
+	unlocked_abilities = new_unlocked
+	if not unlocked_abilities.has("strike"):
+		unlocked_abilities.append("strike")
+	# Drop any equipped ability that is no longer unlocked, then rebuild passives so
+	# a slotted passive that just got re-locked stops contributing its stat bonus.
+	var wheel_changed := false
+	for i in equipped_abilities.size():
+		var eid := str(equipped_abilities[i])
+		if eid != "" and not unlocked_abilities.has(eid):
+			equipped_abilities[i] = ""
+			wheel_changed = true
+	if wheel_changed:
+		_refresh_passives_after_wheel_change()
 
 
 # ============================================================================
