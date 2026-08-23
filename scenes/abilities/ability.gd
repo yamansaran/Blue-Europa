@@ -66,6 +66,27 @@ enum CostType {
 @export var requires: Array[StringName] = []
 @export var required_level: int = 1
 
+# --- PER-RANK OVERRIDES  (the ability RANK system) --------------------------
+## An ability can hold a DIFFERENT value per skill-tree rank. Each array below,
+## when NON-EMPTY, OVERRIDES the matching scalar field for a given rank R (1-based):
+## the value used is  array[clamp(R-1, 0, size-1)]  — so a 3-entry array covers
+## ranks 1/2/3 and any higher rank clamps to the last entry. Leave an array EMPTY
+## to keep the plain scalar behaviour (every existing .tres inherits empty arrays,
+## so nothing needs re-saving). Ranks need NOT be linear or consistent — e.g. Hod
+## costs 20/15/15 spirit and scales Instinct 300/325/350% (scaling_mult 3.0/3.25/3.5).
+## Only fields that CHANGE per rank need an array; the rest keep their single value.
+##   description_ranks  : per-rank tooltip body (String)
+##   cost_amount_ranks  : per-rank cost_amount (int)
+##   base_power_ranks   : per-rank base_power (float) — overrides the
+##                        base_power + power_per_point*(R-1) curve when set
+##   scaling_mult_ranks : per-rank caster-stat scaling multiplier (float)
+##   cooldown_ranks     : per-rank cooldown in turns (int)
+@export var description_ranks: Array[String] = []
+@export var cost_amount_ranks: Array[int] = []
+@export var base_power_ranks: Array[float] = []
+@export var scaling_mult_ranks: Array[float] = []
+@export var cooldown_ranks: Array[int] = []
+
 # --- buff / debuff application ----------------------------------------------
 ## Id of the buff/debuff this ability applies to its target, resolved through
 ## BuffLibrary.build(). Used by BUFF / DEBUFF abilities (and any other kind that
@@ -100,6 +121,45 @@ enum CostType {
 func element_key() -> String:
 	return Stats.element_key(element)
 
+# --- per-rank value access --------------------------------------------------
+## Clamp a 1-based rank `points` to a valid index into a per-rank array of `n`
+## entries: below rank 1 -> 0, above the last entry -> the last entry.
+func _rank_index(points: int, n: int) -> int:
+	var r := points - 1
+	if r < 0:
+		r = 0
+	elif r > n - 1:
+		r = n - 1
+	return r
+
+## The tooltip body for a given rank (description_ranks override, else the scalar).
+func description_at(points: int) -> String:
+	if not description_ranks.is_empty():
+		return description_ranks[_rank_index(points, description_ranks.size())]
+	return description
+
+## The raw cost_amount for a given rank (cost_amount_ranks override, else scalar).
+func cost_amount_at(points: int) -> int:
+	if not cost_amount_ranks.is_empty():
+		return int(cost_amount_ranks[_rank_index(points, cost_amount_ranks.size())])
+	return cost_amount
+
+## The caster-stat scaling multiplier for a given rank.
+func scaling_mult_at(points: int) -> float:
+	if not scaling_mult_ranks.is_empty():
+		return float(scaling_mult_ranks[_rank_index(points, scaling_mult_ranks.size())])
+	return scaling_mult
+
+## The cooldown (turns) for a given rank.
+func cooldown_at(points: int) -> int:
+	if not cooldown_ranks.is_empty():
+		return int(cooldown_ranks[_rank_index(points, cooldown_ranks.size())])
+	return cooldown
+
+## Spirit actually spent at a given rank (only SPIRIT costs are deducted today).
+func spirit_cost_at(points: int) -> int:
+	return cost_amount_at(points) if cost_type == CostType.SPIRIT else 0
+
 ## True when this ability is a PASSIVE that carries a constant stat bonus.
 func is_passive() -> bool:
 	return kind == Kind.PASSIVE
@@ -109,48 +169,60 @@ func has_passive_bonus() -> bool:
 	return is_passive() and ((typeof(passive_mods) == TYPE_DICTIONARY and not passive_mods.is_empty()) \
 		or (typeof(passive_mult) == TYPE_DICTIONARY and not passive_mult.is_empty()))
 
-## The cost as a human phrase WITHOUT the "Cost:" prefix (e.g. "20 spirit",
-## "10% of maximum health", "nothing"). Add new cases here as CostType grows.
-func cost_phrase() -> String:
+## The cost as a human phrase WITHOUT the "Cost:" prefix, for a given rank (e.g.
+## "20 spirit", "10% of maximum health", "nothing"). Add new cases as CostType grows.
+func cost_phrase_at(points: int) -> String:
 	match cost_type:
 		CostType.NONE:           return "nothing"
-		CostType.SPIRIT:         return "%d spirit" % cost_amount
-		CostType.PCT_MAX_HP:     return "%d%% of maximum health" % cost_amount
-		CostType.PCT_CUR_HP:     return "%d%% of current health" % cost_amount
-		CostType.PCT_CUR_SPIRIT: return "%d%% of current spirit" % cost_amount
-		CostType.PCT_MAX_SPIRIT: return "%d%% of maximum spirit" % cost_amount
+		CostType.SPIRIT:         return "%d spirit" % cost_amount_at(points)
+		CostType.PCT_MAX_HP:     return "%d%% of maximum health" % cost_amount_at(points)
+		CostType.PCT_CUR_HP:     return "%d%% of current health" % cost_amount_at(points)
+		CostType.PCT_CUR_SPIRIT: return "%d%% of current spirit" % cost_amount_at(points)
+		CostType.PCT_MAX_SPIRIT: return "%d%% of maximum spirit" % cost_amount_at(points)
 		_:                       return "nothing"
 
-## The full text for the tooltip cost panel: "Cost: <phrase>", plus a second
-## line "CD: <n>" when the ability has a cooldown. A PASSIVE shows "Passive".
-func cost_text() -> String:
+## The full text for the tooltip cost panel at a given rank: "Cost: <phrase>",
+## plus a "CD: <n>" line when the ability has a cooldown. A PASSIVE shows "Passive".
+func cost_text_at(points: int) -> String:
 	if is_passive():
 		return "Passive"
-	var t := "Cost: " + cost_phrase()
-	if cooldown > 0:
-		t += "\nCD: %d" % cooldown
+	var t := "Cost: " + cost_phrase_at(points)
+	var cd := cooldown_at(points)
+	if cd > 0:
+		t += "\nCD: %d" % cd
 	return t
+
+## Rank-1 convenience wrappers (kept so existing callers are unchanged).
+func cost_phrase() -> String:
+	return cost_phrase_at(1)
+
+func cost_text() -> String:
+	return cost_text_at(1)
 
 ## Spirit actually spent in combat. Only SPIRIT costs are deducted for now; the
 ## PCT_* (health/spirit percentage) kinds are described in the tooltip but not
 ## yet applied — hook their deduction into combat when you wire them up.
 func spirit_cost() -> int:
-	return cost_amount if cost_type == CostType.SPIRIT else 0
+	return spirit_cost_at(1)
 
-## Base effect value for a given number of invested points (0 if none).
+## Base effect value for a given number of invested points (0 if none). When
+## base_power_ranks is set it drives the value directly (arbitrary per-rank curve);
+## otherwise the legacy linear base_power + power_per_point*(R-1) applies.
 func power_at(points: int) -> float:
 	if points <= 0:
 		return 0.0
+	if not base_power_ranks.is_empty():
+		return float(base_power_ranks[_rank_index(points, base_power_ranks.size())])
 	return base_power + power_per_point * float(points - 1)
 
-## Pre-mitigation damage/effect value including caster-stat scaling.
+## Pre-mitigation damage/effect value including caster-stat scaling, at a rank.
 ##   e.g. Strike: power_at(1)=100  +  1.0 * caster["vigor"].
 ## Mitigation (pierce vs defence, amplification) is applied later in CombatMath.
 func compute_damage(caster_stats: Dictionary, points: int = 1) -> float:
 	var dmg := power_at(points)
 	var stat := String(scaling_stat)
 	if stat != "":
-		dmg += scaling_mult * float(caster_stats.get(stat, 0))
+		dmg += scaling_mult_at(points) * float(caster_stats.get(stat, 0))
 	return dmg
 
 ## Healing an HEAL ability restores (before the target's healing-received

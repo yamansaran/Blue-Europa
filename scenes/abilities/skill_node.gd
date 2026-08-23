@@ -45,11 +45,12 @@ const RADII := {
 
 ## UNLOCK PREREQUISITES (rev14b). `parents` = node_ids that must ALL be unlocked
 ## (>=1 point) before this node can be invested; a root node leaves it empty.
-## `required_level` = the player level needed to unlock this node (default 1). When
-## any node in a tree defines `parents`, the tree draws its connecting lines from
-## `parents` instead of the legacy `links`.
+## `required_level` = the player level needed to unlock this node. Default 0 means
+## NO level gate (most nodes) — set it only on nodes that should demand a level
+## (the furnishing nodes require 5). When any node in a tree defines `parents`, the
+## tree draws its connecting lines from `parents` instead of the legacy `links`.
 @export var parents: Array[String] = []
-@export var required_level: int = 1
+@export var required_level: int = 0
 
 ## Where the CENTER of this node sits. This is the authored placement — the
 ## node offsets its own top-left by its radius, so changing size_class keeps
@@ -135,8 +136,14 @@ func _ready() -> void:
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
 	var ch := _character()
-	if ch and not ch.changed.is_connected(_on_character_changed):
-		ch.changed.connect(_on_character_changed)
+	if ch:
+		if not ch.changed.is_connected(_on_character_changed):
+			ch.changed.connect(_on_character_changed)
+		# Announce which ability this node grants so Character can resolve an
+		# equipped ability back to its invested rank, even on a save made before
+		# that map existed (opening the tree once repairs it).
+		if ability and ch.has_method("register_node"):
+			ch.register_node(node_id, String(ability.id))
 	queue_redraw()
 
 
@@ -228,7 +235,7 @@ func _try_invest() -> void:
 	# Gated by the node's level requirement + parent prerequisites (enforced inside
 	# Character.invest). Investing the first point unlocks the ability (idempotent —
 	# unlock_ability ignores an already-unlocked id).
-	if ch.invest(node_id, ability.max_points, required_level, parents):
+	if ch.invest(node_id, ability.max_points, required_level, parents, String(ability.id)):
 		if ch.has_method("unlock_ability"):
 			ch.unlock_ability(String(ability.id))
 	elif is_locked():

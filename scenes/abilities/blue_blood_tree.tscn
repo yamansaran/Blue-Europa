@@ -433,6 +433,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("39_altar_of_fire")
 node_id = "altar_of_fire"
+required_level = 5
 center_position = Vector2(270.0, 570.0)
 size_class = 0
 
@@ -442,6 +443,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("40_altar_of_water")
 node_id = "altar_of_water"
+required_level = 5
 center_position = Vector2(330.0, 570.0)
 size_class = 0
 
@@ -451,6 +453,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("41_bread")
 node_id = "bread"
+required_level = 5
 center_position = Vector2(230.0, 394.0)
 size_class = 0
 
@@ -460,6 +463,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("42_menorah")
 node_id = "menorah"
+required_level = 5
 center_position = Vector2(370.0, 394.0)
 size_class = 0
 
@@ -469,6 +473,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("43_misericordia")
 node_id = "misericordia"
+required_level = 5
 center_position = Vector2(265.0, 262.0)
 size_class = 0
 
@@ -478,6 +483,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("44_severitas")
 node_id = "severitas"
+required_level = 5
 center_position = Vector2(335.0, 262.0)
 size_class = 0
 
@@ -487,6 +493,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("45_nomen_ordinis")
 node_id = "nomen_ordinis"
+required_level = 5
 center_position = Vector2(255.0, 160.0)
 size_class = 0
 
@@ -496,6 +503,7 @@ anchors_preset = 0
 script = ExtResource("2_node")
 ability = ExtResource("46_interpretatio")
 node_id = "interpretatio"
+required_level = 5
 center_position = Vector2(345.0, 160.0)
 size_class = 0
 

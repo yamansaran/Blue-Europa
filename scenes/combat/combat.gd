@@ -396,6 +396,18 @@ func _get_ability(id: String) -> Ability:
 		return db.get_ability(id)
 	return null
 
+## The player's invested RANK for `ability` (points in the granting skill-tree
+## node), read from the persistent Character. Cost/effect/cooldown all scale off
+## this. Enemies never invest, so this is only used for the player's own casts;
+## anything without a known rank resolves at 1.
+func _ability_rank(ability: Ability) -> int:
+	if ability == null:
+		return 1
+	var ch := get_node_or_null("/root/Character")
+	if ch and ch.has_method("ability_rank"):
+		return maxi(1, int(ch.ability_rank(String(ability.id))))
+	return 1
+
 func _valid_target(ability: Ability, tgt: BattleCharacter) -> bool:
 	match ability.target:
 		Ability.Target.ENEMY: return tgt.team == TEAM_ENEMY
@@ -409,7 +421,9 @@ func _valid_target(ability: Ability, tgt: BattleCharacter) -> bool:
 ## effect branches on kind. On a successful active use the ability's cooldown is
 ## started and the wheel state is re-synced.
 func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
-	var sp_cost := ability.spirit_cost()
+	# The player's invested rank drives cost, effect and cooldown for this cast.
+	var rank := _ability_rank(ability)
+	var sp_cost := ability.spirit_cost_at(rank)
 	if _player and _player.get_spirit() < sp_cost:
 		print("[combat] not enough spirit for %s (need %d, have %d)" % [ability.display_name, sp_cost, _player.get_spirit()])
 		return
@@ -418,7 +432,7 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 	match ability.kind:
 		Ability.Kind.ATTACK:
 			var atk: CharacterBase = _player.body if _player else null
-			var hit := CombatMath.resolve(atk, tgt.body, ability)
+			var hit := CombatMath.resolve(atk, tgt.body, ability, rank)
 			var dmg := int(hit["damage"])
 			# Pass the attacker as the source so the target's "when struck"
 			# reactions (thorns, ...) can hit back.
@@ -432,7 +446,7 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 
 		Ability.Kind.HEAL:
 			var caster: CharacterBase = _player.body if _player else null
-			var heal_amt := int(round(ability.compute_heal(caster.effective_stats() if caster else {})))
+			var heal_amt := int(round(ability.compute_heal(caster.effective_stats() if caster else {}, rank)))
 			var restored := tgt.heal(heal_amt)
 			print("[combat] %s heals %s for %d." % [ability.display_name, tgt.unit_name, restored])
 			acted = true
@@ -451,8 +465,9 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 		return
 	if _player and sp_cost > 0:
 		_player.spend_spirit(sp_cost)
-	if ability.cooldown > 0:
-		_player_cooldowns[String(ability.id)] = ability.cooldown
+	var cd := ability.cooldown_at(rank)
+	if cd > 0:
+		_player_cooldowns[String(ability.id)] = cd
 	# spend action points; when the budget is exhausted the player's turn ends.
 	_player_ap = maxf(0.0, _player_ap - ability.action_cost)
 	_sync_wheel_state()

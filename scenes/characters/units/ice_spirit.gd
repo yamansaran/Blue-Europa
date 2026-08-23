@@ -35,5 +35,5 @@ func _init() -> void:
 ## it (via super._init()) and then tweak only what a boss needs.
 func _define_stats() -> void:
 	set_max_hp(150)                        # HP is derived — this back-solves hp_base
-	base_stats["ice_defense"] = 80.0       # flavour: tough against ice
+	base_stats["ice_defense"] = 50.0       # flavour: tough against ice
 	base_stats["fire_defense"] = 25.0      # and a little soft to fire

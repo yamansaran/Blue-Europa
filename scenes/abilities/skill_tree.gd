@@ -129,10 +129,16 @@ func show_info(node: SkillNode) -> void:
 	if node.ability == null:
 		_tooltip.hide_tip()
 		return
-	# The invested/max point count now lives in the tooltip (it used to be drawn
-	# under the node). Re-shown on Character.changed so it stays current on invest.
-	var pts_text := "%d / %d points" % [node.points(), node.max_points()]
-	_tooltip.show_for(node.ability, node.get_global_rect(), pts_text)
+	# Skill-tree hover: the tooltip shows the points line, the current-rank
+	# description (or "not yet learned"), and the faded-red next-rank panel. Re-shown
+	# on Character.changed so it all stays current on invest.
+	var ch := get_node_or_null("/root/Character")
+	var lvl := 1
+	if ch and "level" in ch:
+		lvl = int(ch.level)
+	var req := node.required_level
+	_tooltip.show_for_node(node.ability, node.get_global_rect(),
+		node.points(), node.max_points(), req, lvl >= req)
 
 
 ## Pulse each of `node`'s still-locked parent nodes red. Called by a SkillNode when

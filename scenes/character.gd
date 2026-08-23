@@ -52,6 +52,13 @@ var equipped_items: Dictionary = {}
 # --- skill tree -------------------------------------------------------------
 var skill_points: int = 5
 var allocations: Dictionary = {}          # node_id(String) -> points(int)
+## node_id(String) -> ability_id(String). Records which ability each invested (or
+## registered) skill-tree node grants, so combat can turn an equipped ability id
+## back into the RANK the player invested (allocations is keyed by node, the wheel
+## by ability). Written on invest and on register_node (a tree node announcing
+## itself at load); persisted so the rank survives a reload even before the tree
+## screen is opened.
+var node_abilities: Dictionary = {}
 
 # --- attribute points (spent into MAJOR stats) ------------------------------
 var attribute_points: int = 5
@@ -250,9 +257,11 @@ func node_unlocked(node_id: String) -> bool:
 
 ## Whether a node's UNLOCK PREREQUISITES are met: the player is at least
 ## `node_required_level` AND every parent node (by node_id) is already unlocked.
-## A node with no parents (a tree root, e.g. Malkuth) only needs the level. Called
-## by SkillNode both to gate investing and to show a locked/available look.
-func can_unlock_node(node_required_level: int = 1, parents: Array = []) -> bool:
+## A node with no parents (a tree root, e.g. Malkuth) only needs the level. The
+## default requirement is level 0 — i.e. no level gate — so a node only demands a
+## level when its scene explicitly sets one (furnishing nodes ask for 5). Called by
+## SkillNode both to gate investing and to show a locked/available look.
+func can_unlock_node(node_required_level: int = 0, parents: Array = []) -> bool:
 	if level < node_required_level:
 		return false
 	for p in parents:
@@ -260,10 +269,38 @@ func can_unlock_node(node_required_level: int = 1, parents: Array = []) -> bool:
 			return false
 	return true
 
-## Invest one point in a node. Rev14b: now gated by the node's level requirement +
+## Record that `node_id` grants `ability_id` (idempotent). Called by every tree
+## node as it enters the scene, so the node->ability map is complete once a tree is
+## opened — repairing it for saves made before this map existed — without changing
+## any invested points. Purely in-memory here; it is persisted on the next invest
+## (or any other save), and the rank still falls back sensibly until then.
+func register_node(node_id: String, ability_id: String) -> void:
+	if node_id == "" or ability_id == "":
+		return
+	if str(node_abilities.get(node_id, "")) != ability_id:
+		node_abilities[node_id] = ability_id
+
+## The RANK (invested points) the player has in an ability, resolved through the
+## node that grants it: the max points over every node mapped to this ability id.
+## Falls back to 1 for an unlocked ability with no known node (e.g. the default
+## Strike, or a debug unlock), and 0 when the ability is not unlocked at all.
+func ability_rank(ability_id) -> int:
+	var aid := str(ability_id)
+	if aid == "":
+		return 0
+	var best := 0
+	for nid in node_abilities.keys():
+		if str(node_abilities[nid]) == aid:
+			best = maxi(best, get_points(str(nid)))
+	if best > 0:
+		return best
+	return 1 if is_unlocked(aid) else 0
+
+## Invest one point in a node. Rev14b: gated by the node's level requirement +
 ## parent prerequisites (both default-open, so old callers that pass neither behave
-## exactly as before). Returns false — investing nothing — if the gate isn't met.
-func invest(node_id: String, node_max: int, node_required_level: int = 1, parents: Array = []) -> bool:
+## exactly as before). `ability_id` records the node->ability mapping for the rank
+## lookup. Returns false — investing nothing — if the gate isn't met.
+func invest(node_id: String, node_max: int, node_required_level: int = 0, parents: Array = [], ability_id: String = "") -> bool:
 	if node_id == "":
 		return false
 	if skill_points <= 0:
@@ -274,6 +311,8 @@ func invest(node_id: String, node_max: int, node_required_level: int = 1, parent
 	if not can_unlock_node(node_required_level, parents):
 		return false
 	allocations[node_id] = current + 1
+	if ability_id != "":
+		node_abilities[node_id] = ability_id
 	skill_points -= 1
 	changed.emit()
 	save_game()
@@ -517,6 +556,7 @@ func save_game() -> void:
 		"money": money,
 		"skill_points": skill_points,
 		"allocations": allocations,
+		"node_abilities": node_abilities,
 		"attribute_points": attribute_points,
 		"attribute_allocations": attribute_allocations,
 		"unlocked_abilities": unlocked_abilities,
@@ -567,6 +607,12 @@ func load_game() -> void:
 		for key in a.keys():
 			allocations[str(key)] = int(a[key])
 
+	var na = parsed.get("node_abilities", {})
+	node_abilities = {}
+	if typeof(na) == TYPE_DICTIONARY:
+		for key in na.keys():
+			node_abilities[str(key)] = str(na[key])
+
 	var aa = parsed.get("attribute_allocations", {})
 	if typeof(aa) == TYPE_DICTIONARY:
 		attribute_allocations = {}
@@ -603,6 +649,7 @@ func reset_to_defaults() -> void:
 	money = 100
 	skill_points = 5
 	allocations = {}
+	node_abilities = {}
 	attribute_points = 5
 	attribute_allocations = {}
 	unlocked_abilities = ["strike"]

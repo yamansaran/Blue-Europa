@@ -33,6 +33,14 @@ const TIP_DELAY := 0.25          # hover time before cost + description appear
 const POINTS_BG := Color(0.62, 0.55, 0.30)  # muted gold band (skill-tree only)
 const POINTS_TX := Color(0.10, 0.08, 0.02)
 
+# The "next rank" panel (skill-tree only): a faded red band with yellow text that
+# previews what the NEXT rank grants — or why it can't be taken yet.
+const NEXTRANK_BG := Color(0.30, 0.08, 0.08, 0.92)  # faded red
+const NEXTRANK_TX := Color(1.0, 0.88, 0.35)         # yellow
+
+const NOT_LEARNED := "You have not yet learned this ability."
+const MASTERED := "You have mastered this ability."
+
 var _ab: Ability = null
 
 
@@ -44,23 +52,69 @@ func _ready() -> void:
 ## Show the tooltip for `ab`, positioned beside `anchor_global` (a global Rect2 —
 ## usually the hovered widget's global rect). Pass null to hide. `points_text`
 ## fills the optional gold "Points" row (skill tree); leave "" to hide that row.
-func show_for(ab: Ability, anchor_global: Rect2, points_text := "") -> void:
+## `rank` (>0) shows that rank's cost/description; 0 shows the plain rank-1 values.
+## This is the wheel / ability-pool variant — no "next rank" panel.
+func show_for(ab: Ability, anchor_global: Rect2, points_text := "", rank := 0) -> void:
 	if ab == null:
 		hide_tip()
 		return
 	_ab = ab
+	var r := rank if rank > 0 else 1
 	var rows := [
 		{"text": ab.display_name, "bg": NAME_BG, "fg": NAME_TX, "stage": 0},
 		{"text": points_text, "bg": POINTS_BG, "fg": POINTS_TX, "stage": 0,
 			"visible": points_text != ""},
-		{"text": ab.cost_text(), "bg": META_BG, "fg": META_TX, "stage": 1},
-		{"text": ab.description, "bg": DESC_BG, "fg": DESC_TX, "stage": 1,
+		{"text": ab.cost_text_at(r), "bg": META_BG, "fg": META_TX, "stage": 1},
+		{"text": ab.description_at(r), "bg": DESC_BG, "fg": DESC_TX, "stage": 1,
 			"wrap": true, "rich": true},   # rich -> element keywords are coloured
 	]
 	# key on the ability id so re-showing the SAME ability (e.g. a skill node
 	# refreshing its point count on invest) updates the rows in place instead of
 	# restarting the reveal.
 	show_rows(rows, anchor_global, TIP_DELAY, "ability:" + String(ab.id))
+
+
+## SKILL-TREE variant. Adds two things over show_for: the current DESC panel reads
+## for the currently-invested rank (or "not yet learned" at rank 0), and a final
+## faded-red / yellow NEXT-RANK panel previews the next rank — or explains why it
+## can't be taken ("mastered" when maxed, "requires level X" when the level gate is
+## unmet). `points` = points invested here, `max_points` = the ability's cap,
+## `required_level` / `level_ok` = the node's level gate and whether it's satisfied.
+func show_for_node(ab: Ability, anchor_global: Rect2, points: int, max_points: int, required_level: int, level_ok: bool) -> void:
+	if ab == null:
+		hide_tip()
+		return
+	_ab = ab
+	var learned := points > 0
+	# COST + current DESC read for the current rank (rank 1's values when unlearned,
+	# so the panel still previews what the ability does).
+	var shown_rank := points if learned else 1
+	var desc_text := ab.description_at(shown_rank) if learned else NOT_LEARNED
+
+	# The next-rank / status line.
+	var next_text := ""
+	if not level_ok:
+		next_text = "Requires level %d to learn." % required_level
+	elif points >= max_points:
+		next_text = MASTERED
+	else:
+		var nr := points + 1
+		next_text = "Rank %d: %s" % [nr, ab.description_at(nr)]
+
+	var rows := [
+		{"text": ab.display_name, "bg": NAME_BG, "fg": NAME_TX, "stage": 0},
+		{"text": "%d / %d points" % [points, max_points], "bg": POINTS_BG,
+			"fg": POINTS_TX, "stage": 0},
+		{"text": ab.cost_text_at(shown_rank), "bg": META_BG, "fg": META_TX, "stage": 1},
+		{"text": desc_text, "bg": DESC_BG, "fg": DESC_TX, "stage": 1,
+			"wrap": true, "rich": true},
+		{"text": next_text, "bg": NEXTRANK_BG, "fg": NEXTRANK_TX, "stage": 1,
+			"wrap": true, "rich": true},
+	]
+	# Key includes the state that changes the rows, so an invest (points change)
+	# refreshes the text in place while a mere re-hover keeps the reveal.
+	var key := "abilitynode:%s:%d:%d" % [String(ab.id), points, int(level_ok)]
+	show_rows(rows, anchor_global, TIP_DELAY, key)
 
 
 func hide_tip() -> void:

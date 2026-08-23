@@ -239,7 +239,12 @@ func _update_tooltip(slot: int) -> void:
 		return
 	var gp := global_position + _slot_pos(slot)
 	var r := _slot_radius()
-	_tooltip.show_for(ab, Rect2(gp - Vector2(r, r), Vector2(r, r) * 2.0))
+	# Show the cost/description for the player's invested rank of this ability.
+	var rank := 0
+	var ch := get_node_or_null("/root/Character")
+	if ch and ch.has_method("ability_rank"):
+		rank = int(ch.ability_rank(String(ab.id)))
+	_tooltip.show_for(ab, Rect2(gp - Vector2(r, r), Vector2(r, r) * 2.0), "", rank)
 
 func _on_wheel_mouse_exited() -> void:
 	_hover_slot = -1
