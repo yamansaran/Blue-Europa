@@ -18,6 +18,10 @@ extends Panel
 ## ----------------------------------------------------------------------------
 
 signal pressed(index: int)
+## Emitted when another box is dropped ONTO this one (only when drops are enabled
+## via enable_drop). Carries the dragged box's source/index/id plus THIS box's
+## index as the drop target. Hosts use it to move items between grids.
+signal dropped(from_source: String, from_index: int, item_id: String, onto_index: int)
 
 const BOX_SIZE := 56.0
 const EMPTY_BG := Color(0.13, 0.13, 0.16)
@@ -29,6 +33,11 @@ var index: int = -1
 var item_id: String = ""
 var draggable: bool = false
 var drag_source: String = "bag"
+
+## Drop-target opt-in (off by default so the inventory/shop grids are unaffected).
+## enable_drop([...]) turns it on and lists which drag `source` strings to accept.
+var accepts_drop: bool = false
+var _accept_sources: Array = []
 
 var _tooltip: ItemTooltip
 var _item: Item = null
@@ -163,6 +172,27 @@ func _on_gui_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		pressed.emit(index)
+
+
+## Turn this box into a drop target that accepts drags whose `source` is in
+## `sources`. Safe to call on both filled and empty cells.
+func enable_drop(sources: Array) -> void:
+	accepts_drop = true
+	_accept_sources = sources
+
+
+func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+	if not accepts_drop:
+		return false
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	return _accept_sources.has(str(data.get("source", "")))
+
+
+func _drop_data(_at_position: Vector2, data: Variant) -> void:
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	dropped.emit(str(data.get("source", "")), int(data.get("index", -1)), str(data.get("id", "")), index)
 
 
 func _get_drag_data(_at_position: Vector2) -> Variant:

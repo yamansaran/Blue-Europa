@@ -145,8 +145,44 @@ static func build(id: String, _caster: CharacterBase = null, _target: CharacterB
 				],
 			})
 
+		# --- Guard (Tav): reduce ALL incoming damage until your next turn -----
+		# Four rank-clones, identical EXCEPT the reduction fraction. combat.gd maps
+		# the Guard ability's invested rank -> guard_1..guard_4 (see its
+		# _maybe_apply_buff). The reduction is a flat incoming-damage multiplier read
+		# by CombatMath (damage_taken_mult, stored in mods, additive around 0:
+		# -0.80 => take 80% less). All four share id "guard" so re-casting refreshes
+		# duration instead of stacking (two guards would be far too strong). Retune
+		# the four numbers here — this is the single tuning spot.
+		"guard_1":
+			return _make_guard(0.80)
+		"guard_2":
+			return _make_guard(0.90)
+		"guard_3":
+			return _make_guard(0.95)
+		"guard_4":
+			return _make_guard(0.99)
+
 		_:
 			return {}
+
+## Build a Guard damage-reduction buff: a self buff that reduces ALL incoming damage
+## by `reduction` (0.80 = take 80% less) until the caster's next turn (duration 1, so
+## it protects through the enemies' turn and expires at the start of the caster's next
+## turn). The four Guard ranks are clones of this differing ONLY in `reduction`. Stored
+## as a `mods` entry (damage_taken_mult, additive around 0) so CombatMath reads it via
+## get_basket_bonus, exactly like the attacker-side damage_dealt_mult layer. All ranks
+## share id "guard" so applying it refreshes duration instead of stacking.
+static func _make_guard(reduction: float) -> Dictionary:
+	return Buff.make({
+		"id": "guard",
+		"source": "Guard",
+		"desc": "Guarding: takes %d%% less damage until your next turn." % int(round(reduction * 100.0)),
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": 1,
+		"stackable": false,
+		"mods": {"damage_taken_mult": -reduction},
+	})
 
 ## True when `id` names a buff this library knows how to build.
 static func has(id: String) -> bool:

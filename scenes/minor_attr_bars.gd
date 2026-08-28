@@ -6,8 +6,9 @@ extends VBoxContainer
 ## ============================================================================
 ## Replaces the old "X / Y / Z" text readout of the minor attributes. Shows a row
 ## of three toggle buttons — Pierce, Defense, Amp (in that order) — and, below
-## them, one horizontal bar graph per real element, tinted with that element's
-## colour (ElementColors.color).
+## them, one VERTICAL bar per real element, tinted with that element's colour
+## (ElementColors.color), rising from a shared baseline. The bars carry no element
+## text; hovering a bar pops a HoverPanel naming the element and its value.
 ##
 ## Scaling (per selection, driven by the LARGEST value shown):
 ##   - Pierce / Defense: bars are drawn out of 100 by default; if any value
@@ -36,10 +37,17 @@ const TRACK_BG := Color(0.10, 0.10, 0.12)
 const TRACK_BORDER := Color(0.24, 0.24, 0.28)
 const LABEL_COL := Color(0.86, 0.86, 0.88)
 
+## Minimum height of the vertical-bar strip (it expands past this to fill the host).
+const BARS_HEIGHT := 96.0
+## Glow: how far the element-coloured halo bleeds past the fill, and its opacity.
+const GLOW_SIZE := 7.0
+const GLOW_ALPHA := 0.55
+
 var _metric: int = Metric.PIERCE
 var _body: CharacterBase = null
 var _buttons: Array = []
-var _bars_box: VBoxContainer
+var _bars_box: HBoxContainer
+var _hover: HoverPanel
 var _built := false
 
 
@@ -69,11 +77,21 @@ func _build() -> void:
 		btn_row.add_child(b)
 		_buttons.append(b)
 
-	# --- the bar rows live here ---
-	_bars_box = VBoxContainer.new()
+	# --- the vertical bars live in a horizontal strip ---
+	# EXPAND_FILL so that when the host gives this widget extra vertical room the
+	# bars grow down to fill it; BARS_HEIGHT is just the floor so they never
+	# collapse (e.g. inside the inventory's scroll list).
+	_bars_box = HBoxContainer.new()
 	_bars_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bars_box.add_theme_constant_override("separation", 4)
+	_bars_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_bars_box.custom_minimum_size = Vector2(0, BARS_HEIGHT)
+	_bars_box.add_theme_constant_override("separation", 5)
 	add_child(_bars_box)
+
+	# one shared hover card, telling you which element a bar is
+	_hover = HoverPanel.new()
+	_hover.content_width = 130.0
+	add_child(_hover)
 
 	_sync_buttons()
 	_rebuild()
@@ -145,49 +163,70 @@ func _rebuild() -> void:
 		_add_bar(str(element), float(values[element]), axis_max)
 
 
+## One vertical bar (a track with a colour fill rising from the bottom). No text —
+## the element is revealed on hover via the shared HoverPanel.
 func _add_bar(element: String, value: float, axis_max: float) -> void:
-	var row := HBoxContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 6)
+	var frac := clampf(value / maxf(axis_max, 0.0001), 0.0, 1.0)
 
-	var name_lbl := Label.new()
-	name_lbl.text = element.capitalize()
-	name_lbl.custom_minimum_size = Vector2(58, 0)
-	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.add_theme_color_override("font_color", LABEL_COL)
-	row.add_child(name_lbl)
+	var cell := Control.new()
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cell.custom_minimum_size = Vector2(14, 0)
+	cell.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var bar := ProgressBar.new()
-	bar.min_value = 0.0
-	bar.max_value = maxf(axis_max, 0.0001)
-	bar.value = clampf(value, 0.0, bar.max_value)
-	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 14)
-	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var track := Panel.new()
+	track.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tsb := StyleBoxFlat.new()
+	tsb.bg_color = TRACK_BG
+	tsb.set_corner_radius_all(2)
+	tsb.set_border_width_all(1)
+	tsb.border_color = TRACK_BORDER
+	track.add_theme_stylebox_override("panel", tsb)
+	cell.add_child(track)
 
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = ElementColors.color(element)
-	fill.set_corner_radius_all(2)
-	bar.add_theme_stylebox_override("fill", fill)
+	# The fill is a Panel (not a plain ColorRect) so its StyleBoxFlat can cast a
+	# soft shadow IN THE ELEMENT'S OWN COLOUR, centred on the bar — that halo reads
+	# as a glow radiating in the right colour.
+	var col := ElementColors.color(element)
+	var fill := Panel.new()
+	fill.anchor_left = 0.0
+	fill.anchor_right = 1.0
+	fill.anchor_top = 1.0 - frac
+	fill.anchor_bottom = 1.0
+	fill.offset_left = 1.0
+	fill.offset_right = -1.0
+	fill.offset_top = 0.0
+	fill.offset_bottom = -1.0
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fsb := StyleBoxFlat.new()
+	fsb.bg_color = col
+	fsb.set_corner_radius_all(2)
+	fsb.shadow_color = Color(col.r, col.g, col.b, GLOW_ALPHA)
+	fsb.shadow_size = int(GLOW_SIZE)
+	fsb.shadow_offset = Vector2.ZERO      # centred halo, not a drop shadow
+	fill.add_theme_stylebox_override("panel", fsb)
+	cell.add_child(fill)
 
-	var track := StyleBoxFlat.new()
-	track.bg_color = TRACK_BG
-	track.set_corner_radius_all(2)
-	track.set_border_width_all(1)
-	track.border_color = TRACK_BORDER
-	bar.add_theme_stylebox_override("background", track)
-	row.add_child(bar)
+	cell.mouse_entered.connect(_on_bar_hover.bind(cell, element, value))
+	cell.mouse_exited.connect(_on_bar_unhover)
 
-	var val_lbl := Label.new()
-	val_lbl.text = _fmt_value(value)
-	val_lbl.custom_minimum_size = Vector2(40, 0)
-	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	val_lbl.add_theme_font_size_override("font_size", 11)
-	val_lbl.add_theme_color_override("font_color", LABEL_COL)
-	row.add_child(val_lbl)
+	_bars_box.add_child(cell)
 
-	_bars_box.add_child(row)
+
+func _on_bar_hover(cell: Control, element: String, value: float) -> void:
+	if _hover == null:
+		return
+	var rows := [
+		{"text": element.capitalize(), "bg": HoverPanel.NAME_BG, "fg": HoverPanel.NAME_TX, "font_size": 13},
+		{"text": "%s: %s" % [METRIC_NAMES[_metric], _fmt_value(value)], "fg": ElementColors.color(element)},
+	]
+	_hover.show_rows(rows, cell.get_global_rect())
+
+
+func _on_bar_unhover() -> void:
+	if _hover:
+		_hover.hide_panel()
 
 
 func _fmt_value(value: float) -> String:

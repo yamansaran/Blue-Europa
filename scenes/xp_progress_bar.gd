@@ -23,7 +23,8 @@ class_name XPProgressBar
 
 const BLACK      := Color(0.05, 0.05, 0.06)   # percentage box
 const GREY       := Color(0.32, 0.32, 0.34)   # empty track
-const WHITE_FILL := Color(0.95, 0.95, 0.95)   # filled portion
+const WHITE_FILL := Color(0.95, 0.95, 0.95)   # filled portion (progress / pre-fight)
+const GAIN_FILL  := Color(0.64, 0.64, 0.68)   # faded gray: xp gained this fight
 const TEXT_COL   := Color(0.96, 0.96, 0.96)
 
 ## Default height when the parent doesn't force one.
@@ -33,10 +34,18 @@ const PCT_BOX_ASPECT := 2.6
 
 var _pct_label: Label
 var _fill: ColorRect
+var _gain_fill: ColorRect
 var _built := false
 
 var _fraction := 0.0
 var _label_text := "0%"
+
+## Gain-overlay mode: the white fill is pinned to the PRE-fight progress
+## (_base_fraction) and the faded-gray _gain_fill grows from there to _fraction to
+## show the xp earned this fight. Off = plain white bar (the default everywhere).
+var _gain_mode := false
+var _base_xp := 0
+var _base_fraction := 0.0
 
 ## A queued XP-gain animation ({from, to, dur}), kicked off in _ready() when the
 ## bar is set to animate before it has entered the tree (create_tween needs the
@@ -51,7 +60,10 @@ func _ready() -> void:
 	if not _pending_anim.is_empty():
 		var a := _pending_anim
 		_pending_anim = {}
-		_start_xp_anim(int(a["from"]), int(a["to"]), float(a["dur"]))
+		if bool(a.get("gain", false)):
+			_start_gain_anim(int(a["from"]), int(a["to"]), float(a["dur"]))
+		else:
+			_start_xp_anim(int(a["from"]), int(a["to"]), float(a["dur"]))
 
 
 func _build() -> void:
@@ -116,14 +128,43 @@ func _build() -> void:
 	_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	track.add_child(_fill)
 
+	# Faded-gray "gained" overlay: anchored base_fraction..fraction, drawn on TOP
+	# of the white fill so it reads as the xp earned this fight. Hidden unless in
+	# gain mode.
+	_gain_fill = ColorRect.new()
+	_gain_fill.color = GAIN_FILL
+	_gain_fill.anchor_left = 0.0
+	_gain_fill.anchor_top = 0.0
+	_gain_fill.anchor_bottom = 1.0
+	_gain_fill.anchor_right = 0.0
+	_gain_fill.offset_left = 0.0
+	_gain_fill.offset_top = 0.0
+	_gain_fill.offset_right = 0.0
+	_gain_fill.offset_bottom = 0.0
+	_gain_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_gain_fill.visible = false
+	track.add_child(_gain_fill)
+
 	_built = true
 
 
 func _apply() -> void:
 	if not _built:
 		return
-	_fill.anchor_right = _fraction
-	_fill.offset_right = 0.0
+	if _gain_mode:
+		# white = pre-fight progress; gray = pre-fight .. current (the gain)
+		_fill.anchor_right = _base_fraction
+		_fill.offset_right = 0.0
+		_gain_fill.visible = true
+		_gain_fill.anchor_left = _base_fraction
+		_gain_fill.offset_left = 0.0
+		_gain_fill.anchor_right = _fraction
+		_gain_fill.offset_right = 0.0
+	else:
+		_fill.anchor_right = _fraction
+		_fill.offset_right = 0.0
+		if _gain_fill:
+			_gain_fill.visible = false
 	_pct_label.text = _label_text
 
 
@@ -134,6 +175,7 @@ func _apply() -> void:
 ## Set the bar directly from a 0.0..1.0 fraction. Pass a percent_override to show
 ## custom text (e.g. "MAX"); otherwise the whole-number percent is shown.
 func set_progress(fraction: float, percent_override: int = -1) -> void:
+	_gain_mode = false
 	_fraction = clampf(fraction, 0.0, 1.0)
 	var pct := percent_override if percent_override >= 0 else int(round(_fraction * 100.0))
 	_label_text = "%d%%" % pct
@@ -148,6 +190,7 @@ func set_from_xp(total_xp: int) -> void:
 ## Feed the continuous total XP AND an explicit level (skips the lookup and shows
 ## "MAX" text at the top of the curve).
 func set_xp_level(total_xp: int, level: int) -> void:
+	_gain_mode = false
 	if LevelTable.is_max_level(level):
 		_fraction = 1.0
 		_label_text = "MAX"
@@ -185,3 +228,57 @@ func _start_xp_anim(from_xp: int, to_xp: int, duration: float) -> void:
 
 func _anim_set_xp(v: float) -> void:
 	set_from_xp(int(round(v)))
+
+
+# ---------------------------------------------------------------------------
+# Gain overlay (victory screen)
+# ---------------------------------------------------------------------------
+## Show the PRE-fight progress in solid white and animate the xp gained this fight
+## as a rising faded-gray overlay from `from_xp` up to `to_xp`. The level is
+## re-derived each frame, so a gain that crosses a level boundary naturally shows
+## the gray fill to 100%, snap to the next level (where the white base is 0), and
+## keep rising. Safe to call before the widget is in the tree.
+func animate_gain(from_xp: int, to_xp: int, duration: float = 2.0) -> void:
+	_gain_mode = true
+	_base_xp = from_xp
+	_set_gain_frame(from_xp)          # paint the pre-fight bar immediately
+	if to_xp <= from_xp or duration <= 0.0:
+		_set_gain_frame(to_xp)
+		return
+	if not is_inside_tree():
+		_pending_anim = {"from": from_xp, "to": to_xp, "dur": duration, "gain": true}
+		return
+	_start_gain_anim(from_xp, to_xp, duration)
+
+
+func _start_gain_anim(from_xp: int, to_xp: int, duration: float) -> void:
+	_gain_mode = true
+	_base_xp = from_xp
+	_set_gain_frame(from_xp)
+	if _xp_tween and _xp_tween.is_valid():
+		_xp_tween.kill()
+	_xp_tween = create_tween()
+	_xp_tween.tween_method(_set_gain_frame, float(from_xp), float(to_xp), duration) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+## Paint one frame of the gain animation at the given (animated) continuous total.
+func _set_gain_frame(v: float) -> void:
+	var cur_total := int(round(v))
+	var lvl := LevelTable.level_for_xp(cur_total)
+	if LevelTable.is_max_level(lvl):
+		_fraction = 1.0
+		_label_text = "MAX"
+		# base white = whatever of THIS (max) level the player already had
+		_base_fraction = 1.0 if LevelTable.level_for_xp(_base_xp) >= lvl else 0.0
+	else:
+		_fraction = LevelTable.progress_fraction(cur_total, lvl)
+		_label_text = "%d%%" % LevelTable.progress_percent(cur_total, lvl)
+		# The pre-fight (white) portion only exists on the pre-fight level; once the
+		# gain crosses into a higher level the whole level was earned this fight.
+		if LevelTable.level_for_xp(_base_xp) >= lvl:
+			_base_fraction = LevelTable.progress_fraction(_base_xp, lvl)
+		else:
+			_base_fraction = 0.0
+	_base_fraction = minf(_base_fraction, _fraction)
+	_apply()

@@ -155,22 +155,19 @@ func _build_attributes_readout() -> void:
 		(title as Control).anchor_top = 0.0
 		(title as Control).anchor_bottom = 0.1
 
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.anchor_left = 0.04
-	scroll.anchor_top = 0.12
-	scroll.anchor_right = 0.96
-	scroll.anchor_bottom = 0.97
-	scroll.offset_left = 0.0
-	scroll.offset_top = 0.0
-	scroll.offset_right = 0.0
-	scroll.offset_bottom = 0.0
-	panel.add_child(scroll)
-
+	# The readout fills the panel directly (no scroll wrapper) so the bar strip at
+	# the bottom can EXPAND to the panel floor instead of shrink-wrapping its rows.
 	_attr_list = VBoxContainer.new()
-	_attr_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_attr_list.anchor_left = 0.04
+	_attr_list.anchor_top = 0.12
+	_attr_list.anchor_right = 0.96
+	_attr_list.anchor_bottom = 0.97
+	_attr_list.offset_left = 0.0
+	_attr_list.offset_top = 0.0
+	_attr_list.offset_right = 0.0
+	_attr_list.offset_bottom = 0.0
 	_attr_list.add_theme_constant_override("separation", 2)
-	scroll.add_child(_attr_list)
+	panel.add_child(_attr_list)
 	_refresh_attributes()
 
 
@@ -202,9 +199,11 @@ func _refresh_attributes() -> void:
 	_attr_list.add_child(respec)
 
 	# --- minor stats (bar graphs, read-only) ---
-	_add_header("RESIST", Color(1.0, 0.8, 0.75))
+	# EXPAND_FILL vertically so the vertical bars stretch from here to the panel
+	# floor (the metric buttons stay pinned at the top of the widget).
 	var bars := MinorAttrBars.new()
 	bars.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bars.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_attr_list.add_child(bars)
 	bars.set_metric(_minor_metric)
 	bars.set_body(body)

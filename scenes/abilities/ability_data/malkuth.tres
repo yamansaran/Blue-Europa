@@ -5,16 +5,25 @@
 [resource]
 script = ExtResource("1_ability")
 id = &"malkuth"
-display_name = "Malkuth"
-description = "Lower the target's resistances by 15 and drain 20 spirit per turn for 5 turns."
-max_points = 1
-kind = 2
-target = 0
-cost_type = 1
-cost_amount = 20
-cooldown = 2
+display_name = "Sinewed"
+description = "Toughened sinew feeds your innate attacks. Each point strengthens Claw (+25% Vigor and +25% Instinct scaling) and Scour (+25% Vigor scaling)."
+max_points = 4
+kind = 4
+target = 2
+cost_type = 0
+cost_amount = 0
+cooldown = 0
 base_power = 0.0
 power_per_point = 0.0
+description_ranks = Array[String](["Claw: +25% Vigor / +25% Instinct scaling.\nScour: +25% Vigor scaling.", "Claw: +50% Vigor / +50% Instinct scaling.\nScour: +50% Vigor scaling.", "Claw: +75% Vigor / +75% Instinct scaling.\nScour: +75% Vigor scaling.", "Claw: +100% Vigor / +100% Instinct scaling.\nScour: +100% Vigor scaling."])
 requires = Array[StringName]([])
 required_level = 1
-applies_buff = &"resist_down_drain"
+upgrades = {
+"claw": {
+"instinct": 0.25,
+"vigor": 0.25
+},
+"scour": {
+"vigor": 0.25
+}
+}

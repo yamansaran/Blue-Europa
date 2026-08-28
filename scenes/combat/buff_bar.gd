@@ -23,8 +23,8 @@ extends HBoxContainer
 
 enum { SIDE_RIGHT, SIDE_LEFT }
 
-const CHIP_W := 12.0
-const CHIP_H := 34.0
+const CHIP_W := 24.0   # rev21: twice the old 12 (wider chips = twice-as-wide strip)
+const CHIP_H := 39.0   # rev21: matches BattleHealthBar.DUO_HEIGHT (HP+Spirit stack)
 const CHIP_SEP := 3
 const TIP_WIDTH := 210.0
 
@@ -54,6 +54,9 @@ func setup(body: CharacterBase, side: int) -> void:
 	alignment = BoxContainer.ALIGNMENT_END if side == SIDE_LEFT else BoxContainer.ALIGNMENT_BEGIN
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = Vector2(0, CHIP_H)
+	# Match the health bar: sit at CHIP_H and centre vertically in the top band
+	# rather than stretching to fill it, so the strip lines up with the bars.
+	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	refresh()
 
 

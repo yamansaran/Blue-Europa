@@ -29,8 +29,8 @@ const GRID_MIN_ROWS := 8
 # --- horizontal region anchors (fractions of the panel width) ---
 const COL_L_LEFT  := 0.025
 const COL_L_RIGHT := 0.375
-const COL_M_LEFT  := 0.40
-const COL_M_RIGHT := 0.60
+const COL_M_LEFT  := 0.4375   # 0.125 wide, centred at 0.5 (matches the abilities panel)
+const COL_M_RIGHT := 0.5625
 const COL_R_LEFT  := 0.625
 const COL_R_RIGHT := 0.975
 
@@ -177,15 +177,12 @@ func _build_attributes(panel: Panel) -> void:
 	_anchor(title, 0.0, 0.02, 1.0, 0.10)
 	panel.add_child(title)
 
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_anchor(scroll, 0.04, 0.12, 0.96, 0.97)
-	panel.add_child(scroll)
-
+	# Fill the panel directly (no scroll wrapper) so the bar strip can EXPAND down
+	# to the panel floor, matching the abilities screen.
 	_attr_list = VBoxContainer.new()
-	_attr_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_anchor(_attr_list, 0.04, 0.12, 0.96, 0.97)
 	_attr_list.add_theme_constant_override("separation", 3)
-	scroll.add_child(_attr_list)
+	panel.add_child(_attr_list)
 
 
 func _refresh_attributes() -> void:
@@ -218,6 +215,7 @@ func _refresh_attributes() -> void:
 	_attr_header("MINOR ATTRIBUTES", Color(1.0, 0.8, 0.75))
 	var bars := MinorAttrBars.new()
 	bars.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bars.size_flags_vertical = Control.SIZE_EXPAND_FILL   # fill down to the panel floor
 	_attr_list.add_child(bars)
 	bars.set_metric(_minor_metric)
 	bars.set_body(body)

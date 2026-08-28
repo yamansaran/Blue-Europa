@@ -1,29 +1,62 @@
 extends Control
 ## END-OF-COMBAT (victory) screen — a shell-content panel (toolbar stays).
-## Left 25%: party (blank portrait / level / blank xp bar). Center 25%: loot
-## rolled for this fight + a Proceed button. Right 40%: player inventory.
-## 2.5% buffers at both edges and between panels.
+## Left 25%: party (portrait / level / XP bar). Center 25%: the SPOILS menu — the
+## money/xp readout plus a GRID of the items rolled for this fight. Right 40%: the
+## player's real INVENTORY grid (same ItemBox grid used on the inventory screen).
+##
+## SPOILS -> INVENTORY: items rolled for the fight sit in the spoils grid. The
+## player DRAGS an item from the spoils grid onto the inventory grid to KEEP it;
+## anything still sitting in the spoils grid when Proceed is pressed is LEFT
+## BEHIND (never granted). A kept item can be dragged back to the spoils grid to
+## drop it again before proceeding.
 
 const SCREEN_BG := Color(0.24, 0.03, 0.03)   # dark red
 const PANEL_BG  := Color(0.20, 0.20, 0.20)   # dark gray
+
+const INV_COLS := 6           # inventory grid width (matches the inventory screen)
+const INV_MIN_ROWS := 6
+const SPOILS_COLS := 4        # narrower centre panel
+const SPOILS_MIN_ROWS := 3
 
 var _money := 0
 var _xp := 0
 var _items: Array = []
 var _party: Array = []
 
+## Live spoils/keep state. `_left` = items still in the spoils grid (left behind on
+## Proceed); `_kept` = items dragged into the inventory (granted on Proceed).
+var _left: Array = []
+var _kept: Array = []
+## The character's PRE-existing items, shown (read-only) in the inventory grid so
+## the screen looks like the real inventory.
+var _char_items: Array = []
+
+var _tooltip: ItemTooltip
+var _spoils_grid: GridContainer
+var _inv_grid: GridContainer
+
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_money = int(BattleState.result_money)
 	_xp = int(BattleState.result_xp)
-	_items = BattleState.result_items.duplicate()
+	_items = BattleState.result_items.duplicate(true)
 	_party = BattleState.result_party.duplicate()
+	_left = _items.duplicate(true)
+	_kept = []
+
+	var ch := get_node_or_null("/root/Character")
+	if ch and typeof(ch.get("items")) == TYPE_ARRAY:
+		_char_items = (ch.items as Array).duplicate()
 
 	var bg := ColorRect.new()
 	bg.color = SCREEN_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
+
+	# one tooltip shared by every grid box on this screen
+	_tooltip = ItemTooltip.new()
+	add_child(_tooltip)
 
 	var left := _make_panel(0.025, 0.275)
 	var center := _make_panel(0.30, 0.55)
@@ -80,11 +113,6 @@ func _vbox_in(panel: Panel, top_frac := 0.02, bottom_frac := 0.98) -> VBoxContai
 	margin.add_child(vb)
 	return vb
 
-func _item_name(it) -> String:
-	if typeof(it) == TYPE_DICTIONARY:
-		return str(it.get("name", it.get("id", "item")))
-	return str(it)
-
 # ---- left: party -------------------------------------------------------
 func _build_party(panel: Panel) -> void:
 	var vb := _vbox_in(panel)
@@ -135,16 +163,16 @@ func _party_card(member: Dictionary) -> Control:
 		var ch := get_node_or_null("/root/Character")
 		if ch:
 			# Rewards aren't applied until Proceed, so ch.xp is still the PRE-battle
-			# total. Animate from there up to (pre-battle + xp gained) over 2s so the
-			# bar visibly fills in the xp earned this fight (crossing a level if it
-			# earned enough).
+			# total. Paint that pre-fight progress in solid WHITE and animate the xp
+			# gained this fight as a rising FADED-GRAY overlay on top, so the size of
+			# the gain reads at a glance (crossing a level if it earned enough).
 			var cur_xp := int(ch.xp)
-			xpbar.animate_to_xp(cur_xp, cur_xp + _xp, 2.0)
+			xpbar.animate_gain(cur_xp, cur_xp + _xp, 2.0)
 	else:
 		xpbar.set_xp_level(0, int(member.get("level", 1)))
 	return card
 
-# ---- center: loot + proceed -------------------------------------------
+# ---- center: spoils (money/xp + item grid) + proceed -------------------
 func _build_loot(panel: Panel) -> void:
 	var vb := _vbox_in(panel, 0.02, 0.86)
 	vb.add_child(_title("SPOILS"))
@@ -156,16 +184,21 @@ func _build_loot(panel: Panel) -> void:
 	xp_lbl.text = "Experience:  +%d" % _xp
 	xp_lbl.add_theme_color_override("font_color", Color(0.6, 0.85, 1.0))
 	vb.add_child(xp_lbl)
-	vb.add_child(_title_small("Items"))
-	if _items.is_empty():
-		var none := Label.new()
-		none.text = "  (none)"
-		vb.add_child(none)
-	else:
-		for it in _items:
-			var il := Label.new()
-			il.text = "  •  " + _item_name(it)
-			vb.add_child(il)
+
+	vb.add_child(_title_small("Items — drag into your inventory to keep"))
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vb.add_child(scroll)
+	_spoils_grid = GridContainer.new()
+	_spoils_grid.columns = SPOILS_COLS
+	_spoils_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_spoils_grid.add_theme_constant_override("h_separation", 6)
+	_spoils_grid.add_theme_constant_override("v_separation", 6)
+	scroll.add_child(_spoils_grid)
+	_populate_spoils_grid()
 
 	var proceed := Button.new()
 	proceed.text = "Proceed"
@@ -183,6 +216,7 @@ func _build_loot(panel: Panel) -> void:
 func _title_small(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
+	l.add_theme_font_size_override("font_size", 12)
 	l.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
 	return l
 
@@ -192,31 +226,94 @@ func _build_inventory(panel: Panel) -> void:
 	vb.add_child(_title("INVENTORY"))
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 4)
-	scroll.add_child(list)
-	var ch := get_node_or_null("/root/Character")
-	var items: Array = []
-	if ch and typeof(ch.get("items")) == TYPE_ARRAY:
-		items = ch.items
-	if items.is_empty():
-		var none := Label.new()
-		none.text = "(empty)"
-		list.add_child(none)
-	else:
-		for it in items:
-			var il := Label.new()
-			il.text = "•  " + _item_name(it)
-			list.add_child(il)
+	_inv_grid = GridContainer.new()
+	_inv_grid.columns = INV_COLS
+	_inv_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_inv_grid.add_theme_constant_override("h_separation", 6)
+	_inv_grid.add_theme_constant_override("v_separation", 6)
+	scroll.add_child(_inv_grid)
+	_populate_inventory_grid()
+
+# ---- grid population ---------------------------------------------------
+## Spoils grid: the loot still up for grabs. Each filled box is draggable with
+## source "spoils"; every box accepts a "kept" box dragged back out of inventory.
+func _populate_spoils_grid() -> void:
+	if _spoils_grid == null:
+		return
+	for c in _spoils_grid.get_children():
+		c.queue_free()
+	var rows: int = maxi(SPOILS_MIN_ROWS, int(ceil(float(_left.size()) / float(SPOILS_COLS))))
+	var cells: int = rows * SPOILS_COLS
+	for i in cells:
+		var box := ItemBox.new()
+		_spoils_grid.add_child(box)
+		if i < _left.size():
+			box.setup(i, _left[i], _tooltip, true, "spoils")
+		else:
+			box.setup(i, null, _tooltip, false, "spoils")
+		box.enable_drop(["kept"])
+		box.dropped.connect(_on_spoils_drop)
+
+## Inventory grid: the character's existing items (read-only) followed by items
+## kept from the spoils this fight (draggable back out). Every box accepts a
+## "spoils" box dragged in.
+func _populate_inventory_grid() -> void:
+	if _inv_grid == null:
+		return
+	for c in _inv_grid.get_children():
+		c.queue_free()
+	var existing := _char_items.size()
+	var total := existing + _kept.size()
+	var rows: int = maxi(INV_MIN_ROWS, int(ceil(float(total) / float(INV_COLS))))
+	var cells: int = rows * INV_COLS
+	for i in cells:
+		var box := ItemBox.new()
+		_inv_grid.add_child(box)
+		if i < existing:
+			box.setup(i, _char_items[i], _tooltip, false, "inv")
+		elif i < total:
+			var j := i - existing
+			box.setup(j, _kept[j], _tooltip, true, "kept")
+		else:
+			box.setup(i, null, _tooltip, false, "inv")
+		box.enable_drop(["spoils"])
+		box.dropped.connect(_on_inventory_drop)
+
+func _rebuild_grids() -> void:
+	_populate_spoils_grid()
+	_populate_inventory_grid()
+
+# ---- drag/drop handlers ------------------------------------------------
+## A spoils box was dropped onto the inventory: KEEP that item.
+func _on_inventory_drop(from_source: String, from_index: int, _item_id: String, _onto_index: int) -> void:
+	if from_source != "spoils":
+		return
+	if from_index < 0 or from_index >= _left.size():
+		return
+	_kept.append(_left[from_index])
+	_left.remove_at(from_index)
+	_rebuild_grids()
+
+## A kept box was dropped back onto the spoils: give it back up (leave behind).
+func _on_spoils_drop(from_source: String, from_index: int, _item_id: String, _onto_index: int) -> void:
+	if from_source != "kept":
+		return
+	if from_index < 0 or from_index >= _kept.size():
+		return
+	_left.append(_kept[from_index])
+	_kept.remove_at(from_index)
+	_rebuild_grids()
 
 # ---- proceed -----------------------------------------------------------
 func _on_proceed() -> void:
 	var ch := get_node_or_null("/root/Character")
+	# Only items the player dragged into the inventory are granted; whatever is
+	# still sitting in the spoils grid (_left) is left behind.
 	if ch and ch.has_method("gain_rewards"):
-		ch.gain_rewards(_money, _xp, _items)
+		ch.gain_rewards(_money, _xp, _kept)
 	if BattleState.battle_id != "":
 		GameManager.mark_completed(BattleState.battle_id)
 	if BattleState.is_campaign and typeof(CampaignDB) != TYPE_NIL:

@@ -223,7 +223,9 @@ func _build_health_bars() -> void:
 		cell.add_theme_constant_override("separation", 4)
 
 		var hb := BattleHealthBar.new()
-		hb.setup(u.unit_name, u.get_max_hp(), u.get_hp(), u.get_max_spirit(), u.get_spirit(), u.body.model_color())
+		# Enemies mirror: their max box sits on the buff-strip side (the left).
+		var mirror: bool = (u.team == TEAM_ENEMY)
+		hb.setup(u.unit_name, u.get_max_hp(), u.get_hp(), u.get_max_spirit(), u.get_spirit(), u.body.model_color(), mirror)
 		u.health_bar = hb
 
 		var bb := BuffBar.new()
@@ -432,13 +434,17 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 	match ability.kind:
 		Ability.Kind.ATTACK:
 			var atk: CharacterBase = _player.body if _player else null
-			var hit := CombatMath.resolve(atk, tgt.body, ability, rank)
+			var scale_bonus: Dictionary = {}
+			var ch_up := get_node_or_null("/root/Character")
+			if ch_up and ch_up.has_method("ability_scaling_bonus"):
+				scale_bonus = ch_up.ability_scaling_bonus(String(ability.id))
+			var hit := CombatMath.resolve(atk, tgt.body, ability, rank, -1, scale_bonus)
 			var dmg := int(hit["damage"])
 			# Pass the attacker as the source so the target's "when struck"
 			# reactions (thorns, ...) can hit back.
 			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]), _player)
 			# an attack may also drop a buff/debuff on the target (transient effect)
-			_maybe_apply_buff(ability, tgt)
+			_maybe_apply_buff(ability, tgt, rank)
 			var crit_tag := " (CRIT x%.2f)" % float(hit["crit_mult"]) if hit["is_crit"] else ""
 			print("[combat] %s hits %s for %d %s damage%s [chance %.0f%%]" % [
 				ability.display_name, tgt.unit_name, dmg, ability.element_key(), crit_tag, float(hit["crit_chance"])])
@@ -452,7 +458,7 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 			acted = true
 
 		Ability.Kind.BUFF, Ability.Kind.DEBUFF:
-			if _maybe_apply_buff(ability, tgt):
+			if _maybe_apply_buff(ability, tgt, rank):
 				print("[combat] %s applied %s to %s." % [ability.display_name, String(ability.applies_buff), tgt.unit_name])
 				acted = true
 			else:
@@ -481,10 +487,15 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 		end_player_turn()
 
 ## Apply the ability's buff (if any) to `tgt`. Returns true if a buff was applied.
-func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter) -> bool:
+func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter, rank: int = 1) -> bool:
 	var bid := String(ability.applies_buff)
 	if bid == "":
 		return false
+	# Guard is special-cased: it applies a different (cloned) damage-reduction buff
+	# per invested rank. The .tres names applies_buff = &"guard"; here rank 1..4 picks
+	# guard_1..guard_4 in BuffLibrary (each identical but for its reduction value).
+	if bid == "guard":
+		bid = "guard_%d" % clampi(rank, 1, 4)
 	var caster: CharacterBase = _player.body if _player else null
 	var entry := BuffLibrary.build(bid, caster, tgt.body)
 	if entry.is_empty():

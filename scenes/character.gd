@@ -65,8 +65,8 @@ var attribute_points: int = 5
 var attribute_allocations: Dictionary = {}  # major_key(String) -> points(int)
 
 # --- abilities --------------------------------------------------------------
-var unlocked_abilities: Array = ["strike"]
-var equipped_abilities: Array = ["strike", "", "", "", "", "", "", "", "", ""]
+var unlocked_abilities: Array = ["claw", "scour"]
+var equipped_abilities: Array = ["claw", "scour", "", "", "", "", "", "", "", ""]
 
 # --- read-only compatibility view -------------------------------------------
 ## Flat effective-stat dictionary (base + all baskets), plus derived max_hp and
@@ -339,7 +339,7 @@ func respec() -> void:
 ## call any time allocations change; it only ever removes abilities that no invested
 ## node backs, never adds one.
 func _resync_unlocked_from_allocations() -> void:
-	var kept := {"strike": true}
+	var kept := {"claw": true, "scour": true}
 	for nid in allocations.keys():
 		if int(allocations[nid]) > 0:
 			var aid := str(node_abilities.get(nid, ""))
@@ -351,8 +351,9 @@ func _resync_unlocked_from_allocations() -> void:
 		if kept.has(s) and not new_unlocked.has(s):
 			new_unlocked.append(s)
 	unlocked_abilities = new_unlocked
-	if not unlocked_abilities.has("strike"):
-		unlocked_abilities.append("strike")
+	for def_id in ["claw", "scour"]:
+		if not unlocked_abilities.has(def_id):
+			unlocked_abilities.append(def_id)
 	# Drop any equipped ability that is no longer unlocked, then rebuild passives so
 	# a slotted passive that just got re-locked stops contributing its stat bonus.
 	var wheel_changed := false
@@ -426,10 +427,44 @@ func is_unlocked(id) -> bool:
 
 func unlock_ability(id) -> void:
 	var s := str(id)
-	if s != "" and not unlocked_abilities.has(s):
-		unlocked_abilities.append(s)
-		changed.emit()
-		save_game()
+	if s == "" or unlocked_abilities.has(s):
+		return
+	# UPGRADE-ONLY abilities (e.g. Sinewed) buff other abilities via their node
+	# investment — they are never cast or equipped, so keep them out of the pool.
+	var ab := _resolve_ability(s)
+	if ab != null and ab.has_method("is_upgrade_only") and ab.is_upgrade_only():
+		return
+	unlocked_abilities.append(s)
+	changed.emit()
+	save_game()
+
+## Total extra per-stat scaling that invested UPGRADE nodes grant to `ability_id`.
+## Scans every node with points invested; if the ability that node grants carries an
+## `upgrades` map naming this ability, adds points × each listed per-point scaling
+## bonus. Returns { stat_key: extra_multiplier } (empty when nothing upgrades it).
+## Combat passes the result into CombatMath.resolve -> Ability.compute_damage.
+func ability_scaling_bonus(ability_id) -> Dictionary:
+	var target := str(ability_id)
+	var out: Dictionary = {}
+	if target == "":
+		return out
+	for nid in allocations.keys():
+		var pts := int(allocations[nid])
+		if pts <= 0:
+			continue
+		var aid := str(node_abilities.get(nid, nid))
+		var ab := _resolve_ability(aid)
+		if ab == null or typeof(ab.upgrades) != TYPE_DICTIONARY:
+			continue
+		if not ab.upgrades.has(target):
+			continue
+		var per_point = ab.upgrades[target]
+		if typeof(per_point) != TYPE_DICTIONARY:
+			continue
+		for stat in per_point.keys():
+			var k := str(stat)
+			out[k] = float(out.get(k, 0.0)) + float(per_point[stat]) * float(pts)
+	return out
 
 func get_equipped() -> Array:
 	return equipped_abilities.duplicate()
@@ -661,8 +696,9 @@ func load_game() -> void:
 		unlocked_abilities = []
 		for v in ul:
 			unlocked_abilities.append(str(v))
-	if not unlocked_abilities.has("strike"):
-		unlocked_abilities.append("strike")
+	for def_id in ["claw", "scour"]:
+		if not unlocked_abilities.has(def_id):
+			unlocked_abilities.append(def_id)
 
 	var eq = parsed.get("equipped_abilities", null)
 	if typeof(eq) == TYPE_ARRAY:
@@ -689,8 +725,8 @@ func reset_to_defaults() -> void:
 	node_abilities = {}
 	attribute_points = 5
 	attribute_allocations = {}
-	unlocked_abilities = ["strike"]
-	equipped_abilities = ["strike", "", "", "", "", "", "", "", "", ""]
+	unlocked_abilities = ["claw", "scour"]
+	equipped_abilities = ["claw", "scour", "", "", "", "", "", "", "", ""]
 	_rebuild_body()
 	changed.emit()
 	save_game()

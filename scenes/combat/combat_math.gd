@@ -34,6 +34,13 @@ class_name CombatMath
 ## key counts, but by design it is written by buffs/debuffs.
 const PRE_DAMAGE_MULT_KEY := "damage_dealt_mult"
 
+## Basket stat key holding the DEFENDER's incoming-damage multiplier. Symmetric to
+## PRE_DAMAGE_MULT_KEY but read off the DEFENDER: stored on buffs/debuffs as an
+## ADDITIVE bonus around 0 (an 80%-damage-reduction buff stores -0.80), so the
+## applied multiplier is 1.0 + sum, clamped to >= 0. Written by buffs (e.g. Guard),
+## read in the mitigation stage below. Independent of element, so it also scales TRUE.
+const DAMAGE_TAKEN_MULT_KEY := "damage_taken_mult"
+
 # ----------------------------------------------------------------------------
 ## Full resolution. Returns a result dictionary:
 ##   { pre, post, damage, is_crit, crit_chance, crit_mult, element }
@@ -45,7 +52,10 @@ const PRE_DAMAGE_MULT_KEY := "damage_dealt_mult"
 ## - damage      : the final integer damage dealt
 ## - element     : the attack's element string
 ## Pass crit_floor >= 0 to force the crit roll (for tests); -1 rolls randomly.
-static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1, crit_floor: int = -1) -> Dictionary:
+## `scaling_bonus` (stat_key -> extra multiplier) carries per-stat scaling granted
+## by invested UPGRADE nodes (e.g. Sinewed buffing Claw/Scour); combat fills it from
+## Character.ability_scaling_bonus(ability.id). Empty for enemies and un-upgraded casts.
+static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1, crit_floor: int = -1, scaling_bonus: Dictionary = {}) -> Dictionary:
 	var result := {
 		"pre": 0.0, "post": 0.0, "damage": 0,
 		"is_crit": false, "crit_chance": 0.0, "crit_mult": 1.0,
@@ -58,7 +68,7 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 	result["element"] = element
 
 	# --- 1. PRE-MITIGATION ---------------------------------------------------
-	var base_dmg := ability.compute_damage(attacker.effective_stats(), points)
+	var base_dmg := ability.compute_damage(attacker.effective_stats(), points, scaling_bonus)
 	var pre_mult := 1.0 + _pre_mitigation_bonus(attacker)
 	var pre := maxf(0.0, base_dmg * pre_mult)
 	result["pre"] = pre
@@ -81,6 +91,14 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 			if s > 0.0:
 				stiffness = s
 		post = CombatMitigation.apply(pre, resistance, pierce, amp, stiffness)
+
+	# --- 2b. INCOMING-DAMAGE MULTIPLIER (the DEFENDER's Guard, etc.) ----------
+	# A flat multiplier on the damage this defender takes, applied AFTER mitigation
+	# and OUTSIDE the element check (so it scales TRUE damage too). It is 1.0 + the
+	# sum of the defender's damage_taken_mult buffs (additive around 0; negative
+	# reduces — a Guard granting 80% reduction stores -0.80), clamped to >= 0.
+	if defender != null:
+		post = maxf(0.0, post * maxf(0.0, 1.0 + _damage_taken_bonus(defender)))
 	result["post"] = post
 
 	# --- 3. CRIT -------------------------------------------------------------
@@ -108,3 +126,11 @@ static func _pre_mitigation_bonus(attacker: CharacterBase) -> float:
 		return 0.0
 	return attacker.get_basket_bonus("buffs", PRE_DAMAGE_MULT_KEY) \
 		+ attacker.get_basket_bonus("debuffs", PRE_DAMAGE_MULT_KEY)
+
+## Sum of the DEFENDER's incoming-damage multipliers across its buffs + debuffs
+## (e.g. Guard's damage reduction). Additive around 0; negative reduces damage.
+static func _damage_taken_bonus(defender: CharacterBase) -> float:
+	if defender == null:
+		return 0.0
+	return defender.get_basket_bonus("buffs", DAMAGE_TAKEN_MULT_KEY) \
+		+ defender.get_basket_bonus("debuffs", DAMAGE_TAKEN_MULT_KEY)

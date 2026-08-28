@@ -60,18 +60,21 @@ func show_for(ab: Ability, anchor_global: Rect2, points_text := "", rank := 0) -
 		return
 	_ab = ab
 	var r := rank if rank > 0 else 1
+	# Live scaling bonus from invested upgrade nodes (e.g. Sinewed -> Claw/Scour), so
+	# the description shows the UPGRADED percentages via the "{scaling}" token.
+	var bonus := _scaling_bonus_for(ab)
 	var rows := [
 		{"text": ab.display_name, "bg": NAME_BG, "fg": NAME_TX, "stage": 0},
 		{"text": points_text, "bg": POINTS_BG, "fg": POINTS_TX, "stage": 0,
 			"visible": points_text != ""},
 		{"text": ab.cost_text_at(r), "bg": META_BG, "fg": META_TX, "stage": 1},
-		{"text": ab.description_at(r), "bg": DESC_BG, "fg": DESC_TX, "stage": 1,
+		{"text": ab.description_resolved(r, bonus), "bg": DESC_BG, "fg": DESC_TX, "stage": 1,
 			"wrap": true, "rich": true},   # rich -> element keywords are coloured
 	]
-	# key on the ability id so re-showing the SAME ability (e.g. a skill node
-	# refreshing its point count on invest) updates the rows in place instead of
-	# restarting the reveal.
-	show_rows(rows, anchor_global, TIP_DELAY, "ability:" + String(ab.id))
+	# key on the ability id (+ a signature of the live bonus) so re-showing the SAME
+	# ability refreshes the rows in place, and a change in the upgrade bonus (invest
+	# Sinewed while hovering) re-renders the description instead of showing stale text.
+	show_rows(rows, anchor_global, TIP_DELAY, "ability:" + String(ab.id) + _bonus_sig(bonus))
 
 
 ## SKILL-TREE variant. Adds two things over show_for: the current DESC panel reads
@@ -86,20 +89,29 @@ func show_for_node(ab: Ability, anchor_global: Rect2, points: int, max_points: i
 		return
 	_ab = ab
 	var learned := points > 0
+	# Live scaling bonus from invested upgrade nodes, folded into the "{scaling}"
+	# token (a no-op for descriptions without it).
+	var bonus := _scaling_bonus_for(ab)
 	# COST + current DESC read for the current rank (rank 1's values when unlearned,
 	# so the panel still previews what the ability does).
 	var shown_rank := points if learned else 1
-	var desc_text := ab.description_at(shown_rank) if learned else NOT_LEARNED
+	var desc_text := ab.description_resolved(shown_rank, bonus) if learned else NOT_LEARNED
 
 	# The next-rank / status line.
 	var next_text := ""
 	if not level_ok:
+		# Level-locked: still PREVIEW what the ability does (its rank-1 description) in
+		# the description panel, then show the level requirement on the line below.
+		# Previously the description panel showed only the "not learned" placeholder
+		# here, so a locked node revealed the level gate but never what it grants.
+		if not learned:
+			desc_text = ab.description_resolved(1, bonus)
 		next_text = "Requires level %d to learn." % required_level
 	elif points >= max_points:
 		next_text = MASTERED
 	else:
 		var nr := points + 1
-		next_text = "Rank %d: %s" % [nr, ab.description_at(nr)]
+		next_text = "Rank %d: %s" % [nr, ab.description_resolved(nr, bonus)]
 
 	var rows := [
 		{"text": ab.display_name, "bg": NAME_BG, "fg": NAME_TX, "stage": 0},
@@ -120,3 +132,28 @@ func show_for_node(ab: Ability, anchor_global: Rect2, points: int, max_points: i
 func hide_tip() -> void:
 	_ab = null
 	hide_panel()
+
+
+## The player's live upgrade-node scaling bonus for `ab` (e.g. Sinewed -> Claw/Scour),
+## read from the persistent Character. Empty when nothing upgrades this ability or the
+## Character autoload isn't reachable.
+func _scaling_bonus_for(ab: Ability) -> Dictionary:
+	if ab == null:
+		return {}
+	var ch := get_node_or_null("/root/Character")
+	if ch and ch.has_method("ability_scaling_bonus"):
+		return ch.ability_scaling_bonus(String(ab.id))
+	return {}
+
+
+## A stable string signature of a scaling-bonus dict, appended to the hover's refresh
+## key so the description re-renders when the bonus changes (empty => no suffix).
+func _bonus_sig(bonus: Dictionary) -> String:
+	if bonus == null or bonus.is_empty():
+		return ""
+	var keys := bonus.keys()
+	keys.sort()
+	var s := "|"
+	for k in keys:
+		s += "%s=%.3f;" % [str(k), float(bonus[k])]
+	return s

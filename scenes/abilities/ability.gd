@@ -63,6 +63,13 @@ enum CostType {
 ## HEAL ability this is the healing scaling (e.g. Alef: instinct * 3.0).
 @export var scaling_stat: StringName = &""
 @export var scaling_mult: float = 0.0
+## OPTIONAL second caster-stat scaling term, added on top of scaling_stat. Lets one
+## ability scale off TWO stats at once (e.g. Claw: 50% vigor + 50% instinct). Leave
+## scaling_stat2 blank to use only the primary term — every existing .tres inherits
+## the blank default, so nothing needs re-saving. Has its own per-rank override
+## array (scaling_mult2_ranks), mirroring scaling_mult / scaling_mult_ranks.
+@export var scaling_stat2: StringName = &""
+@export var scaling_mult2: float = 0.0
 @export var requires: Array[StringName] = []
 @export var required_level: int = 1
 
@@ -85,7 +92,24 @@ enum CostType {
 @export var cost_amount_ranks: Array[int] = []
 @export var base_power_ranks: Array[float] = []
 @export var scaling_mult_ranks: Array[float] = []
+@export var scaling_mult2_ranks: Array[float] = []
 @export var cooldown_ranks: Array[int] = []
+
+# --- UPGRADE node (a skill-tree node that buffs OTHER abilities) -------------
+## Some skill-tree nodes are not castable abilities of their own — investing points
+## in them strengthens the player's OTHER abilities. Such a node's ability .tres
+## carries this `upgrades` map instead of combat stats:
+##     { "<target_ability_id>": { "<stat_key>": per_point_scaling_add, ... }, ... }
+## For every point invested in the granting node, each listed target ability gains
+## `per_point_scaling_add * caster[stat]` extra output (applied at damage time via
+## Character.ability_scaling_bonus -> compute_damage's scaling_bonus argument).
+## Example — Sinewed (the Malkuth node), per point:
+##     { "claw":  { "vigor": 0.25, "instinct": 0.25 },
+##       "scour": { "vigor": 0.25 } }
+## An ability with a non-empty `upgrades` map is treated as UPGRADE-ONLY: it never
+## enters the ability pool / combat wheel (see Character.unlock_ability). Blank for
+## every normal ability, so existing .tres are unaffected.
+@export var upgrades: Dictionary = {}
 
 # --- buff / debuff application ----------------------------------------------
 ## Id of the buff/debuff this ability applies to its target, resolved through
@@ -138,6 +162,52 @@ func description_at(points: int) -> String:
 		return description_ranks[_rank_index(points, description_ranks.size())]
 	return description
 
+## A stat key as a display label ("vigor" -> "Vigor", "some_stat" -> "Some Stat").
+func _stat_label(stat_key: String) -> String:
+	return stat_key.capitalize()
+
+## Human phrase for this ability's EFFECTIVE caster-stat scaling at `points`, e.g.
+## "50% of Vigor + 50% of Instinct". `scaling_bonus` (stat_key -> extra multiplier,
+## from Character.ability_scaling_bonus) is folded in so an upgraded ability shows
+## its upgraded percentages — e.g. Sinewed pushes Claw to "75% of Vigor + 75% of
+## Instinct". Native stats come first (in scaling_stat, scaling_stat2 order), then
+## any bonus-only stats the ability doesn't natively scale off. Empty when the
+## ability has no scaling at all.
+func scaling_phrase(points: int = 1, scaling_bonus: Dictionary = {}) -> String:
+	var parts := PackedStringArray()
+	var used := {}
+	var s1 := String(scaling_stat)
+	if s1 != "":
+		used[s1] = true
+		var m1 := scaling_mult_at(points) + float(scaling_bonus.get(s1, 0.0))
+		parts.append("%d%% of %s" % [int(round(m1 * 100.0)), _stat_label(s1)])
+	var s2 := String(scaling_stat2)
+	if s2 != "":
+		used[s2] = true
+		var m2 := scaling_mult2_at(points) + float(scaling_bonus.get(s2, 0.0))
+		parts.append("%d%% of %s" % [int(round(m2 * 100.0)), _stat_label(s2)])
+	if typeof(scaling_bonus) == TYPE_DICTIONARY:
+		for k in scaling_bonus.keys():
+			var ks := String(k)
+			if used.has(ks):
+				continue
+			var mv := float(scaling_bonus[k])
+			if mv == 0.0:
+				continue
+			parts.append("%d%% of %s" % [int(round(mv * 100.0)), _stat_label(ks)])
+	return " + ".join(parts)
+
+## The description for `points`, with dynamic tokens substituted. Supports the
+## "{scaling}" token, which is replaced by scaling_phrase(points, scaling_bonus) so a
+## description like "Deal Physical damage equal to {scaling}." shows the ability's
+## LIVE effective scaling (including any upgrade-node bonus). Tokens are only touched
+## when present, so plain authored descriptions are returned unchanged.
+func description_resolved(points: int = 1, scaling_bonus: Dictionary = {}) -> String:
+	var s := description_at(points)
+	if s.find("{scaling}") != -1:
+		s = s.replace("{scaling}", scaling_phrase(points, scaling_bonus))
+	return s
+
 ## The raw cost_amount for a given rank (cost_amount_ranks override, else scalar).
 func cost_amount_at(points: int) -> int:
 	if not cost_amount_ranks.is_empty():
@@ -149,6 +219,18 @@ func scaling_mult_at(points: int) -> float:
 	if not scaling_mult_ranks.is_empty():
 		return float(scaling_mult_ranks[_rank_index(points, scaling_mult_ranks.size())])
 	return scaling_mult
+
+## The SECOND caster-stat scaling multiplier for a given rank (scaling_mult2_ranks
+## override, else the scalar). Mirrors scaling_mult_at for the optional second stat.
+func scaling_mult2_at(points: int) -> float:
+	if not scaling_mult2_ranks.is_empty():
+		return float(scaling_mult2_ranks[_rank_index(points, scaling_mult2_ranks.size())])
+	return scaling_mult2
+
+## True when this ability is an UPGRADE-ONLY node (it carries an `upgrades` map and
+## exists only to strengthen other abilities — never cast, never equipped).
+func is_upgrade_only() -> bool:
+	return typeof(upgrades) == TYPE_DICTIONARY and not upgrades.is_empty()
 
 ## The cooldown (turns) for a given rank.
 func cooldown_at(points: int) -> int:
@@ -218,11 +300,21 @@ func power_at(points: int) -> float:
 ## Pre-mitigation damage/effect value including caster-stat scaling, at a rank.
 ##   e.g. Strike: power_at(1)=100  +  1.0 * caster["vigor"].
 ## Mitigation (pierce vs defence, amplification) is applied later in CombatMath.
-func compute_damage(caster_stats: Dictionary, points: int = 1) -> float:
+func compute_damage(caster_stats: Dictionary, points: int = 1, scaling_bonus: Dictionary = {}) -> float:
 	var dmg := power_at(points)
 	var stat := String(scaling_stat)
 	if stat != "":
 		dmg += scaling_mult_at(points) * float(caster_stats.get(stat, 0))
+	# Optional second scaling stat (e.g. Claw's instinct term).
+	var stat2 := String(scaling_stat2)
+	if stat2 != "":
+		dmg += scaling_mult2_at(points) * float(caster_stats.get(stat2, 0))
+	# Extra per-stat scaling granted by invested UPGRADE nodes (e.g. Sinewed adds
+	# vigor/instinct scaling to Claw & Scour). scaling_bonus maps stat_key -> extra
+	# multiplier; combat fills it from Character.ability_scaling_bonus(id).
+	if typeof(scaling_bonus) == TYPE_DICTIONARY and not scaling_bonus.is_empty():
+		for k in scaling_bonus.keys():
+			dmg += float(scaling_bonus[k]) * float(caster_stats.get(String(k), 0))
 	return dmg
 
 ## Healing an HEAL ability restores (before the target's healing-received

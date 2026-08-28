@@ -66,9 +66,9 @@ color = Color(0.24, 0.03, 0.03, 1)
 [node name="OverviewPanel" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = -1
-anchor_left = 0.0
+anchor_left = 0.0875
 anchor_top = 0.0
-anchor_right = 0.25
+anchor_right = 0.2125
 anchor_bottom = 0.3
 offset_left = 0.0
 offset_top = 0.0
@@ -93,9 +93,9 @@ vertical_alignment = 1
 [node name="AttributesPanel" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = -1
-anchor_left = 0.0
+anchor_left = 0.0875
 anchor_top = 0.3
-anchor_right = 0.25
+anchor_right = 0.2125
 anchor_bottom = 1.0
 offset_left = 0.0
 offset_top = 0.0
