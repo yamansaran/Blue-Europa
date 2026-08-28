@@ -1,51 +1,51 @@
-[gd_scene load_steps=48 format=3 uid="uid://cskilltreesmpl1"]
+[gd_scene format=3 uid="uid://0x13wp645fgm"]
 
-[ext_resource type="Script" path="res://scenes/abilities/skill_tree.gd" id="1_tree"]
-[ext_resource type="Script" path="res://scenes/abilities/skill_node.gd" id="2_node"]
+[ext_resource type="Script" uid="uid://b1jqlaf1vxute" path="res://scenes/abilities/skill_tree.gd" id="1_tree"]
+[ext_resource type="Script" uid="uid://hh1m8e80p3xc" path="res://scenes/abilities/skill_node.gd" id="2_node"]
 [ext_resource type="Resource" path="res://scenes/abilities/ability_data/keter.tres" id="3_keter"]
 [ext_resource type="Resource" path="res://scenes/abilities/ability_data/chokmah.tres" id="4_chokmah"]
 [ext_resource type="Resource" path="res://scenes/abilities/ability_data/binah.tres" id="5_binah"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/chesed.tres" id="6_chesed"]
+[ext_resource type="Resource" uid="uid://bsnap0000001" path="res://scenes/abilities/ability_data/chesed.tres" id="6_chesed"]
 [ext_resource type="Resource" path="res://scenes/abilities/ability_data/geburah.tres" id="7_geburah"]
 [ext_resource type="Resource" path="res://scenes/abilities/ability_data/tiphareth.tres" id="8_tiphareth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/netzach.tres" id="9_netzach"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/hod.tres" id="10_hod"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/yesod.tres" id="11_yesod"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/malkuth.tres" id="12_malkuth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/aleph.tres" id="13_aleph"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/beth.tres" id="14_beth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/gimel.tres" id="15_gimel"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/daleth.tres" id="16_daleth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/heh.tres" id="17_heh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/vav.tres" id="18_vav"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/zayin.tres" id="19_zayin"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/cheth.tres" id="20_cheth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/teth.tres" id="21_teth"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/yod.tres" id="22_yod"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/kaph.tres" id="23_kaph"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/lamed.tres" id="24_lamed"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/mem.tres" id="25_mem"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/nun.tres" id="26_nun"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/samekh.tres" id="27_samekh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/ayin.tres" id="28_ayin"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/peh.tres" id="29_peh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/tzaddi.tres" id="30_tzaddi"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/qoph.tres" id="31_qoph"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/resh.tres" id="32_resh"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/shin.tres" id="33_shin"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/tav.tres" id="34_tav"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/severity.tres" id="35_severity"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/mercy.tres" id="36_mercy"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/negative.tres" id="37_negative"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/affirmative.tres" id="38_affirmative"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/altar_of_fire.tres" id="39_altar_of_fire"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/altar_of_water.tres" id="40_altar_of_water"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/bread.tres" id="41_bread"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/menorah.tres" id="42_menorah"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/misericordia.tres" id="43_misericordia"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/severitas.tres" id="44_severitas"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/nomen_ordinis.tres" id="45_nomen_ordinis"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/interpretatio.tres" id="46_interpretatio"]
+[ext_resource type="Resource" uid="uid://0xj6ngy8liwu" path="res://scenes/abilities/ability_data/netzach.tres" id="9_netzach"]
+[ext_resource type="Resource" uid="uid://bhod000000001" path="res://scenes/abilities/ability_data/hod.tres" id="10_hod"]
+[ext_resource type="Resource" uid="uid://byesod0000001" path="res://scenes/abilities/ability_data/yesod.tres" id="11_yesod"]
+[ext_resource type="Resource" uid="uid://dq30d7d8sseom" path="res://scenes/abilities/ability_data/malkuth.tres" id="12_malkuth"]
+[ext_resource type="Resource" uid="uid://beab001" path="res://scenes/abilities/ability_data/aleph.tres" id="13_aleph"]
+[ext_resource type="Resource" uid="uid://beab002" path="res://scenes/abilities/ability_data/beth.tres" id="14_beth"]
+[ext_resource type="Resource" uid="uid://beab003" path="res://scenes/abilities/ability_data/gimel.tres" id="15_gimel"]
+[ext_resource type="Resource" uid="uid://beab004" path="res://scenes/abilities/ability_data/daleth.tres" id="16_daleth"]
+[ext_resource type="Resource" uid="uid://beab005" path="res://scenes/abilities/ability_data/heh.tres" id="17_heh"]
+[ext_resource type="Resource" uid="uid://beab006" path="res://scenes/abilities/ability_data/vav.tres" id="18_vav"]
+[ext_resource type="Resource" uid="uid://beab007" path="res://scenes/abilities/ability_data/zayin.tres" id="19_zayin"]
+[ext_resource type="Resource" uid="uid://beab008" path="res://scenes/abilities/ability_data/cheth.tres" id="20_cheth"]
+[ext_resource type="Resource" uid="uid://beab01a" path="res://scenes/abilities/ability_data/teth.tres" id="21_teth"]
+[ext_resource type="Resource" uid="uid://beab010" path="res://scenes/abilities/ability_data/yod.tres" id="22_yod"]
+[ext_resource type="Resource" uid="uid://beab011" path="res://scenes/abilities/ability_data/kaph.tres" id="23_kaph"]
+[ext_resource type="Resource" uid="uid://beab012" path="res://scenes/abilities/ability_data/lamed.tres" id="24_lamed"]
+[ext_resource type="Resource" uid="uid://beab013" path="res://scenes/abilities/ability_data/mem.tres" id="25_mem"]
+[ext_resource type="Resource" uid="uid://beab014" path="res://scenes/abilities/ability_data/nun.tres" id="26_nun"]
+[ext_resource type="Resource" uid="uid://beab015" path="res://scenes/abilities/ability_data/samekh.tres" id="27_samekh"]
+[ext_resource type="Resource" uid="uid://beab016" path="res://scenes/abilities/ability_data/ayin.tres" id="28_ayin"]
+[ext_resource type="Resource" uid="uid://beab017" path="res://scenes/abilities/ability_data/peh.tres" id="29_peh"]
+[ext_resource type="Resource" uid="uid://beab018" path="res://scenes/abilities/ability_data/tzaddi.tres" id="30_tzaddi"]
+[ext_resource type="Resource" uid="uid://beab02a" path="res://scenes/abilities/ability_data/qoph.tres" id="31_qoph"]
+[ext_resource type="Resource" uid="uid://beab020" path="res://scenes/abilities/ability_data/resh.tres" id="32_resh"]
+[ext_resource type="Resource" uid="uid://beab021" path="res://scenes/abilities/ability_data/shin.tres" id="33_shin"]
+[ext_resource type="Resource" uid="uid://beab022" path="res://scenes/abilities/ability_data/tav.tres" id="34_tav"]
+[ext_resource type="Resource" uid="uid://beab023" path="res://scenes/abilities/ability_data/severity.tres" id="35_severity"]
+[ext_resource type="Resource" uid="uid://beab024" path="res://scenes/abilities/ability_data/mercy.tres" id="36_mercy"]
+[ext_resource type="Resource" uid="uid://beab025" path="res://scenes/abilities/ability_data/negative.tres" id="37_negative"]
+[ext_resource type="Resource" uid="uid://beab026" path="res://scenes/abilities/ability_data/affirmative.tres" id="38_affirmative"]
+[ext_resource type="Resource" uid="uid://beab027" path="res://scenes/abilities/ability_data/altar_of_fire.tres" id="39_altar_of_fire"]
+[ext_resource type="Resource" uid="uid://beab028" path="res://scenes/abilities/ability_data/altar_of_water.tres" id="40_altar_of_water"]
+[ext_resource type="Resource" uid="uid://beab03a" path="res://scenes/abilities/ability_data/bread.tres" id="41_bread"]
+[ext_resource type="Resource" uid="uid://beab030" path="res://scenes/abilities/ability_data/menorah.tres" id="42_menorah"]
+[ext_resource type="Resource" uid="uid://beab031" path="res://scenes/abilities/ability_data/misericordia.tres" id="43_misericordia"]
+[ext_resource type="Resource" uid="uid://beab032" path="res://scenes/abilities/ability_data/severitas.tres" id="44_severitas"]
+[ext_resource type="Resource" uid="uid://beab033" path="res://scenes/abilities/ability_data/nomen_ordinis.tres" id="45_nomen_ordinis"]
+[ext_resource type="Resource" uid="uid://beab034" path="res://scenes/abilities/ability_data/interpretatio.tres" id="46_interpretatio"]
 
 [sub_resource type="StyleBoxFlat" id="sb_info"]
 bg_color = Color(0.08, 0.08, 0.09, 0.96)
@@ -54,12 +54,12 @@ border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
 border_color = Color(0.8, 0.75, 0.55, 0.9)
-corner_radius_top_left = 3.8
-corner_radius_top_right = 3.8
-corner_radius_bottom_right = 3.8
-corner_radius_bottom_left = 3.8
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
 
-[node name="SkillTree" type="Control"]
+[node name="SkillTree" type="Control" unique_id=855793516]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -68,464 +68,674 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_tree")
 
-[node name="Keter" type="Control" parent="."]
+[node name="Keter" type="Control" parent="." unique_id=457489622]
+custom_minimum_size = Vector2(52, 52)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 274.0
+offset_top = 48.0
+offset_right = 326.0
+offset_bottom = 100.0
 script = ExtResource("2_node")
 ability = ExtResource("3_keter")
 node_id = "keter"
+size_class = 2
 parents = Array[String](["aleph", "beth", "gimel"])
 required_level = 35
-center_position = Vector2(300.0, 74.0)
-size_class = 2
+center_position = Vector2(300, 74)
 
-[node name="Chokmah" type="Control" parent="."]
+[node name="Chokmah" type="Control" parent="." unique_id=242139623]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 422.0
+offset_top = 166.0
+offset_right = 458.0
+offset_bottom = 202.0
 script = ExtResource("2_node")
 ability = ExtResource("4_chokmah")
 node_id = "chokmah"
 parents = Array[String](["heh", "vav"])
 required_level = 25
-center_position = Vector2(440.0, 184.0)
-size_class = 1
+center_position = Vector2(440, 184)
 
-[node name="Binah" type="Control" parent="."]
+[node name="Binah" type="Control" parent="." unique_id=1231707168]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 142.0
+offset_top = 166.0
+offset_right = 178.0
+offset_bottom = 202.0
 script = ExtResource("2_node")
 ability = ExtResource("5_binah")
 node_id = "binah"
 parents = Array[String](["zayin", "cheth"])
 required_level = 25
-center_position = Vector2(160.0, 184.0)
-size_class = 1
+center_position = Vector2(160, 184)
 
-[node name="Chesed" type="Control" parent="."]
+[node name="Chesed" type="Control" parent="." unique_id=863189592]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 422.0
+offset_top = 306.0
+offset_right = 458.0
+offset_bottom = 342.0
 script = ExtResource("2_node")
 ability = ExtResource("6_chesed")
 node_id = "chesed"
 parents = Array[String](["yod", "kaph"])
 required_level = 20
-center_position = Vector2(440.0, 324.0)
-size_class = 1
+center_position = Vector2(440, 324)
 
-[node name="Gevurah" type="Control" parent="."]
+[node name="Gevurah" type="Control" parent="." unique_id=1286595996]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 142.0
+offset_top = 306.0
+offset_right = 178.0
+offset_bottom = 342.0
 script = ExtResource("2_node")
 ability = ExtResource("7_geburah")
 node_id = "gevurah"
 parents = Array[String](["lamed", "mem"])
 required_level = 20
-center_position = Vector2(160.0, 324.0)
-size_class = 1
+center_position = Vector2(160, 324)
 
-[node name="Tiferet" type="Control" parent="."]
+[node name="Tiferet" type="Control" parent="." unique_id=1904559364]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 282.0
+offset_top = 376.0
+offset_right = 318.0
+offset_bottom = 412.0
 script = ExtResource("2_node")
 ability = ExtResource("8_tiphareth")
 node_id = "tiferet"
 parents = Array[String](["nun", "samekh", "ayin"])
 required_level = 15
-center_position = Vector2(300.0, 394.0)
-size_class = 1
+center_position = Vector2(300, 394)
 
-[node name="Netzach" type="Control" parent="."]
+[node name="Netzach" type="Control" parent="." unique_id=1729443731]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 422.0
+offset_top = 446.0
+offset_right = 458.0
+offset_bottom = 482.0
 script = ExtResource("2_node")
 ability = ExtResource("9_netzach")
 node_id = "netzach"
 parents = Array[String](["tzaddi", "qoph"])
 required_level = 10
-center_position = Vector2(440.0, 464.0)
-size_class = 1
+center_position = Vector2(440, 464)
 
-[node name="Hod" type="Control" parent="."]
+[node name="Hod" type="Control" parent="." unique_id=1562123757]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 142.0
+offset_top = 446.0
+offset_right = 178.0
+offset_bottom = 482.0
 script = ExtResource("2_node")
 ability = ExtResource("10_hod")
 node_id = "hod"
 parents = Array[String](["resh", "shin"])
 required_level = 10
-center_position = Vector2(160.0, 464.0)
-size_class = 1
+center_position = Vector2(160, 464)
 
-[node name="Yesod" type="Control" parent="."]
+[node name="Yesod" type="Control" parent="." unique_id=1272707272]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 282.0
+offset_top = 516.0
+offset_right = 318.0
+offset_bottom = 552.0
 script = ExtResource("2_node")
 ability = ExtResource("11_yesod")
 node_id = "yesod"
 parents = Array[String](["tav"])
 required_level = 5
-center_position = Vector2(300.0, 534.0)
-size_class = 1
+center_position = Vector2(300, 534)
 
-[node name="Malkuth" type="Control" parent="."]
+[node name="Malkuth" type="Control" parent="." unique_id=1530741423]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 282.0
+offset_top = 626.0
+offset_right = 318.0
+offset_bottom = 662.0
 script = ExtResource("2_node")
 ability = ExtResource("12_malkuth")
 node_id = "malkuth"
-center_position = Vector2(300.0, 644.0)
-size_class = 1
+center_position = Vector2(300, 644)
 
-[node name="Aleph" type="Control" parent="."]
+[node name="Aleph" type="Control" parent="." unique_id=1670300026]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 360.0
+offset_top = 119.0
+offset_right = 380.0
+offset_bottom = 139.0
 script = ExtResource("2_node")
 ability = ExtResource("13_aleph")
 node_id = "aleph"
-parents = Array[String](["chokmah"])
-center_position = Vector2(370.0, 129.0)
 size_class = 0
+parents = Array[String](["chokmah"])
+center_position = Vector2(370, 129)
 
-[node name="Beth" type="Control" parent="."]
+[node name="Beth" type="Control" parent="." unique_id=1609810348]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 220.0
+offset_top = 119.0
+offset_right = 240.0
+offset_bottom = 139.0
 script = ExtResource("2_node")
 ability = ExtResource("14_beth")
 node_id = "beth"
-parents = Array[String](["binah"])
-center_position = Vector2(230.0, 129.0)
 size_class = 0
+parents = Array[String](["binah"])
+center_position = Vector2(230, 129)
 
-[node name="Gimel" type="Control" parent="."]
+[node name="Gimel" type="Control" parent="." unique_id=1214618880]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 290.0
+offset_top = 224.0
+offset_right = 310.0
+offset_bottom = 244.0
 script = ExtResource("2_node")
 ability = ExtResource("15_gimel")
 node_id = "gimel"
-parents = Array[String](["tiferet"])
-center_position = Vector2(300.0, 234.0)
 size_class = 0
+parents = Array[String](["tiferet"])
+center_position = Vector2(300, 234)
 
-[node name="Daleth" type="Control" parent="."]
+[node name="Daleth" type="Control" parent="." unique_id=407001343]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 290.0
+offset_top = 174.0
+offset_right = 310.0
+offset_bottom = 194.0
 script = ExtResource("2_node")
 ability = ExtResource("16_daleth")
 node_id = "daleth"
-parents = Array[String](["chokmah", "binah"])
-center_position = Vector2(300.0, 184.0)
 size_class = 0
+parents = Array[String](["chokmah", "binah"])
+center_position = Vector2(300, 184)
 
-[node name="Heh" type="Control" parent="."]
+[node name="Heh" type="Control" parent="." unique_id=1897705712]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 360.0
+offset_top = 279.0
+offset_right = 380.0
+offset_bottom = 299.0
 script = ExtResource("2_node")
 ability = ExtResource("17_heh")
 node_id = "heh"
-parents = Array[String](["tiferet"])
-center_position = Vector2(370.0, 289.0)
 size_class = 0
+parents = Array[String](["tiferet"])
+center_position = Vector2(370, 289)
 
-[node name="Vav" type="Control" parent="."]
+[node name="Vav" type="Control" parent="." unique_id=2070359289]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 430.0
+offset_top = 244.0
+offset_right = 450.0
+offset_bottom = 264.0
 script = ExtResource("2_node")
 ability = ExtResource("18_vav")
 node_id = "vav"
-parents = Array[String](["chesed"])
-center_position = Vector2(440.0, 254.0)
 size_class = 0
+parents = Array[String](["chesed"])
+center_position = Vector2(440, 254)
 
-[node name="Zayin" type="Control" parent="."]
+[node name="Zayin" type="Control" parent="." unique_id=1118592156]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 220.0
+offset_top = 279.0
+offset_right = 240.0
+offset_bottom = 299.0
 script = ExtResource("2_node")
 ability = ExtResource("19_zayin")
 node_id = "zayin"
-parents = Array[String](["tiferet"])
-center_position = Vector2(230.0, 289.0)
 size_class = 0
+parents = Array[String](["tiferet"])
+center_position = Vector2(230, 289)
 
-[node name="Cheth" type="Control" parent="."]
+[node name="Cheth" type="Control" parent="." unique_id=638974481]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 150.0
+offset_top = 244.0
+offset_right = 170.0
+offset_bottom = 264.0
 script = ExtResource("2_node")
 ability = ExtResource("20_cheth")
 node_id = "cheth"
-parents = Array[String](["gevurah"])
-center_position = Vector2(160.0, 254.0)
 size_class = 0
+parents = Array[String](["gevurah"])
+center_position = Vector2(160, 254)
 
-[node name="Teth" type="Control" parent="."]
+[node name="Teth" type="Control" parent="." unique_id=1337907620]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 290.0
+offset_top = 314.0
+offset_right = 310.0
+offset_bottom = 334.0
 script = ExtResource("2_node")
 ability = ExtResource("21_teth")
 node_id = "teth"
-parents = Array[String](["chesed", "gevurah"])
-center_position = Vector2(300.0, 324.0)
 size_class = 0
+parents = Array[String](["chesed", "gevurah"])
+center_position = Vector2(300, 324)
 
-[node name="Yod" type="Control" parent="."]
+[node name="Yod" type="Control" parent="." unique_id=1315286457]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 360.0
+offset_top = 349.0
+offset_right = 380.0
+offset_bottom = 369.0
 script = ExtResource("2_node")
 ability = ExtResource("22_yod")
 node_id = "yod"
-parents = Array[String](["tiferet"])
-center_position = Vector2(370.0, 359.0)
 size_class = 0
+parents = Array[String](["tiferet"])
+center_position = Vector2(370, 359)
 
-[node name="Kaph" type="Control" parent="."]
+[node name="Kaph" type="Control" parent="." unique_id=847592981]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 430.0
+offset_top = 384.0
+offset_right = 450.0
+offset_bottom = 404.0
 script = ExtResource("2_node")
 ability = ExtResource("23_kaph")
 node_id = "kaph"
-parents = Array[String](["netzach"])
-center_position = Vector2(440.0, 394.0)
 size_class = 0
+parents = Array[String](["netzach"])
+center_position = Vector2(440, 394)
 
-[node name="Lamed" type="Control" parent="."]
+[node name="Lamed" type="Control" parent="." unique_id=1266899567]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 220.0
+offset_top = 349.0
+offset_right = 240.0
+offset_bottom = 369.0
 script = ExtResource("2_node")
 ability = ExtResource("24_lamed")
 node_id = "lamed"
-parents = Array[String](["tiferet"])
-center_position = Vector2(230.0, 359.0)
 size_class = 0
+parents = Array[String](["tiferet"])
+center_position = Vector2(230, 359)
 
-[node name="Mem" type="Control" parent="."]
+[node name="Mem" type="Control" parent="." unique_id=1499268213]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 150.0
+offset_top = 384.0
+offset_right = 170.0
+offset_bottom = 404.0
 script = ExtResource("2_node")
 ability = ExtResource("25_mem")
 node_id = "mem"
-parents = Array[String](["hod"])
-center_position = Vector2(160.0, 394.0)
 size_class = 0
+parents = Array[String](["hod"])
+center_position = Vector2(160, 394)
 
-[node name="Nun" type="Control" parent="."]
+[node name="Nun" type="Control" parent="." unique_id=1827788171]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 360.0
+offset_top = 419.0
+offset_right = 380.0
+offset_bottom = 439.0
 script = ExtResource("2_node")
 ability = ExtResource("26_nun")
 node_id = "nun"
-parents = Array[String](["netzach"])
-center_position = Vector2(370.0, 429.0)
 size_class = 0
+parents = Array[String](["netzach"])
+center_position = Vector2(370, 429)
 
-[node name="Samekh" type="Control" parent="."]
+[node name="Samekh" type="Control" parent="." unique_id=1102790211]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 290.0
+offset_top = 424.0
+offset_right = 310.0
+offset_bottom = 444.0
 script = ExtResource("2_node")
 ability = ExtResource("27_samekh")
 node_id = "samekh"
-parents = Array[String](["yesod"])
-center_position = Vector2(300.0, 434.0)
 size_class = 0
+parents = Array[String](["yesod"])
+center_position = Vector2(300, 434)
 
-[node name="Ayin" type="Control" parent="."]
+[node name="Ayin" type="Control" parent="." unique_id=273919530]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 220.0
+offset_top = 419.0
+offset_right = 240.0
+offset_bottom = 439.0
 script = ExtResource("2_node")
 ability = ExtResource("28_ayin")
 node_id = "ayin"
-parents = Array[String](["hod"])
-center_position = Vector2(230.0, 429.0)
 size_class = 0
+parents = Array[String](["hod"])
+center_position = Vector2(230, 429)
 
-[node name="Peh" type="Control" parent="."]
+[node name="Peh" type="Control" parent="." unique_id=1296004392]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 290.0
+offset_top = 454.0
+offset_right = 310.0
+offset_bottom = 474.0
 script = ExtResource("2_node")
 ability = ExtResource("29_peh")
 node_id = "peh"
-parents = Array[String](["netzach", "hod"])
-center_position = Vector2(300.0, 464.0)
 size_class = 0
+parents = Array[String](["netzach", "hod"])
+center_position = Vector2(300, 464)
 
-[node name="Tzaddi" type="Control" parent="."]
+[node name="Tzaddi" type="Control" parent="." unique_id=789404333]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 360.0
+offset_top = 489.0
+offset_right = 380.0
+offset_bottom = 509.0
 script = ExtResource("2_node")
 ability = ExtResource("30_tzaddi")
 node_id = "tzaddi"
-parents = Array[String](["yesod"])
-center_position = Vector2(370.0, 499.0)
 size_class = 0
+parents = Array[String](["yesod"])
+center_position = Vector2(370, 499)
 
-[node name="Qoph" type="Control" parent="."]
+[node name="Qoph" type="Control" parent="." unique_id=101223664]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 360.0
+offset_top = 544.0
+offset_right = 380.0
+offset_bottom = 564.0
 script = ExtResource("2_node")
 ability = ExtResource("31_qoph")
 node_id = "qoph"
-parents = Array[String](["malkuth"])
-center_position = Vector2(370.0, 554.0)
 size_class = 0
+parents = Array[String](["malkuth"])
+center_position = Vector2(370, 554)
 
-[node name="Resh" type="Control" parent="."]
+[node name="Resh" type="Control" parent="." unique_id=246829844]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 220.0
+offset_top = 489.0
+offset_right = 240.0
+offset_bottom = 509.0
 script = ExtResource("2_node")
 ability = ExtResource("32_resh")
 node_id = "resh"
-parents = Array[String](["yesod"])
-center_position = Vector2(230.0, 499.0)
 size_class = 0
+parents = Array[String](["yesod"])
+center_position = Vector2(230, 499)
 
-[node name="Shin" type="Control" parent="."]
+[node name="Shin" type="Control" parent="." unique_id=1987081449]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 220.0
+offset_top = 544.0
+offset_right = 240.0
+offset_bottom = 564.0
 script = ExtResource("2_node")
 ability = ExtResource("33_shin")
 node_id = "shin"
-parents = Array[String](["malkuth"])
-center_position = Vector2(230.0, 554.0)
 size_class = 0
+parents = Array[String](["malkuth"])
+center_position = Vector2(230, 554)
 
-[node name="Tav" type="Control" parent="."]
+[node name="Tav" type="Control" parent="." unique_id=1784133446]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 290.0
+offset_top = 579.0
+offset_right = 310.0
+offset_bottom = 599.0
 script = ExtResource("2_node")
 ability = ExtResource("34_tav")
 node_id = "tav"
-parents = Array[String](["malkuth"])
-center_position = Vector2(300.0, 589.0)
 size_class = 0
+parents = Array[String](["malkuth"])
+center_position = Vector2(300, 589)
 
-[node name="Severity" type="Control" parent="."]
+[node name="Severity" type="Control" parent="." unique_id=124711261]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 50.0
+offset_top = 314.0
+offset_right = 70.0
+offset_bottom = 334.0
 script = ExtResource("2_node")
 ability = ExtResource("35_severity")
 node_id = "severity"
-parents = Array[String](["gevurah"])
-center_position = Vector2(60.0, 324.0)
 size_class = 0
+parents = Array[String](["gevurah"])
+center_position = Vector2(60, 324)
 
-[node name="Mercy" type="Control" parent="."]
+[node name="Mercy" type="Control" parent="." unique_id=1182236080]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 530.0
+offset_top = 314.0
+offset_right = 550.0
+offset_bottom = 334.0
 script = ExtResource("2_node")
 ability = ExtResource("36_mercy")
 node_id = "mercy"
-parents = Array[String](["chesed"])
-center_position = Vector2(540.0, 324.0)
 size_class = 0
+parents = Array[String](["chesed"])
+center_position = Vector2(540, 324)
 
-[node name="Negative" type="Control" parent="."]
+[node name="Negative" type="Control" parent="." unique_id=1178948949]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 50.0
+offset_top = 384.0
+offset_right = 70.0
+offset_bottom = 404.0
 script = ExtResource("2_node")
 ability = ExtResource("37_negative")
 node_id = "negative"
-parents = Array[String](["mem"])
-center_position = Vector2(60.0, 394.0)
 size_class = 0
+parents = Array[String](["mem"])
+center_position = Vector2(60, 394)
 
-[node name="Affirmative" type="Control" parent="."]
+[node name="Affirmative" type="Control" parent="." unique_id=8980034]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 530.0
+offset_top = 384.0
+offset_right = 550.0
+offset_bottom = 404.0
 script = ExtResource("2_node")
 ability = ExtResource("38_affirmative")
 node_id = "affirmative"
-parents = Array[String](["kaph"])
-center_position = Vector2(540.0, 394.0)
 size_class = 0
+parents = Array[String](["kaph"])
+center_position = Vector2(540, 394)
 
-[node name="AltarofFire" type="Control" parent="."]
+[node name="AltarofFire" type="Control" parent="." unique_id=1453201385]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 260.0
+offset_top = 560.0
+offset_right = 280.0
+offset_bottom = 580.0
 script = ExtResource("2_node")
 ability = ExtResource("39_altar_of_fire")
 node_id = "altar_of_fire"
-required_level = 3
-center_position = Vector2(270.0, 570.0)
 size_class = 0
+required_level = 3
+center_position = Vector2(270, 570)
 
-[node name="AltarofWater" type="Control" parent="."]
+[node name="AltarofWater" type="Control" parent="." unique_id=1296179290]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 320.0
+offset_top = 560.0
+offset_right = 340.0
+offset_bottom = 580.0
 script = ExtResource("2_node")
 ability = ExtResource("40_altar_of_water")
 node_id = "altar_of_water"
-required_level = 3
-center_position = Vector2(330.0, 570.0)
 size_class = 0
+required_level = 3
+center_position = Vector2(330, 570)
 
-[node name="Bread" type="Control" parent="."]
+[node name="Bread" type="Control" parent="." unique_id=2059597269]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 220.0
+offset_top = 384.0
+offset_right = 240.0
+offset_bottom = 404.0
 script = ExtResource("2_node")
 ability = ExtResource("41_bread")
 node_id = "bread"
-required_level = 13
-center_position = Vector2(230.0, 394.0)
 size_class = 0
+required_level = 13
+center_position = Vector2(230, 394)
 
-[node name="Menorah" type="Control" parent="."]
+[node name="Menorah" type="Control" parent="." unique_id=524169476]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 360.0
+offset_top = 384.0
+offset_right = 380.0
+offset_bottom = 404.0
 script = ExtResource("2_node")
 ability = ExtResource("42_menorah")
 node_id = "menorah"
-required_level = 13
-center_position = Vector2(370.0, 394.0)
 size_class = 0
+required_level = 13
+center_position = Vector2(370, 394)
 
-[node name="Misericordia" type="Control" parent="."]
+[node name="Misericordia" type="Control" parent="." unique_id=1909054994]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 255.0
+offset_top = 252.0
+offset_right = 275.0
+offset_bottom = 272.0
 script = ExtResource("2_node")
 ability = ExtResource("43_misericordia")
 node_id = "misericordia"
-required_level = 23
-center_position = Vector2(265.0, 262.0)
 size_class = 0
+required_level = 23
+center_position = Vector2(265, 262)
 
-[node name="Severitas" type="Control" parent="."]
+[node name="Severitas" type="Control" parent="." unique_id=313025145]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 325.0
+offset_top = 252.0
+offset_right = 345.0
+offset_bottom = 272.0
 script = ExtResource("2_node")
 ability = ExtResource("44_severitas")
 node_id = "severitas"
-required_level = 23
-center_position = Vector2(335.0, 262.0)
 size_class = 0
+required_level = 23
+center_position = Vector2(335, 262)
 
-[node name="NomenOrdinis" type="Control" parent="."]
+[node name="NomenOrdinis" type="Control" parent="." unique_id=612679979]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 245.0
+offset_top = 150.0
+offset_right = 265.0
+offset_bottom = 170.0
 script = ExtResource("2_node")
 ability = ExtResource("45_nomen_ordinis")
 node_id = "nomen_ordinis"
-required_level = 27
-center_position = Vector2(255.0, 160.0)
 size_class = 0
+required_level = 27
+center_position = Vector2(255, 160)
 
-[node name="Interpretatio" type="Control" parent="."]
+[node name="Interpretatio" type="Control" parent="." unique_id=51469784]
+custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
+offset_left = 335.0
+offset_top = 150.0
+offset_right = 355.0
+offset_bottom = 170.0
 script = ExtResource("2_node")
 ability = ExtResource("46_interpretatio")
 node_id = "interpretatio"
-required_level = 27
-center_position = Vector2(345.0, 160.0)
 size_class = 0
+required_level = 27
+center_position = Vector2(345, 160)
 
-[node name="InfoBox" type="PanelContainer" parent="."]
+[node name="InfoBox" type="PanelContainer" parent="." unique_id=1099431861]
 visible = false
 layout_mode = 1
-anchors_preset = 0
 offset_right = 240.0
 offset_bottom = 120.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("sb_info")
 
-[node name="Margin" type="MarginContainer" parent="InfoBox"]
+[node name="Margin" type="MarginContainer" parent="InfoBox" unique_id=1423398640]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 10
@@ -533,29 +743,26 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 8
 
-[node name="VBox" type="VBoxContainer" parent="InfoBox/Margin"]
+[node name="VBox" type="VBoxContainer" parent="InfoBox/Margin" unique_id=1225011990]
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="NameLabel" type="Label" parent="InfoBox/Margin/VBox"]
+[node name="NameLabel" type="Label" parent="InfoBox/Margin/VBox" unique_id=54397179]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 18
 text = "Do Thing"
 
-[node name="PointsLabel" type="Label" parent="InfoBox/Margin/VBox"]
+[node name="PointsLabel" type="Label" parent="InfoBox/Margin/VBox" unique_id=953585325]
 layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(1.0, 0.86, 0.35, 1)
+theme_override_colors/font_color = Color(1, 0.86, 0.35, 1)
 theme_override_font_sizes/font_size = 14
 text = "Points: 0 / 1"
 
-[node name="DescLabel" type="Label" parent="InfoBox/Margin/VBox"]
+[node name="DescLabel" type="Label" parent="InfoBox/Margin/VBox" unique_id=1937388962]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.85, 0.85, 0.85, 1)
 theme_override_font_sizes/font_size = 14
 text = "do a thing"

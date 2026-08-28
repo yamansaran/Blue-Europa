@@ -5,15 +5,17 @@
 [resource]
 script = ExtResource("1_ability")
 id = &"tzaddi"
-display_name = "Tzaddi"
-description = "Canal Tzaddi (placeholder)."
+display_name = "Crystalize"
+description = "Encase yourself in crystal, increasing all resistances by 100% for 5 turns."
 max_points = 1
-kind = 0
-target = 0
-cost_type = 0
-cost_amount = 0
-cooldown = 0
+max_equipped = 4
+kind = 1
+target = 2
+cost_type = 1
+cost_amount = 25
+cooldown = 2
 base_power = 0.0
 power_per_point = 0.0
 requires = Array[StringName]([])
 required_level = 1
+applies_buff = &"crystaline"

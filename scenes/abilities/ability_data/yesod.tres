@@ -5,16 +5,19 @@
 [resource]
 script = ExtResource("1_ability")
 id = &"yesod"
-display_name = "Yesod"
-description = "Restore 25 spirit at the start of each of your turns for 8 turns."
-max_points = 1
+display_name = "Scaled Skin"
+description = "Give an ally Scaled Skin for 5 turns: they take 20% less damage and restore 30% of Instinct in health at the start of each of their turns."
+max_points = 3
+max_equipped = 1
 kind = 1
-target = 2
+target = 1
 cost_type = 1
 cost_amount = 20
-cooldown = 2
+cooldown = 3
+cooldown_ranks = Array[int]([3, 3, 2])
 base_power = 0.0
 power_per_point = 0.0
+description_ranks = Array[String](["Give an ally Scaled Skin for 5 turns: they take 20% less damage and restore 30% of Instinct in health at the start of each of their turns.", "Give an ally Scaled Skin for 6 turns: they take 20% less damage and restore 40% of Instinct in health at the start of each of their turns.", "Give an ally Scaled Skin for 7 turns: they take 20% less damage and restore 50% of Instinct in health at the start of each of their turns."])
 requires = Array[StringName]([])
 required_level = 1
-applies_buff = &"spirit_regen_25"
+applies_buff = &"scaled_skin"

@@ -98,7 +98,13 @@ func _configure(amount: int, element: String, is_crit: bool, is_heal: bool = fal
 	add_theme_font_override("font", FONT_ITALIC if (is_crit and not is_heal) else FONT_REGULAR)
 
 	# --- colour + outline ---
-	var col := HEAL_COLOR if is_heal else ElementColors.color(element)
+	# A heal is green by default, but a "+N" of a tagged element (e.g. a grey shield
+	# gain) uses that element's colour so shield gains read grey, not green.
+	var col: Color
+	if is_heal:
+		col = HEAL_COLOR if element == "physical" else ElementColors.color(element)
+	else:
+		col = ElementColors.color(element)
 	add_theme_color_override("font_color", col)
 	# Outline so the number reads over any background/model. Dark element colours
 	# (blood, true/black) get a LIGHT outline instead of the usual dark one. The

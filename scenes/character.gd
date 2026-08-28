@@ -23,7 +23,7 @@ signal changed
 
 const SAVE_PATH := "user://character.save"
 const SAVE_VERSION := 3          # bump discards any older save (fresh start)
-const WHEEL_SLOTS := 10
+const WHEEL_SLOTS := 10       # BASE wheel slots; Overmind adds on top (wheel_slot_count)
 
 ## Each attribute point adds this much to its major stat.
 const ATTRIBUTE_STEP := 1.0
@@ -78,6 +78,21 @@ var base_stats: Dictionary:
 
 func _ready() -> void:
 	load_game()
+	# Character autoloads BEFORE AbilityDB, so at load time abilities can't be resolved
+	# (Overmind's wheel-slot bonus and any per-rank passive read as absent). Re-sync once
+	# every autoload is ready — call_deferred runs after AbilityDB._ready has scanned the
+	# ability folder.
+	call_deferred("_post_autoload_sync")
+
+
+## Second-pass sync after all autoloads (incl. AbilityDB) are ready: size the wheel to
+## include Overmind's bonus slots and rebuild the passives basket at the invested rank.
+func _post_autoload_sync() -> void:
+	_normalize_wheel()
+	_rebuild_passive_basket()
+	_rebuild_crown_basket()
+	body.clamp_vitals()
+	changed.emit()
 
 
 func _stats_snapshot() -> Dictionary:
@@ -132,6 +147,7 @@ func _rebuild_body() -> void:
 	_rebuild_attribute_basket()
 	_rebuild_item_basket()
 	_rebuild_passive_basket()
+	_rebuild_crown_basket()
 	body.init_vitals()
 
 
@@ -226,22 +242,119 @@ func _rebuild_passive_basket() -> void:
 		var ab := _resolve_ability(id)
 		if ab == null or not ab.has_passive_bonus():
 			continue
+		# ALWAYS-ACTIVE passives are sourced from the invested node below, never the wheel
+		# — skip them here so a copy in a slot can't also contribute (which would double
+		# the bonus). None ship today (Beautiful Form is a normal equippable passive); this
+		# keeps the always_active flag usable for a future node-sourced stat passive.
+		if ab.has_method("is_always_active") and ab.is_always_active():
+			continue
+		# Resolve the FLAT + MULTIPLIER bonus at the player's invested rank, so a
+		# per-rank passive (e.g. Mercy) contributes its current rank's values.
+		var rank := ability_rank(id)
 		var mods := {}
-		if typeof(ab.passive_mods) == TYPE_DICTIONARY:
-			mods = (ab.passive_mods as Dictionary).duplicate(true)
+		var mods_src = ab.passive_mods_at(rank)
+		if typeof(mods_src) == TYPE_DICTIONARY:
+			mods = (mods_src as Dictionary).duplicate(true)
 		var mult := {}
-		if typeof(ab.passive_mult) == TYPE_DICTIONARY:
-			mult = (ab.passive_mult as Dictionary).duplicate(true)
+		var mult_src = ab.passive_mult_at(rank)
+		if typeof(mult_src) == TYPE_DICTIONARY:
+			mult = (mult_src as Dictionary).duplicate(true)
 		# id keyed by slot so multiple copies stack and removing one is clean.
 		body.add_entry("passives",
 			CharacterBase.make_entry("passive_slot_%d" % i, ab.display_name, mods, mult))
+	# ALWAYS-ACTIVE passives: applied from the INVESTED NODE, not the wheel — they never
+	# need to be equipped and are kept out of the ability pool. Scan every node with points
+	# invested; if its ability is an always-active passive that carries a stat bonus, add
+	# one entry at the invested rank. Nothing hits this today (Sinewed / Overmind / Crown
+	# are always-active but have no passive_mods, so has_passive_bonus() is false and they
+	# contribute nothing here — their effects live elsewhere); it stands ready for a future
+	# node-sourced stat passive using the always_active flag.
+	for nid in allocations.keys():
+		var pts := int(allocations[nid])
+		if pts <= 0:
+			continue
+		var aid := str(node_abilities.get(nid, nid))
+		var nab := _resolve_ability(aid)
+		if nab == null or not nab.has_method("is_always_active") or not nab.is_always_active():
+			continue
+		if not nab.has_passive_bonus():
+			continue
+		var n_mods := {}
+		var n_mods_src = nab.passive_mods_at(pts)
+		if typeof(n_mods_src) == TYPE_DICTIONARY:
+			n_mods = (n_mods_src as Dictionary).duplicate(true)
+		var n_mult := {}
+		var n_mult_src = nab.passive_mult_at(pts)
+		if typeof(n_mult_src) == TYPE_DICTIONARY:
+			n_mult = (n_mult_src as Dictionary).duplicate(true)
+		body.add_entry("passives",
+			CharacterBase.make_entry("passive_node_%s" % str(nid), nab.display_name, n_mods, n_mult))
 
 
 ## Re-apply passive bonuses after the wheel changed, then re-clamp vitals (a
 ## passive could move max HP / max Spirit) and notify listeners.
 func _refresh_passives_after_wheel_change() -> void:
 	_rebuild_passive_basket()
+	_rebuild_crown_basket()
 	body.clamp_vitals()
+
+
+## Rebuild the CROWN basket. The always-on Keter / Crown node scales the player's BONUS
+## stats (the summed flat mods across the other baskets — NOT the base value) by
+## bonus_per_level, per invested point, per CHARACTER LEVEL. Scans invested skill-tree
+## nodes for any whose ability is a bonus-scaling node (Ability.is_bonus_scaling),
+## snapshots each listed stat's CURRENT bonus (the crown basket is cleared first, so it
+## never scales off itself), and adds ONE flat entry. Rebuilt alongside the other baskets
+## whenever progression changes; it needs AbilityDB to resolve abilities, so the deferred
+## post-load sync re-runs it once AbilityDB is ready (mirrors Overmind's wheel bonus).
+func _rebuild_crown_basket() -> void:
+	body.clear_basket("crown")
+	var mods := {}
+	for nid in allocations.keys():
+		var pts := int(allocations[nid])
+		if pts <= 0:
+			continue
+		var aid := str(node_abilities.get(nid, nid))
+		var ab := _resolve_ability(aid)
+		if ab == null or not ab.has_method("is_bonus_scaling") or not ab.is_bonus_scaling():
+			continue
+		# 1% (bonus_per_level) of each listed stat's bonus, per point, per character level.
+		var factor := float(ab.bonus_per_level) * float(pts) * float(level)
+		if factor == 0.0:
+			continue
+		for stat in ab.bonus_per_level_stats:
+			var key := str(stat)
+			var bonus := body.get_bonus(key)   # crown cleared above -> excludes itself
+			if bonus == 0.0:
+				continue
+			mods[key] = float(mods.get(key, 0.0)) + bonus * factor
+	if not mods.is_empty():
+		body.add_entry("crown", CharacterBase.make_entry("crown", "Crown", mods))
+
+
+# ============================================================================
+# Combat-wheel size (Overmind — an always-on wheel-slot passive)
+# ============================================================================
+## Extra combat-wheel slots granted by invested WHEEL-SLOT passives (Overmind). Scans
+## every skill-tree node with points invested; if the ability that node grants is a
+## wheel-slot passive (wheel_slots_per_point != 0), adds points * per-point slots. The
+## passive need NOT be equipped — the bonus is live while any point sits in the node.
+func extra_wheel_slots() -> int:
+	var extra := 0
+	for nid in allocations.keys():
+		var pts := int(allocations[nid])
+		if pts <= 0:
+			continue
+		var aid := str(node_abilities.get(nid, nid))
+		var ab := _resolve_ability(aid)
+		if ab != null and ab.has_method("is_wheel_slot_passive") and ab.is_wheel_slot_passive():
+			extra += pts * int(ab.wheel_slots_per_point)
+	return extra
+
+## The current number of combat-wheel slots: the base WHEEL_SLOTS plus any Overmind
+## bonus. The wheel + equip logic size themselves off this.
+func wheel_slot_count() -> int:
+	return WHEEL_SLOTS + maxi(0, extra_wheel_slots())
 
 
 # ============================================================================
@@ -314,6 +427,11 @@ func invest(node_id: String, node_max: int, node_required_level: int = 0, parent
 	if ability_id != "":
 		node_abilities[node_id] = ability_id
 	skill_points -= 1
+	# A rank change can grow the wheel (Overmind) and/or change an equipped per-rank
+	# passive's bonus (Beautiful Form) — resize the wheel and rebuild passives so the
+	# effect is live the instant the point is spent.
+	_normalize_wheel()
+	_refresh_passives_after_wheel_change()
 	changed.emit()
 	save_game()
 	return true
@@ -327,6 +445,10 @@ func respec() -> void:
 	# Refunding the points also re-locks every node, so the abilities those nodes
 	# granted must leave the pool — otherwise they linger as unlocked forever.
 	_resync_unlocked_from_allocations()
+	# Overmind's bonus slots are gone now — shrink the wheel back (only trailing empty
+	# slots are dropped) and rebuild passives at their reset ranks.
+	_normalize_wheel()
+	_refresh_passives_after_wheel_change()
 	changed.emit()
 	save_game()
 
@@ -385,6 +507,7 @@ func allocate_attribute(major: String) -> bool:
 	attribute_allocations[major] = get_attribute_invested(major) + 1
 	attribute_points -= 1
 	_rebuild_attribute_basket()
+	_rebuild_crown_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -398,6 +521,7 @@ func respec_attributes() -> void:
 	attribute_points += refunded
 	attribute_allocations.clear()
 	_rebuild_attribute_basket()
+	_rebuild_crown_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -429,10 +553,12 @@ func unlock_ability(id) -> void:
 	var s := str(id)
 	if s == "" or unlocked_abilities.has(s):
 		return
-	# UPGRADE-ONLY abilities (e.g. Sinewed) buff other abilities via their node
-	# investment — they are never cast or equipped, so keep them out of the pool.
+	# ALWAYS-ACTIVE node abilities are live straight from the skill tree and are never
+	# cast or equipped, so keep them out of the ability pool. is_always_active() covers
+	# them all: the explicit always_active passive (unused today), upgrade-only nodes
+	# (Sinewed), wheel-slot passives (Overmind) and bonus-scaling nodes (Crown).
 	var ab := _resolve_ability(s)
-	if ab != null and ab.has_method("is_upgrade_only") and ab.is_upgrade_only():
+	if ab != null and ab.has_method("is_always_active") and ab.is_always_active():
 		return
 	unlocked_abilities.append(s)
 	changed.emit()
@@ -485,7 +611,7 @@ func _max_equipped_for(id) -> int:
 
 func can_equip(slot: int, id) -> bool:
 	var s := str(id)
-	if slot < 0 or slot >= WHEEL_SLOTS:
+	if slot < 0 or slot >= wheel_slot_count():
 		return false
 	if s == "" or not is_unlocked(s):
 		return false
@@ -503,7 +629,7 @@ func equip_ability(slot: int, id) -> bool:
 	return true
 
 func unequip_slot(slot: int) -> void:
-	if slot < 0 or slot >= WHEEL_SLOTS:
+	if slot < 0 or slot >= wheel_slot_count():
 		return
 	if str(equipped_abilities[slot]) == "":
 		return
@@ -513,9 +639,9 @@ func unequip_slot(slot: int) -> void:
 	save_game()
 
 func move_equipped(from_slot: int, to_slot: int) -> bool:
-	if from_slot < 0 or from_slot >= WHEEL_SLOTS:
+	if from_slot < 0 or from_slot >= wheel_slot_count():
 		return false
-	if to_slot < 0 or to_slot >= WHEEL_SLOTS:
+	if to_slot < 0 or to_slot >= wheel_slot_count():
 		return false
 	if from_slot == to_slot:
 		return true
@@ -529,13 +655,19 @@ func move_equipped(from_slot: int, to_slot: int) -> bool:
 	save_game()
 	return true
 
+## Size equipped_abilities to the current wheel_slot_count() (base + Overmind bonus).
+## GROWS to the target, but only SHRINKS by dropping TRAILING EMPTY slots — so an
+## equipped ability is never silently deleted if the count drops (e.g. AbilityDB not
+## ready yet at cold boot, or a respec removed Overmind). The deferred post-load sync
+## re-runs this once AbilityDB is available to restore any bonus slots.
 func _normalize_wheel() -> void:
-	while equipped_abilities.size() < WHEEL_SLOTS:
-		equipped_abilities.append("")
-	if equipped_abilities.size() > WHEEL_SLOTS:
-		equipped_abilities.resize(WHEEL_SLOTS)
 	for i in equipped_abilities.size():
 		equipped_abilities[i] = str(equipped_abilities[i])
+	var target := wheel_slot_count()
+	while equipped_abilities.size() < target:
+		equipped_abilities.append("")
+	while equipped_abilities.size() > target and str(equipped_abilities[equipped_abilities.size() - 1]) == "":
+		equipped_abilities.remove_at(equipped_abilities.size() - 1)
 
 
 # ============================================================================
@@ -575,6 +707,7 @@ func equip_from_bag(bag_index: int, slot_key: String) -> bool:
 		"mods": item.stats.duplicate(true),
 	}
 	_rebuild_item_basket()
+	_rebuild_crown_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -587,6 +720,7 @@ func unequip_item_slot(slot_key: String) -> bool:
 	items.append(equipped_items[slot_key])
 	equipped_items.erase(slot_key)
 	_rebuild_item_basket()
+	_rebuild_crown_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -746,6 +880,7 @@ func gain_rewards(money_amt: int, xp_amt: int, new_items: Array) -> void:
 	for it in new_items:
 		items.append(it)
 	_apply_xp_level()          # continuous xp may push the level up
+	_rebuild_crown_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -755,6 +890,7 @@ func gain_rewards(money_amt: int, xp_amt: int, new_items: Array) -> void:
 func gain_xp(xp_amt: int) -> void:
 	xp += xp_amt
 	_apply_xp_level()
+	_rebuild_crown_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()

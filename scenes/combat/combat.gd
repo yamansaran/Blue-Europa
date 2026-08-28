@@ -57,6 +57,7 @@ func _ready() -> void:
 	_build_layout()
 	_load_units()
 	_apply_permanent_buffs()
+	_apply_passive_buffs()
 	_build_health_bars()
 	_place_units()
 	_build_wheel()
@@ -166,6 +167,39 @@ func _apply_permanent_buffs() -> void:
 				continue
 			CombatBuffs.apply(u.body, entry)
 		u.body.init_vitals()
+
+## Apply the combat buff granted by each PASSIVE ability in the player's wheel (e.g.
+## Gliogenesis' per-turn regen). Mirrors _apply_permanent_buffs, but the source is
+## the wheel rather than a character's permanent_buffs list: for each equipped PASSIVE
+## that names a passive_buff, build "<passive_buff>_<invested rank>" and apply it to
+## the player as a permanent (fight-long) buff. Deduped by ability id so two copies of
+## the same passive don't double up; rank comes from the persistent Character.
+func _apply_passive_buffs() -> void:
+	if _player == null or _player.body == null:
+		return
+	var ch := get_node_or_null("/root/Character")
+	if ch == null or not ch.has_method("get_equipped"):
+		return
+	var applied := {}
+	for id in ch.get_equipped():
+		var aid := str(id)
+		if aid == "" or applied.has(aid):
+			continue
+		var ab := _get_ability(aid)
+		if ab == null or ab.kind != Ability.Kind.PASSIVE:
+			continue
+		var bid := String(ab.passive_buff)
+		if bid == "":
+			continue
+		applied[aid] = true
+		var rank := _ability_rank(ab)
+		var built_id := "%s_%d" % [bid, clampi(rank, 1, maxi(1, ab.max_points))]
+		var entry := BuffLibrary.build(built_id, _player.body, _player.body)
+		if entry.is_empty():
+			push_warning("[combat] passive %s names unknown passive_buff '%s'." % [ab.display_name, built_id])
+			continue
+		CombatBuffs.apply(_player.body, entry)
+	_player.body.init_vitals()
 
 func _spawn_unit(body: CharacterBase, team: int, ai: String) -> BattleCharacter:
 	var u := BattleCharacter.new()
@@ -410,10 +444,24 @@ func _ability_rank(ability: Ability) -> int:
 		return maxi(1, int(ch.ability_rank(String(ability.id))))
 	return 1
 
+## The caster's DEALT heal-power / shield-power multiplier. Healing and shielding a
+## character DEALS is scaled by (1 + its stat/100); the matching RECEIVED multiplier is
+## applied on the target side (battle_character.heal() / gain_shield()), so an event is
+## scaled by both the caster's and the target's stat (a self-cast benefits from both).
+func _heal_power_dealt(caster: CharacterBase) -> float:
+	if caster == null:
+		return 1.0
+	return 1.0 + maxf(0.0, caster.get_effective("heal_power")) / 100.0
+
+func _shield_power_dealt(caster: CharacterBase) -> float:
+	if caster == null:
+		return 1.0
+	return 1.0 + maxf(0.0, caster.get_effective("shield_power")) / 100.0
+
 func _valid_target(ability: Ability, tgt: BattleCharacter) -> bool:
 	match ability.target:
 		Ability.Target.ENEMY: return tgt.team == TEAM_ENEMY
-		Ability.Target.ALLY: return tgt.team != TEAM_ENEMY and tgt != _player
+		Ability.Target.ALLY: return tgt.team != TEAM_ENEMY   # any friendly unit, caster included
 		Ability.Target.SELF: return tgt == _player
 		Ability.Target.ALL_ENEMIES: return true
 		Ability.Target.ALL_ALLIES: return true
@@ -438,13 +486,33 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 			var ch_up := get_node_or_null("/root/Character")
 			if ch_up and ch_up.has_method("ability_scaling_bonus"):
 				scale_bonus = ch_up.ability_scaling_bonus(String(ability.id))
-			var hit := CombatMath.resolve(atk, tgt.body, ability, rank, -1, scale_bonus)
+			# Cryonecrosis: gain bonus pierce per debuff of the named element on the
+			# target (e.g. +N ice pierce per ice debuff), folded into this hit only.
+			var extra_pierce := 0.0
+			var pp_elem := String(ability.pierce_per_debuff_element)
+			if pp_elem != "":
+				extra_pierce = ability.pierce_per_debuff_at(rank) \
+					* float(CombatBuffs.count_debuffs_of_element(tgt.body, pp_elem))
+			var hit := CombatMath.resolve(atk, tgt.body, ability, rank, -1, scale_bonus, extra_pierce)
 			var dmg := int(hit["damage"])
+			# Snap: deal the per-hit value once PER matching debuff element on the target
+			# (0 matching debuffs => 0 damage).
+			var per_elem := String(ability.damage_per_debuff_element)
+			if per_elem != "":
+				dmg *= CombatBuffs.count_debuffs_of_element(tgt.body, per_elem)
 			# Pass the attacker as the source so the target's "when struck"
 			# reactions (thorns, ...) can hit back.
-			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]), _player)
+			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]), _player, not ability.skip_ice_amp)
 			# an attack may also drop a buff/debuff on the target (transient effect)
 			_maybe_apply_buff(ability, tgt, rank)
+			# ...and apply any one-time spirit gain (caster) / steal (target).
+			_apply_spirit_effects(ability, tgt, rank)
+			# ...and Shatter: consume an ice debuff for a stun + %-max-HP bonus hit.
+			_apply_shatter(ability, tgt, rank)
+			# ...and any ON-HIT-APPLY buffs the attacker carries (Wraith Form drops
+			# Rime Skin on whatever it strikes).
+			if tgt.is_alive():
+				CombatBuffs.fire_on_hit(_player.body if _player else null, tgt)
 			var crit_tag := " (CRIT x%.2f)" % float(hit["crit_mult"]) if hit["is_crit"] else ""
 			print("[combat] %s hits %s for %d %s damage%s [chance %.0f%%]" % [
 				ability.display_name, tgt.unit_name, dmg, ability.element_key(), crit_tag, float(hit["crit_chance"])])
@@ -452,9 +520,27 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 
 		Ability.Kind.HEAL:
 			var caster: CharacterBase = _player.body if _player else null
-			var heal_amt := int(round(ability.compute_heal(caster.effective_stats() if caster else {}, rank)))
+			# DEALT heal_power: the caster's heal_power (%) increases the healing it deals.
+			# The target's RECEIVED heal_power is applied inside tgt.heal().
+			var heal_amt := int(round(ability.compute_heal(caster.effective_stats() if caster else {}, rank) * _heal_power_dealt(caster)))
 			var restored := tgt.heal(heal_amt)
 			print("[combat] %s heals %s for %d." % [ability.display_name, tgt.unit_name, restored])
+			acted = true
+
+		Ability.Kind.SHIELD:
+			var scaster: CharacterBase = _player.body if _player else null
+			# DEALT shield_power: the caster's shield_power (%) increases the shield it
+			# grants. The target's RECEIVED shield_power is applied inside tgt.gain_shield().
+			var shield_amt := int(round(ability.compute_shield(scaster.effective_stats() if scaster else {}, rank) * _shield_power_dealt(scaster)))
+			if shield_amt > 0:
+				tgt.gain_shield({
+					"id": String(ability.id),
+					"source": ability.display_name,
+					"element": ability.element_key(),
+					"amount": shield_amt,
+					"decay": ability.shield_decay_spec(),
+				})
+				print("[combat] %s shields %s for %d." % [ability.display_name, tgt.unit_name, shield_amt])
 			acted = true
 
 		Ability.Kind.BUFF, Ability.Kind.DEBUFF:
@@ -496,6 +582,17 @@ func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter, rank: int = 1) ->
 	# guard_1..guard_4 in BuffLibrary (each identical but for its reduction value).
 	if bid == "guard":
 		bid = "guard_%d" % clampi(rank, 1, 4)
+	# Scaled Skin (Yesod) is the same clone-per-rank pattern: rank 1..3 -> the
+	# scaled_skin_1..3 clones (each a longer duration + bigger per-turn heal).
+	elif bid == "scaled_skin":
+		bid = "scaled_skin_%d" % clampi(rank, 1, 3)
+	# Hematopoiesis (Altar of Water): same clone-per-rank pattern, ranks 1..3.
+	elif bid == "hematopoiesis":
+		bid = "hematopoiesis_%d" % clampi(rank, 1, 3)
+	elif bid == "hypothermia":
+		bid = "hypothermia_%d" % clampi(rank, 1, 2)
+	elif bid == "frost":
+		bid = "frost_%d" % clampi(rank, 1, 2)
 	var caster: CharacterBase = _player.body if _player else null
 	var entry := BuffLibrary.build(bid, caster, tgt.body)
 	if entry.is_empty():
@@ -504,6 +601,56 @@ func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter, rank: int = 1) ->
 	tgt.refresh_bar()      # a max-HP / max-Spirit buff can move the ceilings
 	tgt.refresh_buffs()
 	return true
+
+## Apply an ability's one-time spirit effects: the CASTER (the player) GAINS
+## spirit_gain_at(rank), and the TARGET LOSES spirit_steal_at(rank) — both instant,
+## clamped to each unit's [0, max] by change_spirit. Called from the ATTACK branch
+## after the hit lands; a no-op unless the ability sets a gain/steal. A self/ally
+## target that is also the caster would both gain and lose, but Thermodynamic
+## Transfusion (the only user today) targets an ENEMY, so the two never collide.
+func _apply_spirit_effects(ability: Ability, tgt: BattleCharacter, rank: int) -> void:
+	if ability == null or not ability.has_spirit_effect(rank):
+		return
+	var gain := ability.spirit_gain_at(rank)
+	if gain != 0 and _player != null:
+		var got := _player.change_spirit(gain)
+		print("[combat] %s gains %d spirit from %s." % [_player.unit_name, got, ability.display_name])
+	var steal := ability.spirit_steal_at(rank)
+	if steal != 0 and tgt != null:
+		var lost := tgt.change_spirit(-steal)
+		print("[combat] %s loses %d spirit to %s." % [tgt.unit_name, -lost, ability.display_name])
+
+## Shatter: if `ability` consumes a debuff element and `tgt` carries at least one
+## debuff of that element, remove the OLDEST such debuff, apply the ability's shatter
+## buff (e.g. a stun) to the target, and deal bonus damage equal to a fraction of the
+## target's max HP as the shatter element. A no-op for an attack that sets no
+## consume_debuff_element, or when the target carries no matching debuff. The bonus
+## damage is dealt with NO source, so it triggers no on-struck reaction.
+func _apply_shatter(ability: Ability, tgt: BattleCharacter, rank: int) -> void:
+	if ability == null or not ability.has_shatter():
+		return
+	if tgt == null or tgt.body == null:
+		return
+	var elem := String(ability.consume_debuff_element)
+	# The gate: consuming succeeds iff the target actually had such a debuff.
+	if not CombatBuffs.consume_oldest_debuff_of_element(tgt.body, elem):
+		return
+	# 1) apply the on-shatter buff/debuff (e.g. stun) to the target
+	var bid := String(ability.shatter_apply_buff)
+	if bid != "":
+		var caster: CharacterBase = _player.body if _player else null
+		var entry := BuffLibrary.build(bid, caster, tgt.body)
+		if not entry.is_empty():
+			CombatBuffs.apply(tgt.body, entry)
+	# 2) bonus damage as a fraction of the target's max HP, as the shatter element
+	var pct := ability.shatter_pct_max_hp_at(rank)
+	if pct > 0.0 and tgt.is_alive():
+		var bonus := int(round(maxf(0.0, float(tgt.get_max_hp()) * pct)))
+		if bonus > 0:
+			tgt.take_damage(bonus, String(ability.shatter_damage_element), false)
+	tgt.refresh_bar()
+	tgt.refresh_buffs()
+	print("[combat] %s shatters a %s debuff on %s." % [ability.display_name, elem, tgt.unit_name])
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -640,6 +787,11 @@ func _process_turn_start_all() -> void:
 		for d in report["dots"]:
 			if u.is_alive():
 				u.take_damage(int(d["amount"]), str(d["element"]), false)
+		# 1b) heal-over-turn (Scaled Skin, ...): restore HP via heal() so it
+		# animates and respects the healing-received multiplier.
+		for h in report["heals"]:
+			if u.is_alive():
+				u.heal(int(h["amount"]))
 		# 2) spirit: default per-turn regen + this unit's buff/debuff spirit delta
 		if u.is_alive():
 			var regen := int(round(u.body.get_effective("spirit_regen")))
@@ -648,6 +800,9 @@ func _process_turn_start_all() -> void:
 		# 3) on-expire events for anything that fell off this turn
 		for e in report["expired"]:
 			CombatBuffs.fire_expiry(u, e)
+		# 4) shields decay at the turn boundary (each decaying instance loses its
+		# flat / %-of-current / %-of-value-at-apply amount; non-decaying ones persist).
+		CombatShields.tick_decay(u.body)
 		u.refresh_bar()
 		u.refresh_buffs()
 	_check_victory()

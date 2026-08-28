@@ -51,6 +51,9 @@ static func _default_per_stack() -> Dictionary:
 		"dot_element": "physical",  # element the DoT is dealt as
 		"dot_mult": 1.0,            # flat DoT multiplier (future buffs tune this)
 		"spirit_per_turn": 0.0,     # + regen / - drain per turn (per stack)
+		"heal_per_turn": 0.0,       # HP restored per turn (per stack); snapshotted at apply
+		"heal_pct_per_turn": 0.0,   # HP restored per turn as a FRACTION of the bearer's current
+									#   max HP (0.10 = 10%); read LIVE each turn against max_hp()
 		"resist_mult": 0.0,         # GLOBAL multiplicative resist bonus (per stack)
 		"resist_mult_by_element": {}, # per-element multiplicative resist bonus
 	}
@@ -84,6 +87,16 @@ static func make(config: Dictionary) -> Dictionary:
 	if typeof(raw_on_struck) == TYPE_ARRAY:
 		on_struck = (raw_on_struck as Array).duplicate(true)
 
+	# ON-HIT-APPLY: a list of "when the BEARER lands an attack, apply a buff to the
+	# target it hit" specs (see CombatBuffs.fire_on_hit). Each spec is a dict
+	# { "buff": "<id>", (opt) "duration": int } — the named buff is built and applied
+	# to the struck target, with duration overridden when given. Deep-copied; empty =
+	# no on-hit effect. Used by Wraith Form to coat every struck target in Rime Skin.
+	var on_hit_apply: Array = []
+	var raw_on_hit = config.get("on_hit_apply", [])
+	if typeof(raw_on_hit) == TYPE_ARRAY:
+		on_hit_apply = (raw_on_hit as Array).duplicate(true)
+
 	var stackable := bool(config.get("stackable", false))
 	var entry := {
 		"id": str(config.get("id", "buff")),
@@ -104,8 +117,14 @@ static func make(config: Dictionary) -> Dictionary:
 		"transient": bool(config.get("transient", false)),
 		"silence": bool(config.get("silence", false)),
 		"stun": bool(config.get("stun", false)),
+		# Per-stack ice-damage amplifier (Hoarfrost). While present, the NEXT sourced
+		# ice hit on the bearer is multiplied by (1 + ice_amp_per_stack * stacks) and
+		# then this entry is consumed. Plain metadata (not stack-scaled here — the ×stacks
+		# is applied by CombatBuffs.apply_incoming_ice_amp at read time). 0.0 = inert.
+		"ice_amp_per_stack": float(config.get("ice_amp_per_stack", 0.0)),
 		"expire_effect": str(config.get("expire_effect", "")),
 		"on_struck": on_struck,
+		"on_hit_apply": on_hit_apply,
 		"per_stack": per_stack,
 		# scaled live fields (filled by recompute_scaled below):
 		"mods": {},
@@ -114,6 +133,8 @@ static func make(config: Dictionary) -> Dictionary:
 		"dot_element": str(per_stack["dot_element"]),
 		"dot_mult": float(per_stack["dot_mult"]),
 		"spirit_per_turn": 0.0,
+		"heal_per_turn": 0.0,
+		"heal_pct_per_turn": 0.0,
 		"resist_mult": 0.0,
 		"resist_mult_by_element": {},
 	}
@@ -143,6 +164,8 @@ static func recompute_scaled(entry: Dictionary) -> void:
 	entry["dot_element"] = str(per_stack.get("dot_element", "physical"))
 	entry["dot_mult"] = float(per_stack.get("dot_mult", 1.0))
 	entry["spirit_per_turn"] = float(per_stack.get("spirit_per_turn", 0.0)) * s
+	entry["heal_per_turn"] = float(per_stack.get("heal_per_turn", 0.0)) * s
+	entry["heal_pct_per_turn"] = float(per_stack.get("heal_pct_per_turn", 0.0)) * s
 	entry["resist_mult"] = float(per_stack.get("resist_mult", 0.0)) * s
 
 	var scaled_rme := {}
@@ -186,12 +209,25 @@ static func on_struck(entry: Dictionary) -> Array:
 static func has_on_struck(entry: Dictionary) -> bool:
 	return not on_struck(entry).is_empty()
 
+## The list of on-hit-apply spec dicts on this entry ([] when none). Each is
+## { "buff": "<id>", (opt) "duration": int } — applied to the target the bearer hits.
+static func on_hit_apply(entry: Dictionary) -> Array:
+	var r = entry.get("on_hit_apply", [])
+	return r if typeof(r) == TYPE_ARRAY else []
+
 ## The RAW DoT damage this entry deals THIS turn (already stack-scaled), as an int.
 ## NOTE: this is BEFORE the bearer's `vulnerability` multiplier — CombatBuffs
 ## applies vulnerability when it collects the turn's DoT (see collect_turn_start).
 static func dot_damage(entry: Dictionary) -> int:
 	var raw := float(entry.get("dot", 0.0)) * float(entry.get("dot_mult", 1.0))
 	return int(round(maxf(0.0, raw)))
+
+## The HP this entry restores THIS turn (already stack-scaled), as an int. Mirrors
+## dot_damage but for the heal-over-turn field. The amount is snapshotted into
+## heal_per_turn when the buff is built (e.g. Scaled Skin bakes 30/40/50% of the
+## target's Instinct at cast), so this is a plain readout of that stored value.
+static func heal_amount(entry: Dictionary) -> int:
+	return int(round(maxf(0.0, float(entry.get("heal_per_turn", 0.0)))))
 
 ## The basket name an entry belongs in, from its kind.
 static func basket_for(entry: Dictionary) -> String:

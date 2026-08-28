@@ -11,7 +11,7 @@ extends Resource
 ## pierce/defence/amp math lives in CombatMath.resolve_damage().
 ## ----------------------------------------------------------------------------
 
-enum Kind { ATTACK, BUFF, DEBUFF, HEAL, PASSIVE }
+enum Kind { ATTACK, BUFF, DEBUFF, HEAL, PASSIVE, SHIELD }
 enum Target { ENEMY, ALLY, SELF, ALL_ENEMIES, ALL_ALLIES }
 ## What resource an ability costs to use. Extend this list as new cost kinds are
 ## needed; cost_text() and combat's cost handling switch on it.
@@ -111,11 +111,39 @@ enum CostType {
 ## every normal ability, so existing .tres are unaffected.
 @export var upgrades: Dictionary = {}
 
+# --- SHIELD (kind == SHIELD) ------------------------------------------------
+## A SHIELD ability grants the target an ABSORBING shield (temporary HP that soaks
+## incoming damage before health, with no overflow to health — see CombatShields).
+## The shield AMOUNT uses the same power_at + scaling as an attack/heal
+## (base_power + scaling_stat + scaling_stat2), so author it with base_power /
+## scaling_stat(2) / scaling_mult(2)[_ranks] exactly like a HEAL. Below are the
+## DECAY knobs: each turn the shield loses flat + %-of-current + %-of-value-at-apply.
+## Leave all three at 0 for a shield that never decays (lasts until spent). Only read
+## when kind == SHIELD; existing .tres inherit the zero defaults with no re-save.
+@export var shield_decay_flat: float = 0.0          # flat points lost per turn
+@export var shield_decay_pct_current: float = 0.0   # fraction of CURRENT lost per turn (0.2 = 20%)
+@export var shield_decay_pct_max: float = 0.0       # fraction of the AT-APPLY value lost per turn
+
 # --- buff / debuff application ----------------------------------------------
 ## Id of the buff/debuff this ability applies to its target, resolved through
 ## BuffLibrary.build(). Used by BUFF / DEBUFF abilities (and any other kind that
 ## should also drop a buff on hit). Blank => this ability applies no buff.
 @export var applies_buff: StringName = &""
+
+# --- one-time spirit effects (on cast) --------------------------------------
+## Instant, one-shot spirit adjustments applied the moment this ability resolves
+## (NOT a per-turn buff — that is spirit_per_turn on a buff entry). Two independent
+## effects: the CASTER gains `spirit_gain`, and the TARGET loses `spirit_steal`
+## (both flat spirit points, clamped to each unit's [0, max] by change_spirit).
+## Combat's ATTACK path applies them after the hit lands (see combat.gd
+## _apply_spirit_effects); other kinds could call the same helper if wired. Each
+## has an optional per-rank override array mirroring cost_amount_ranks — leave the
+## arrays empty to use the scalar, and leave both scalars 0 for no spirit effect,
+## so every existing .tres is unaffected with no re-save.
+@export var spirit_gain: int = 0
+@export var spirit_gain_ranks: Array[int] = []
+@export var spirit_steal: int = 0
+@export var spirit_steal_ranks: Array[int] = []
 
 # --- PASSIVE stat bonus (kind == PASSIVE) -----------------------------------
 ## A PASSIVE ability grants a CONSTANT stat bonus while it sits in a combat-wheel
@@ -131,6 +159,103 @@ enum CostType {
 ## .tres inherit the empty defaults with no re-save.
 @export var passive_mods: Dictionary = {}
 @export var passive_mult: Dictionary = {}
+## OPTIONAL per-rank overrides for a PASSIVE's stat bonus, mirroring the attack/heal
+## _ranks arrays: when NON-EMPTY, entry[clamp(R-1,...)] replaces passive_mods /
+## passive_mult for the invested rank R. Each element is a { stat_key: amount } dict
+## (an empty {} means "no bonus at that rank"). Lets one passive scale per rank —
+## e.g. Beautiful Form grows +5/15/30/30/30 flat and +0/0/0/10/25% across 5 ranks.
+## Leave empty to keep the single passive_mods / passive_mult at every rank; existing
+## passives inherit the empty defaults with no re-save. Read via passive_mods_at /
+## passive_mult_at (Character rebuilds the passives basket at the invested rank).
+@export var passive_mods_ranks: Array[Dictionary] = []
+@export var passive_mult_ranks: Array[Dictionary] = []
+## A PASSIVE may also grant a per-turn / persistent BUFF while it sits in a wheel
+## slot. This names a BuffLibrary id; at combat start, combat._apply_passive_buffs
+## builds "<passive_buff>_<invested rank>" and applies it to the player as a permanent
+## buff (re-granted every fight, like a character's permanent_buffs). Use this for a
+## passive whose effect is NOT a plain stat mod (e.g. Gliogenesis' per-turn regen).
+## Blank => the passive contributes only its passive_mods / passive_mult. Only read
+## when kind == PASSIVE.
+@export var passive_buff: StringName = &""
+
+# --- ALWAYS ACTIVE (a passive granted from the node, never equipped) ---------
+## Marks a PASSIVE whose stat bonus is live from the moment ANY point sits in its
+## skill-tree node — it is NEVER equipped in the combat wheel and NEVER enters the
+## ability pool (Character.unlock_ability skips it). Character rebuilds its passive
+## bonus straight from the invested node at its rank (Character._rebuild_passive_basket),
+## exactly like a slotted passive but sourced from the tree instead of the wheel. Use it
+## for a passive that should simply be ON once unlocked (nothing sets it today — Beautiful
+## Form is a normal EQUIPPABLE passive). The upgrade-only (Sinewed), wheel-slot (Overmind)
+## and bonus-scaling (Crown) nodes are
+## ALSO always-active by nature — is_always_active() treats all of them as one category,
+## so they all read "Always Active" and stay out of the pool. Blank/false for every
+## normal ability, so existing .tres are unaffected.
+@export var always_active: bool = false
+
+# --- WHEEL-SLOT passive (Overmind) ------------------------------------------
+## An always-on passive whose invested points ADD combat-wheel slots. UNLIKE a normal
+## passive it does NOT need to be equipped: Character reads the invested rank straight
+## from the skill tree (Character.extra_wheel_slots) and grows the wheel, so the effect
+## is live while ANY point sits in the granting node. Each invested point grants this
+## many extra wheel slots (Overmind = 1 => +1/2/3 across its ranks). Because it is
+## never cast or equipped, Character.unlock_ability keeps it out of the ability pool
+## (like an upgrade-only node). 0 => not a wheel-slot passive (every other ability).
+@export var wheel_slots_per_point: int = 0
+
+# --- CROWN: always-on per-character-level scaling of the player's BONUS stats -
+## Like Overmind / Sinewed, this is an always-on skill-tree node: its effect is live
+## the moment ANY point sits in the granting node — it is NEVER cast or equipped, and
+## Character.unlock_ability keeps it out of the ability pool (see is_bonus_scaling).
+## For each stat key in `bonus_per_level_stats`, the player gains `bonus_per_level` of
+## that stat's current BONUS (the summed flat mods — NOT the base) per CHARACTER LEVEL
+## per invested point. Character rebuilds a "crown" basket from a snapshot of the other
+## baskets' bonuses (so it never scales off itself). Crown sets bonus_per_level 0.01
+## across vigor/vitality/instinct/magnificence/disdain and every real element's
+## pierce/defense/amp. 0.0 => not a bonus-scaling node (every other ability).
+@export var bonus_per_level: float = 0.0
+@export var bonus_per_level_stats: Array[String] = []
+
+# --- SHATTER: consume a debuff of an element for a bonus on-hit effect -------
+## When an ATTACK sets consume_debuff_element (e.g. &"ice") and the struck target
+## carries at least one debuff tagged with that element, combat._apply_shatter
+## removes the OLDEST such debuff and then applies the extras below. Blank => the
+## attack has no shatter behaviour, so existing .tres are unaffected.
+@export var consume_debuff_element: StringName = &""
+## Buff/debuff id applied to the target when a shatter triggers (e.g. &"stunned").
+@export var shatter_apply_buff: StringName = &""
+## Bonus damage dealt on a shatter, as a FRACTION of the target's max HP (0.15 = 15%).
+## Has a per-rank override array mirroring the other _ranks fields.
+@export var shatter_pct_max_hp: float = 0.0
+@export var shatter_pct_max_hp_ranks: Array[float] = []
+## Element the shatter bonus damage is dealt as (a string key for take_damage).
+@export var shatter_damage_element: StringName = &"ice"
+
+# --- HOARFROST: this attack's own ice damage bypasses the hoarfrost amp ------
+## When true, this ATTACK's own ice damage does NOT benefit from or consume the
+## target's hoarfrost stacks (so casting Hoarfrost neither eats nor is boosted by
+## other Hoarfrost applications). Set only on Hoarfrost; every other attack leaves
+## it false, so their ice hits amplify + consume hoarfrost normally.
+@export var skip_ice_amp: bool = false
+
+# --- SNAP: damage multiplied by a debuff count on the target -----------------
+## When an ATTACK sets this (e.g. &"ice"), its computed damage is MULTIPLIED by the
+## number of debuffs of that element currently on the target — i.e. the per-hit value
+## (base + scaling) is dealt once per matching debuff. 0 matching debuffs => 0 damage.
+## Blank => normal single-instance damage, so existing .tres are unaffected.
+@export var damage_per_debuff_element: StringName = &""
+
+# --- CRYONECROSIS: bonus PIERCE per debuff of an element on the target --------
+## When an ATTACK sets pierce_per_debuff_element (e.g. &"ice"), the attack gains
+## `pierce_per_debuff` extra pierce of its OWN element for EACH debuff of the named
+## element currently on the target. Combat counts the matching debuffs
+## (CombatBuffs.count_debuffs_of_element) and adds pierce_per_debuff_at(rank) × count
+## to the attacker's pierce for this one hit (threaded into CombatMath.resolve's
+## extra_pierce). 0 matching debuffs => no bonus. Has a per-rank override array
+## mirroring the other _ranks fields; blank element / zero value => no effect, so
+## existing .tres are unaffected.
+@export var pierce_per_debuff_element: StringName = &""
+@export var pierce_per_debuff: float = 0.0
+@export var pierce_per_debuff_ranks: Array[float] = []
 
 # --- crit (see CombatCrit) --------------------------------------------------
 ## Multiplies the base crit CHANCE for this ability (base 1.0 = no change).
@@ -227,6 +352,25 @@ func scaling_mult2_at(points: int) -> float:
 		return float(scaling_mult2_ranks[_rank_index(points, scaling_mult2_ranks.size())])
 	return scaling_mult2
 
+## The shatter bonus-damage fraction of the target's max HP for a given rank
+## (shatter_pct_max_hp_ranks override, else the scalar). 0.0 => no bonus damage.
+func shatter_pct_max_hp_at(points: int) -> float:
+	if not shatter_pct_max_hp_ranks.is_empty():
+		return float(shatter_pct_max_hp_ranks[_rank_index(points, shatter_pct_max_hp_ranks.size())])
+	return shatter_pct_max_hp
+
+## True when this ATTACK has shatter behaviour (it consumes a debuff element).
+func has_shatter() -> bool:
+	return String(consume_debuff_element) != ""
+
+## The bonus pierce granted PER matching debuff for a given rank (pierce_per_debuff_ranks
+## override, else the scalar). Combat multiplies this by the count of debuffs of
+## pierce_per_debuff_element on the target. 0.0 => no bonus.
+func pierce_per_debuff_at(points: int) -> float:
+	if not pierce_per_debuff_ranks.is_empty():
+		return float(pierce_per_debuff_ranks[_rank_index(points, pierce_per_debuff_ranks.size())])
+	return pierce_per_debuff
+
 ## True when this ability is an UPGRADE-ONLY node (it carries an `upgrades` map and
 ## exists only to strengthen other abilities — never cast, never equipped).
 func is_upgrade_only() -> bool:
@@ -238,6 +382,25 @@ func cooldown_at(points: int) -> int:
 		return int(cooldown_ranks[_rank_index(points, cooldown_ranks.size())])
 	return cooldown
 
+## Flat spirit the CASTER gains when this ability resolves, at a given rank
+## (spirit_gain_ranks override, else the scalar). 0 = no gain.
+func spirit_gain_at(points: int) -> int:
+	if not spirit_gain_ranks.is_empty():
+		return int(spirit_gain_ranks[_rank_index(points, spirit_gain_ranks.size())])
+	return spirit_gain
+
+## Flat spirit the TARGET loses when this ability resolves, at a given rank
+## (spirit_steal_ranks override, else the scalar). 0 = no drain.
+func spirit_steal_at(points: int) -> int:
+	if not spirit_steal_ranks.is_empty():
+		return int(spirit_steal_ranks[_rank_index(points, spirit_steal_ranks.size())])
+	return spirit_steal
+
+## True when this ability carries any one-time spirit effect (gain or steal) at
+## the given rank — lets combat skip the work when there is nothing to do.
+func has_spirit_effect(points: int) -> bool:
+	return spirit_gain_at(points) != 0 or spirit_steal_at(points) != 0
+
 ## Spirit actually spent at a given rank (only SPIRIT costs are deducted today).
 func spirit_cost_at(points: int) -> int:
 	return cost_amount_at(points) if cost_type == CostType.SPIRIT else 0
@@ -246,10 +409,53 @@ func spirit_cost_at(points: int) -> int:
 func is_passive() -> bool:
 	return kind == Kind.PASSIVE
 
-## True when this passive actually contributes something to the passives basket.
+## True when this passive actually contributes something to the passives basket —
+## either the flat/multiplier scalars OR the per-rank override arrays (Beautiful Form
+## sets only the rank arrays, so those must count too).
 func has_passive_bonus() -> bool:
-	return is_passive() and ((typeof(passive_mods) == TYPE_DICTIONARY and not passive_mods.is_empty()) \
-		or (typeof(passive_mult) == TYPE_DICTIONARY and not passive_mult.is_empty()))
+	if not is_passive():
+		return false
+	if (typeof(passive_mods) == TYPE_DICTIONARY and not passive_mods.is_empty()) \
+		or (typeof(passive_mult) == TYPE_DICTIONARY and not passive_mult.is_empty()):
+		return true
+	return not passive_mods_ranks.is_empty() or not passive_mult_ranks.is_empty()
+
+## The FLAT passive stat bonus for a given rank (passive_mods_ranks override, else the
+## passive_mods scalar). Always returns a Dictionary.
+func passive_mods_at(points: int) -> Dictionary:
+	if not passive_mods_ranks.is_empty():
+		var d = passive_mods_ranks[_rank_index(points, passive_mods_ranks.size())]
+		return d if typeof(d) == TYPE_DICTIONARY else {}
+	return passive_mods if typeof(passive_mods) == TYPE_DICTIONARY else {}
+
+## The MULTIPLIER passive stat bonus for a given rank (passive_mult_ranks override,
+## else the passive_mult scalar). Always returns a Dictionary.
+func passive_mult_at(points: int) -> Dictionary:
+	if not passive_mult_ranks.is_empty():
+		var d = passive_mult_ranks[_rank_index(points, passive_mult_ranks.size())]
+		return d if typeof(d) == TYPE_DICTIONARY else {}
+	return passive_mult if typeof(passive_mult) == TYPE_DICTIONARY else {}
+
+## True when this ability is an always-on WHEEL-SLOT passive (Overmind): its invested
+## points add combat-wheel slots and it is never equipped (see wheel_slots_per_point
+## and Character.extra_wheel_slots / unlock_ability).
+func is_wheel_slot_passive() -> bool:
+	return wheel_slots_per_point != 0
+
+## True when this ability is an always-on CROWN bonus-scaling node (its invested points
+## scale the player's bonus stats per character level and it is never cast or equipped —
+## see bonus_per_level and Character._rebuild_crown_basket / unlock_ability).
+func is_bonus_scaling() -> bool:
+	return bonus_per_level != 0.0 and not bonus_per_level_stats.is_empty()
+
+## True when this ability is an ALWAYS-ACTIVE node ability: its effect is live while any
+## point sits in its skill-tree node, and it is never cast, equipped, or shown in the
+## ability pool. This unifies FOUR shapes into one category: the explicit `always_active`
+## passive (unused today), the upgrade-only node (Sinewed), the wheel-slot passive
+## (Overmind), and the bonus-scaling node (Crown). The hover panel shows "Always Active"
+## for all of them, and Character.unlock_ability keeps every one out of the pool.
+func is_always_active() -> bool:
+	return always_active or is_upgrade_only() or is_wheel_slot_passive() or is_bonus_scaling()
 
 ## The cost as a human phrase WITHOUT the "Cost:" prefix, for a given rank (e.g.
 ## "20 spirit", "10% of maximum health", "nothing"). Add new cases as CostType grows.
@@ -264,8 +470,12 @@ func cost_phrase_at(points: int) -> String:
 		_:                       return "nothing"
 
 ## The full text for the tooltip cost panel at a given rank: "Cost: <phrase>",
-## plus a "CD: <n>" line when the ability has a cooldown. A PASSIVE shows "Passive".
+## plus a "CD: <n>" line when the ability has a cooldown. An ALWAYS-ACTIVE node
+## ability (Crown / Sinewed / Overmind) shows "Always Active"; any
+## other PASSIVE shows "Passive" (e.g. the equippable Beautiful Form).
 func cost_text_at(points: int) -> String:
+	if is_always_active():
+		return "Always Active"
 	if is_passive():
 		return "Passive"
 	var t := "Cost: " + cost_phrase_at(points)
@@ -323,3 +533,23 @@ func compute_damage(caster_stats: Dictionary, points: int = 1, scaling_bonus: Di
 ##   e.g. Alef: power_at(1)=0  +  3.0 * caster["instinct"]  =  300% of instinct.
 func compute_heal(caster_stats: Dictionary, points: int = 1) -> float:
 	return maxf(0.0, compute_damage(caster_stats, points))
+
+## The absorbing-shield amount a SHIELD ability grants (before any target modifiers).
+## Same power_at + caster-stat scaling as compute_damage/compute_heal — named
+## separately so the intent reads clearly at the call site.
+##   e.g. Vanguard: 0 base + 4.0*vitality + (0.75..2.0)*instinct.
+func compute_shield(caster_stats: Dictionary, points: int = 1) -> float:
+	return maxf(0.0, compute_damage(caster_stats, points))
+
+## The decay spec for this SHIELD ability's shield, as CombatShields expects it:
+## { "flat":.., "pct_current":.., "pct_max":.. } with only the non-zero terms
+## present. An all-zero spec returns {} (a shield that never decays).
+func shield_decay_spec() -> Dictionary:
+	var d := {}
+	if shield_decay_flat != 0.0:
+		d["flat"] = shield_decay_flat
+	if shield_decay_pct_current != 0.0:
+		d["pct_current"] = shield_decay_pct_current
+	if shield_decay_pct_max != 0.0:
+		d["pct_max"] = shield_decay_pct_max
+	return d

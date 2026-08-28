@@ -27,6 +27,7 @@ const COLORS := {
 	"toxic":     Color(0.28, 0.80, 0.30),   # green
 	"mental":    Color(0.66, 0.30, 0.86),   # purple
 	"true":      Color(0.05, 0.05, 0.06),   # black
+	"shield":    Color(0.62, 0.62, 0.66),   # medium grey — shield-absorbed damage
 }
 
 ## Fallback for any unknown element string.

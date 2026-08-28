@@ -1,8 +1,17 @@
-[gd_resource type="Resource" script_class="Ability" format=3]
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bcrown0000001"]
 
-[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ry0vl"]
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
 
 [resource]
-script = ExtResource("1_ry0vl")
+script = ExtResource("1_ability")
 id = &"keter"
-display_name = "Keter"
+display_name = "Crown"
+description = "The crowning perfection of the self. For each of your character levels, your BONUS Vigor, Vitality, Instinct, Magnificence, Disdain, pierce, defenses and amplification (all elements) are increased by 1%. Always active — it never needs to be equipped, only unlocked."
+max_points = 1
+max_equipped = 1
+kind = 4
+target = 2
+cost_type = 0
+cost_amount = 0
+bonus_per_level = 0.01
+bonus_per_level_stats = Array[String](["vigor", "vitality", "instinct", "magnificence", "disdain", "physical_pierce", "physical_defense", "physical_amp", "spiritual_pierce", "spiritual_defense", "spiritual_amp", "ice_pierce", "ice_defense", "ice_amp", "fire_pierce", "fire_defense", "fire_amp", "lightning_pierce", "lightning_defense", "lightning_amp", "blood_pierce", "blood_defense", "blood_amp", "toxic_pierce", "toxic_defense", "toxic_amp", "mental_pierce", "mental_defense", "mental_amp"])

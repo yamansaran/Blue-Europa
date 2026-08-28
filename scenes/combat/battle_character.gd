@@ -111,6 +111,31 @@ func refresh_bar() -> void:
 	if health_bar:
 		health_bar.set_hp(get_hp(), get_max_hp())
 		health_bar.set_spirit(get_spirit(), get_max_spirit())
+		health_bar.set_shield(get_shield())
+
+## Total absorbing shield across every source (the number on the grey shield bar).
+func get_shield() -> int:
+	return CombatShields.total(body) if body else 0
+
+## Grant an absorbing shield to this unit from a config dict (see CombatShields.apply:
+## id / source / element / amount / decay). Floats a grey "+N" over the unit and
+## refreshes the bar so the shield reads immediately.
+func gain_shield(config: Dictionary) -> void:
+	if body == null:
+		return
+	# RECEIVED shield_power: this unit's shield_power (%) increases every absorbing
+	# shield it is granted, whatever the source. The DEALT side (the caster's own
+	# shield_power) is applied where the shield is computed (combat.gd SHIELD branch).
+	var recv_mult := 1.0 + maxf(0.0, body.get_effective("shield_power")) / 100.0
+	var amt := int(round(float(config.get("amount", 0.0)) * recv_mult))
+	if amt <= 0:
+		return
+	# Apply the boosted amount (duplicate the config so we don't mutate the caller's dict).
+	var cfg := config.duplicate(true)
+	cfg["amount"] = amt
+	CombatShields.apply(body, cfg)
+	refresh_bar()
+	_spawn_number(amt, "shield", false, true)   # grey "+N"
 
 ## Rebuild the visible buff/debuff strip from the body's current buffs+debuffs.
 func refresh_buffs() -> void:
@@ -124,8 +149,24 @@ func refresh_buffs() -> void:
 ## struck" reactions (thorns, ...) hit back. DoT / environmental damage passes no
 ## source and triggers no reaction. Reflected damage is dealt with no source too,
 ## so thorns can never recurse.
-func take_damage(amount: int, element: String = "physical", is_crit: bool = false, source = null) -> void:
+func take_damage(amount: int, element: String = "physical", is_crit: bool = false, source = null, amp_ice: bool = true) -> void:
 	if body == null:
+		return
+	# Hoarfrost: a SOURCED ice hit (a player/ally attack) consumes the target's
+	# hoarfrost stacks, amplifying this instance. amp_ice lets Hoarfrost's own ice
+	# damage opt out so it neither eats nor is boosted by other Hoarfrost stacks.
+	if amp_ice and element == "ice" and source != null:
+		amount = CombatBuffs.apply_incoming_ice_amp(body, amount)
+	# SHIELD absorption: damage is dealt to the shield FIRST (newest instance first),
+	# and there is NO overflow to health — if the unit has ANY shield when the hit
+	# lands, health takes ZERO this hit, whatever the leftover. Drain the shields,
+	# float the absorbed amount in grey, still let "when struck" reactions fire.
+	if amount > 0 and CombatShields.has_shield(body):
+		var absorbed := CombatShields.absorb(body, amount)
+		refresh_bar()
+		_spawn_number(absorbed, "shield", false, false)
+		if source != null:
+			CombatBuffs.fire_on_struck(self, source, amount, element)
 		return
 	body.current_hp = clampi(body.current_hp - amount, 0, body.max_hp())
 	refresh_bar()
@@ -143,12 +184,16 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 		CombatBuffs.fire_on_struck(self, source, amount, element)
 
 ## Restore HP, floating a green "+N" over this unit. The amount is scaled by the
-## target's healing-received multiplier (from its buffs/debuffs) before applying.
+## target's healing-received multiplier (from its buffs/debuffs) AND by its RECEIVED
+## heal_power (%) — heal_power increases all healing this unit receives, whatever the
+## source (direct heals and heal-over-turn alike). The DEALT side (the caster's own
+## heal_power) is applied where the heal is computed (combat.gd HEAL branch).
 ## Returns the HP actually restored. Never revives a dead unit.
 func heal(amount: int, _is_crit: bool = false) -> int:
 	if body == null or not is_alive():
 		return 0
-	var scaled := int(round(float(amount) * CombatBuffs.healing_received_mult(body)))
+	var recv_mult := 1.0 + maxf(0.0, body.get_effective("heal_power")) / 100.0
+	var scaled := int(round(float(amount) * CombatBuffs.healing_received_mult(body) * recv_mult))
 	if scaled <= 0:
 		return 0
 	var before := body.current_hp

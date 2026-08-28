@@ -1,8 +1,23 @@
-[gd_resource type="Resource" script_class="Ability" format=3]
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bcryonecr0001"]
 
-[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_hkkc0"]
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
 
 [resource]
-script = ExtResource("1_hkkc0")
+script = ExtResource("1_ability")
 id = &"chokmah"
-display_name = "Chokmah"
+display_name = "Cryonecrosis"
+description = "Deal Ice damage equal to 100% of Instinct. Gains 10 Ice pierce for each Ice debuff on the target."
+max_points = 6
+max_equipped = 2
+kind = 0
+target = 0
+element = 2
+cost_type = 1
+cost_amount = 45
+scaling_stat = &"instinct"
+scaling_mult = 1.0
+scaling_mult_ranks = Array[float]([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+description_ranks = Array[String](["Deal Ice damage equal to 100% of Instinct. Gains 10 Ice pierce for each Ice debuff on the target.", "Deal Ice damage equal to 200% of Instinct. Gains 11 Ice pierce for each Ice debuff on the target.", "Deal Ice damage equal to 300% of Instinct. Gains 12 Ice pierce for each Ice debuff on the target.", "Deal Ice damage equal to 400% of Instinct. Gains 13 Ice pierce for each Ice debuff on the target.", "Deal Ice damage equal to 500% of Instinct. Gains 14 Ice pierce for each Ice debuff on the target.", "Deal Ice damage equal to 600% of Instinct. Gains 15 Ice pierce for each Ice debuff on the target."])
+pierce_per_debuff_element = &"ice"
+pierce_per_debuff = 10.0
+pierce_per_debuff_ranks = Array[float]([10.0, 11.0, 12.0, 13.0, 14.0, 15.0])

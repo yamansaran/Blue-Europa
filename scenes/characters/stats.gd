@@ -105,6 +105,22 @@ const ACTION_POINTS_DEFAULT := 1.0
 ## screen. (The debug stat panel adds a field for it so it can be tested.)
 const VULNERABILITY_DEFAULT := 1.0
 
+# --- heal / shield power tuning ---------------------------------------------
+## Two hidden per-character stats measured in PERCENT. `heal_power` increases ALL
+## healing this character is involved in, and `shield_power` increases ALL absorbing
+## shields this character is involved in — on BOTH sides of the event: the amount a
+## character DEALS is scaled by (1 + its stat/100) at cast time, and the amount a
+## character RECEIVES is scaled by (1 + its stat/100) when it lands. So a heal cast by
+## A on B is scaled by A's heal_power (dealt) and B's heal_power (received); a self-heal
+## therefore benefits from both. Default 0.0 = no change. Both are real base stats
+## ("heal_power" / "shield_power") so they are per-character OVERRIDABLE via a spec
+## (stats:{"heal_power": ...}) and BUFFABLE / boostable by passives (Mercy) like anything
+## else. Neither is a major, so — like vulnerability / action_points — they never show in
+## the attribute screen. The dealt side is applied in combat.gd's HEAL/SHIELD branches;
+## the received side in battle_character.heal() / gain_shield().
+const HEAL_POWER_DEFAULT := 0.0
+const SHIELD_POWER_DEFAULT := 0.0
+
 # ----------------------------------------------------------------------------
 ## A fresh copy of the full base-stat dictionary (majors + hp_base + every
 ## element's pierce/defence/amp). Always returns a NEW dict so callers can mutate
@@ -119,6 +135,8 @@ static func default_base_stats() -> Dictionary:
 	d["spirit_regen"] = SPIRIT_REGEN_DEFAULT
 	d["action_points"] = ACTION_POINTS_DEFAULT
 	d["vulnerability"] = VULNERABILITY_DEFAULT
+	d["heal_power"] = HEAL_POWER_DEFAULT
+	d["shield_power"] = SHIELD_POWER_DEFAULT
 	for e in REAL_ELEMENTS:
 		d[e + "_pierce"] = PIERCE_DEFAULT
 		d[e + "_defense"] = DEFENSE_DEFAULT

@@ -77,11 +77,15 @@ var base_stats: Dictionary = Stats.default_base_stats()
 ## the combat-only buffs / debuffs baskets live on the battle clone and are gone
 ## when the fight ends. `passives` is fed by PASSIVE abilities sitting in the
 ## combat wheel (rebuilt by Character, like items).
+## `crown` is a PERSISTENT derived basket (Character rebuilds it): the always-on
+## Keter/Crown node scales the player's BONUS stats per character level, stored as a
+## single flat entry computed from a snapshot of the other baskets' bonuses.
 var baskets: Dictionary = {
 	"items": [],
 	"levels": [],
 	"attributes": [],
 	"passives": [],
+	"crown": [],
 	"buffs": [],
 	"debuffs": [],
 }
@@ -89,6 +93,12 @@ var baskets: Dictionary = {
 # --- runtime vitals ---------------------------------------------------------
 var current_hp: int = 0
 var current_spirit: int = 0
+
+## COMBAT-ONLY absorbing shields. Each entry is a plain Dictionary shield instance
+## (see CombatShields): {id, source, element, amount, max_amount, decay}. Multiple
+## sources stack as SEPARATE instances (the bar shows their total; damage eats the
+## NEWEST first). Never saved, never cloned — a fresh battle body starts with none.
+var shields: Array = []
 
 ## Optional explicit model colour; when null the name-hash colour is used.
 var color_override = null
@@ -368,7 +378,7 @@ func from_dict(d: Dictionary) -> void:
 			base_stats[str(k)] = float(bs[k])
 
 	var bk = d.get("baskets", null)
-	baskets = {"items": [], "levels": [], "attributes": [], "passives": [], "buffs": [], "debuffs": []}
+	baskets = {"items": [], "levels": [], "attributes": [], "passives": [], "crown": [], "buffs": [], "debuffs": []}
 	if typeof(bk) == TYPE_DICTIONARY:
 		for name in bk:
 			if typeof(bk[name]) == TYPE_ARRAY:

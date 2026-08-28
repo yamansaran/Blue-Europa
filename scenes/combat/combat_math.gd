@@ -55,7 +55,10 @@ const DAMAGE_TAKEN_MULT_KEY := "damage_taken_mult"
 ## `scaling_bonus` (stat_key -> extra multiplier) carries per-stat scaling granted
 ## by invested UPGRADE nodes (e.g. Sinewed buffing Claw/Scour); combat fills it from
 ## Character.ability_scaling_bonus(ability.id). Empty for enemies and un-upgraded casts.
-static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1, crit_floor: int = -1, scaling_bonus: Dictionary = {}) -> Dictionary:
+## `extra_pierce` is added to the attacker's pierce for THIS hit's element only (used by
+## Cryonecrosis, which gains ice pierce per ice debuff on the target); 0.0 for everything
+## else. It is ignored for the TRUE element (which bypasses mitigation).
+static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1, crit_floor: int = -1, scaling_bonus: Dictionary = {}, extra_pierce: float = 0.0) -> Dictionary:
 	var result := {
 		"pre": 0.0, "post": 0.0, "damage": 0,
 		"is_crit": false, "crit_chance": 0.0, "crit_mult": 1.0,
@@ -81,7 +84,7 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 			resistance = defender.get_effective(Stats.defense_key(element))
 			# Multiplicative resist layer from the defender's buffs/debuffs (Bet, ...).
 			resistance = maxf(0.0, resistance * (1.0 + CombatBuffs.resist_mult_bonus(defender, element)))
-		var pierce := attacker.get_effective(Stats.pierce_key(element))
+		var pierce := attacker.get_effective(Stats.pierce_key(element)) + maxf(0.0, extra_pierce)
 		var amp := attacker.get_effective(Stats.amp_key(element))
 		# Mitigation stiffness (m) is the DEFENDER's own curve stat; fall back if a
 		# body predates the stat (0 / missing).
@@ -127,10 +130,13 @@ static func _pre_mitigation_bonus(attacker: CharacterBase) -> float:
 	return attacker.get_basket_bonus("buffs", PRE_DAMAGE_MULT_KEY) \
 		+ attacker.get_basket_bonus("debuffs", PRE_DAMAGE_MULT_KEY)
 
-## Sum of the DEFENDER's incoming-damage multipliers across its buffs + debuffs
-## (e.g. Guard's damage reduction). Additive around 0; negative reduces damage.
+## Sum of the DEFENDER's incoming-damage multipliers across its buffs + debuffs, PLUS
+## its always-on PASSIVE abilities (e.g. Guard's damage reduction from a buff; Cold /
+## Warm Blooded's flat damage-resistance from a slotted passive). Additive around 0;
+## negative reduces damage taken (resistance), positive increases it (Warm Blooded).
 static func _damage_taken_bonus(defender: CharacterBase) -> float:
 	if defender == null:
 		return 0.0
 	return defender.get_basket_bonus("buffs", DAMAGE_TAKEN_MULT_KEY) \
-		+ defender.get_basket_bonus("debuffs", DAMAGE_TAKEN_MULT_KEY)
+		+ defender.get_basket_bonus("debuffs", DAMAGE_TAKEN_MULT_KEY) \
+		+ defender.get_basket_bonus("passives", DAMAGE_TAKEN_MULT_KEY)

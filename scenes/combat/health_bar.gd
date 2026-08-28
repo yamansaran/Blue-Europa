@@ -36,6 +36,16 @@ const DUO_HEIGHT   := HP_BAR_H + BAR_SEP + SPIRIT_BAR_H   # 39
 ## Padding of the in-bar text from the bar's edges.
 const TEXT_PAD := 5.0
 
+## SHIELD: a medium-grey bar that floats just ABOVE the HP bar whenever the unit
+## carries any absorbing shield, showing a drawn shield glyph + the TOTAL shield.
+## It is a child of the HP bar (anchored above it), so it never disturbs the HP /
+## Spirit / max-box layout; it simply appears and disappears with the shield.
+const SHIELD_BAR_BG   := Color(0.42, 0.42, 0.46)   # medium grey
+const SHIELD_ICON_COL := Color(0.93, 0.93, 0.97)   # near-white shield glyph
+const SHIELD_TEXT_COL := Color(1.0, 1.0, 1.0)
+const SHIELD_BAR_H    := 15.0     # height of the shield bar
+const SHIELD_BAR_GAP  := 2.0      # gap between the shield bar and the HP bar
+
 ## Width of the HP / Spirit bars (the max box + buff strip add their own width).
 const BARS_WIDTH := 160.0
 
@@ -54,6 +64,10 @@ var _hp_max_label: Label
 var _spirit_bar: ProgressBar
 var _spirit_text: Label
 var _spirit_max_label: Label
+
+# Shield bar (grey), floating above the HP bar; hidden when there is no shield.
+var _shield_overlay: Control
+var _shield_text: Label
 
 # True maxima for the value text (the ProgressBar.max_value is floored at 1).
 var _hp_max: int = 1
@@ -92,6 +106,43 @@ func _ensure_built() -> void:
 	_bar.add_child(_name_label)
 	_hp_text = _edge_label(11, _end_align())
 	_bar.add_child(_hp_text)
+
+	# Shield bar: a grey strip anchored just ABOVE the HP bar (a child of it, so it
+	# stays out of the VBox flow). Hidden until the unit has shield. The glyph is
+	# drawn in _draw_shield_overlay; the amount hugs the value-side edge.
+	_shield_overlay = Control.new()
+	_shield_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_overlay.clip_contents = false
+	_shield_overlay.anchor_left = 0.0
+	_shield_overlay.anchor_right = 1.0
+	_shield_overlay.anchor_top = 0.0
+	_shield_overlay.anchor_bottom = 0.0
+	_shield_overlay.offset_left = 0.0
+	_shield_overlay.offset_right = 0.0
+	_shield_overlay.offset_top = -(SHIELD_BAR_H + SHIELD_BAR_GAP)
+	_shield_overlay.offset_bottom = -SHIELD_BAR_GAP
+	_shield_overlay.visible = false
+	_shield_overlay.draw.connect(_draw_shield_overlay)
+	_bar.add_child(_shield_overlay)
+
+	_shield_text = Label.new()
+	_shield_text.horizontal_alignment = _end_align()
+	_shield_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_shield_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_text.add_theme_color_override("font_color", SHIELD_TEXT_COL)
+	_shield_text.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	_shield_text.add_theme_constant_override("outline_size", 3)
+	_shield_text.add_theme_font_size_override("font_size", 11)
+	_shield_text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Leave room for the drawn glyph on the START edge; the amount hugs the END edge.
+	var glyph_room := SHIELD_BAR_H + TEXT_PAD
+	if _mirror:
+		_shield_text.offset_left = TEXT_PAD
+		_shield_text.offset_right = -glyph_room
+	else:
+		_shield_text.offset_left = glyph_room
+		_shield_text.offset_right = -TEXT_PAD
+	_shield_overlay.add_child(_shield_text)
 
 	# Spirit bar (blue), directly under HP: current value at the END edge.
 	_spirit_bar = ProgressBar.new()
@@ -245,3 +296,42 @@ func _set_hp_display(v: float) -> void:
 func _set_spirit_display(v: float) -> void:
 	_spirit_bar.value = v
 	_spirit_text.text = "%d" % int(round(v))
+
+
+## Show the unit's TOTAL absorbing shield on the grey bar above the HP bar. 0 hides
+## the bar entirely; any positive value shows the glyph + amount.
+func set_shield(total_shield: int) -> void:
+	_ensure_built()
+	var has := total_shield > 0
+	_shield_overlay.visible = has
+	if has:
+		_shield_text.text = "%d" % total_shield
+		_shield_overlay.queue_redraw()
+
+
+## Draw the shield bar: a rounded medium-grey background + a small shield glyph at
+## the START edge. Bound to _shield_overlay.draw, so the draws target that node.
+func _draw_shield_overlay() -> void:
+	var ov := _shield_overlay
+	var w := ov.size.x
+	var h := ov.size.y
+	if w <= 0.0 or h <= 0.0:
+		return
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = SHIELD_BAR_BG
+	sb.set_corner_radius_all(3)
+	ov.draw_style_box(sb, Rect2(Vector2.ZERO, ov.size))
+	# Shield glyph (flat top, pointed bottom) hugging the start edge.
+	var pad := 3.0
+	var iw := h - pad * 2.0
+	var ih := h - pad * 2.0
+	var ix := (w - pad - iw) if _mirror else pad
+	var iy := pad
+	var pts := PackedVector2Array([
+		Vector2(ix, iy),
+		Vector2(ix + iw, iy),
+		Vector2(ix + iw, iy + ih * 0.52),
+		Vector2(ix + iw * 0.5, iy + ih),
+		Vector2(ix, iy + ih * 0.52),
+	])
+	ov.draw_colored_polygon(pts, SHIELD_ICON_COL)

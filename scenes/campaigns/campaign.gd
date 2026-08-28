@@ -90,7 +90,7 @@ static func large_ice_sprite_spec() -> Dictionary:
 static func normal_loot() -> Dictionary:
 	return {
 		"money_min": 15, "money_max": 40,
-		"xp_min": 50, "xp_max": 80,
+		"xp_min": 500, "xp_max": 800,
 		"items": [
 			{"id": "frost_shard", "name": "Frost Shard", "chance": 0.8},
 			{"id": "sprite_dust", "name": "Sprite Dust", "chance": 0.4},
@@ -100,7 +100,7 @@ static func normal_loot() -> Dictionary:
 static func boss_loot() -> Dictionary:
 	return {
 		"money_min": 80, "money_max": 150,
-		"xp_min": 200, "xp_max": 300,
+		"xp_min": 2000, "xp_max": 3000,
 		"items": [
 			{"id": "frost_core", "name": "Frost Core", "chance": 1.0},
 			{"id": "sprite_dust", "name": "Sprite Dust", "chance": 0.75},

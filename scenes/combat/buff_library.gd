@@ -32,7 +32,7 @@ static func _all_resist_mods(delta: float) -> Dictionary:
 	return mods
 
 ## Build a buff entry by id. Returns {} (empty) for an unknown / blank id.
-static func build(id: String, _caster: CharacterBase = null, _target: CharacterBase = null) -> Dictionary:
+static func build(id: String, caster: CharacterBase = null, target: CharacterBase = null) -> Dictionary:
 	match id:
 		# --- Bet: +100% to ALL resists, 5 turns, stacks infinitely -----------
 		# A true MULTIPLICATIVE resist bonus (see CombatMath): resist_mult 1.0 per
@@ -162,6 +162,193 @@ static func build(id: String, _caster: CharacterBase = null, _target: CharacterB
 		"guard_4":
 			return _make_guard(0.99)
 
+		# --- Scaled Skin (Yesod): 20% damage resist + heal over time ----------
+		# Three rank-clones, identical EXCEPT their duration (5/6/7 turns) and the
+		# heal-per-turn fraction of the TARGET's Instinct (30/40/50%). combat.gd maps
+		# the Scaled Skin ability's invested rank -> scaled_skin_1..3 (see its
+		# _maybe_apply_buff), exactly like Guard. The 20% resist is a flat incoming-
+		# damage multiplier (damage_taken_mult -0.20 in mods, read by CombatMath) and
+		# is the same at every rank. The per-turn heal is snapshotted from the target's
+		# Instinct at cast time into heal_per_turn (see _make_scaled_skin). All three
+		# share id "scaled_skin" so re-casting refreshes duration instead of stacking.
+		"scaled_skin_1":
+			return _make_scaled_skin(5, 0.30, target)
+		"scaled_skin_2":
+			return _make_scaled_skin(6, 0.40, target)
+		"scaled_skin_3":
+			return _make_scaled_skin(7, 0.50, target)
+
+		# --- Hematopoiesis (Altar of Water): pure heal over time --------------
+		# Three rank-clones differing in duration (4/5/6 turns) and the heal-per-turn
+		# fraction of the TARGET's (Vigor + Instinct) (100/200/325%). combat.gd maps
+		# the ability's invested rank -> hematopoiesis_1..3 (see its _maybe_apply_buff),
+		# exactly like Scaled Skin. The per-turn heal is snapshotted from the target's
+		# stats at cast time into heal_per_turn (see _make_hematopoiesis). All three
+		# share id "hematopoiesis" so re-casting refreshes duration instead of stacking.
+		"hematopoiesis_1":
+			return _make_hematopoiesis(4, 1.00, target)
+		"hematopoiesis_2":
+			return _make_hematopoiesis(5, 2.00, target)
+		"hematopoiesis_3":
+			return _make_hematopoiesis(6, 3.25, target)
+
+		# --- Crystaline (Tzaddi): +100% to ALL resists, 5 turns --------------
+		# A single-rank self buff: a true MULTIPLICATIVE resist bonus (resist_mult 1.0
+		# => x2 all resists), read by CombatMath. Unlike resist_up_100 (Netzach) this
+		# one does NOT stack — Crystalize is a 1-rank ability, so re-casting just
+		# refreshes the 5-turn duration. Applied by the Crystalize ability.
+		"crystaline":
+			return Buff.make({
+				"id": "crystaline",
+				"source": "Crystaline",
+				"desc": "Encased in crystal: all resistances increased by 100% for 5 turns.",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 5,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				"element": "ice",
+				"resist_mult": 1.0,          # +100% of all resists (multiplicative)
+			})
+
+		# --- Gliogenesis (Peh): passive per-turn health + spirit regen ---------
+		# Four rank-clones, applied to the player as a PERMANENT buff (duration -1)
+		# at combat start while the Gliogenesis passive sits in the wheel (see
+		# combat._apply_passive_buffs). They differ only in the % of max health healed
+		# per turn (2.5/5/7.5/10%) and the flat spirit gained per turn (0/0/4/6). The
+		# heal is a LIVE fraction of current max HP (heal_pct_per_turn), read each turn.
+		"gliogenesis_1":
+			return _make_gliogenesis(0.025, 0.0)
+		"gliogenesis_2":
+			return _make_gliogenesis(0.05, 0.0)
+		"gliogenesis_3":
+			return _make_gliogenesis(0.075, 4.0)
+		"gliogenesis_4":
+			return _make_gliogenesis(0.10, 6.0)
+
+		# --- Stunned: blocks all actions for 1 turn ---------------------------
+		# Applied by Shatter when it consumes an ice debuff. The `stun` flag is read by
+		# CombatBuffs.is_stunned (the wheel greys out for a stunned PLAYER; enemy turn
+		# logic will consume it once the enemy action engine exists). Deliberately has
+		# NO element tag so a later Shatter cannot consume the stun as an "ice debuff".
+		"stunned":
+			return Buff.make({
+				"id": "stunned",
+				"source": "Stunned",
+				"desc": "Stunned: cannot act for 1 turn.",
+				"kind": Buff.KIND_DEBUFF,
+				"visible": true,
+				"duration": 1,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				"stun": true,
+			})
+
+		# --- Hypothermia (Nun): -alacrity + spirit drain, 8 turns --------------
+		# Two rank-clones differing only in the alacrity multiplier (-10% / -12%).
+		# combat.gd maps the ability rank -> hypothermia_1/2 in _maybe_apply_buff.
+		"hypothermia_1":
+			return _make_hypothermia(-0.10)
+		"hypothermia_2":
+			return _make_hypothermia(-0.12)
+
+		# --- Frost (Menorah): -alacrity + ice DoT, 2 turns --------------------
+		# Two rank-clones differing in alacrity mult (-20% / -22%) and the ice DoT,
+		# which is SNAPSHOTTED from the CASTER at cast: instinct_pct*Instinct +
+		# vigor_pct*Vigor (50%/100% Instinct + 25% Vigor). Mapped by combat.gd rank.
+		"frost_1":
+			return _make_frost(-0.20, 0.5, 0.25, caster)
+		"frost_2":
+			return _make_frost(-0.22, 1.0, 0.25, caster)
+
+		# --- Rime Skin (Vav): -50% healing + self-damage when struck, 4 turns --
+		# One entry (identical at every rank; only the applying attack scales). The
+		# healing cut is a healing_received_mult -0.5 in mods; the on_struck reaction
+		# deals 5% of the bearer's own max HP as ice each time a sourced attack hits it.
+		"rime_skin":
+			return Buff.make({
+				"id": "rime_skin",
+				"source": "Rime Skin",
+				"desc": "Rime Skin: healing received cut by 50%; when struck by an attack, takes 5% of maximum health as ice damage.",
+				"kind": Buff.KIND_DEBUFF,
+				"visible": true,
+				"duration": 4,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": true,
+				"element": "ice",
+				"mods": {"healing_received_mult": -0.5},
+				"on_struck": [
+					{"effect": "self_pct_max_hp", "percent": 0.05, "element": "ice"},
+				],
+			})
+
+		# --- Hoarfrost (Yod): amplify the next ice instance, then consume ------
+		# A stacking marker debuff. It carries no stats: ice_amp_per_stack is read by
+		# CombatBuffs.apply_incoming_ice_amp when a sourced ice hit lands, which boosts
+		# that hit by 20% per stack and removes the debuff. Unlimited stacking (0).
+		"hoarfrost":
+			return Buff.make({
+				"id": "hoarfrost",
+				"source": "Hoarfrost",
+				"desc": "Hoarfrost: the next ice damage taken is increased by 20% per stack, then consumed.",
+				"kind": Buff.KIND_DEBUFF,
+				"visible": true,
+				"duration": 1,
+				"stackable": true,
+				"max_stacks": 0,
+				"weight": 1.0,
+				"resistible": false,
+				"element": "ice",
+				"ice_amp_per_stack": 0.2,
+			})
+
+		# --- Silenced (Mind Freeze): block spirit-cost abilities for 3 turns ---
+		# The `silence` flag is read by CombatBuffs.is_silenced — the wheel greys out
+		# spirit-cost slots for a silenced PLAYER; enemy targeting/action AI will consume
+		# it once that engine exists (mirrors how `stunned` is wired). Fixed 3-turn
+		# duration at every rank, so no per-rank clones are needed.
+		"silenced":
+			return Buff.make({
+				"id": "silenced",
+				"source": "Silenced",
+				"desc": "Silenced: cannot use spirit-cost abilities for 3 turns.",
+				"kind": Buff.KIND_DEBUFF,
+				"visible": true,
+				"duration": 3,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": true,
+				"silence": true,
+			})
+
+		# --- Wraith Form (Mercy): a defensive self-buff with an on-hit rider ------
+		# Applied to the caster by the Wraith Form ability (SELF target). For 5 turns:
+		# take 50% less damage (damage_taken_mult -0.5, the Guard lever read by CombatMath),
+		# +50% Instinct (a base-stat multiplier that shows in readouts), and — via
+		# on_hit_apply (see CombatBuffs.fire_on_hit) — coat every target the wraith strikes
+		# in a 1-turn Rime Skin (the existing rime_skin debuff, duration overridden to 1).
+		# Single-rank, so re-casting just refreshes the duration.
+		"wraith_form":
+			return Buff.make({
+				"id": "wraith_form",
+				"source": "Wraith Form",
+				"desc": "Wraith Form: takes 50% less damage and has +50% Instinct for 5 turns; every target struck is coated in Rime Skin.",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 5,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				"mods": {"damage_taken_mult": -0.5},
+				"mult": {"instinct": 0.5},
+				"on_hit_apply": [
+					{"buff": "rime_skin", "duration": 1},
+				],
+			})
+
 		_:
 			return {}
 
@@ -182,6 +369,128 @@ static func _make_guard(reduction: float) -> Dictionary:
 		"duration": 1,
 		"stackable": false,
 		"mods": {"damage_taken_mult": -reduction},
+	})
+
+## Constant fraction of ALL incoming damage that Scaled Skin removes, at every rank
+## (0.20 = take 20% less). The single tuning spot for the resist half of the buff.
+const SCALED_SKIN_RESIST := 0.20
+
+## Build a Scaled Skin buff: a target buff that reduces ALL incoming damage by
+## SCALED_SKIN_RESIST and restores `heal_pct` of the TARGET's Instinct at the start
+## of each of the target's turns, for `turns` turns. The three ranks are clones of
+## this differing only in `turns` (5/6/7) and `heal_pct` (0.30/0.40/0.50). The resist
+## is a `mods` damage_taken_mult (read by CombatMath, same lever as Guard); the heal
+## is SNAPSHOTTED here from the target's effective Instinct into heal_per_turn (read
+## each turn by CombatBuffs.collect_turn_start -> combat applies it via heal()). All
+## ranks share id "scaled_skin" so applying it refreshes duration instead of stacking.
+static func _make_scaled_skin(turns: int, heal_pct: float, target: CharacterBase) -> Dictionary:
+	var instinct := 0.0
+	if target != null:
+		instinct = maxf(0.0, target.get_effective("instinct"))
+	var heal := heal_pct * instinct
+	return Buff.make({
+		"id": "scaled_skin",
+		"source": "Scaled Skin",
+		"desc": "Scaled Skin: takes %d%% less damage and restores %d health at the start of each turn for %d turns." % [
+			int(round(SCALED_SKIN_RESIST * 100.0)), int(round(heal)), turns],
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": turns,
+		"stackable": false,
+		"element": "toxic",
+		"mods": {"damage_taken_mult": -SCALED_SKIN_RESIST},
+		"heal_per_turn": heal,
+	})
+
+## Build a Hematopoiesis buff: a pure heal-over-time that restores `heal_pct` of the
+## TARGET's (Vigor + Instinct) at the start of each of the target's turns, for `turns`
+## turns. The three ranks are clones differing only in `turns` (4/5/6) and `heal_pct`
+## (1.00/2.00/3.25). The heal is SNAPSHOTTED here from the target's effective Vigor and
+## Instinct into heal_per_turn (read each turn by CombatBuffs.collect_turn_start ->
+## combat applies it via heal()). No resist / mods — it is heal only. All ranks share
+## id "hematopoiesis" so applying it refreshes duration instead of stacking.
+static func _make_hematopoiesis(turns: int, heal_pct: float, target: CharacterBase) -> Dictionary:
+	var stat_sum := 0.0
+	if target != null:
+		stat_sum = maxf(0.0, target.get_effective("vigor")) + maxf(0.0, target.get_effective("instinct"))
+	var heal := heal_pct * stat_sum
+	return Buff.make({
+		"id": "hematopoiesis",
+		"source": "Hematopoiesis",
+		"desc": "Hematopoiesis: restores %d health at the start of each turn for %d turns." % [int(round(heal)), turns],
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": turns,
+		"stackable": false,
+		"element": "blood",
+		"heal_per_turn": heal,
+	})
+
+## Build a Gliogenesis buff: a PERMANENT self buff that, at the start of each of the
+## bearer's turns, restores `heal_pct` of the bearer's CURRENT max HP and grants
+## `spirit` flat spirit. Unlike Scaled Skin / Hematopoiesis (which snapshot a flat
+## heal from a stat at cast), the health regen here is LIVE via heal_pct_per_turn, so
+## it tracks any change to max HP during the fight. The four Gliogenesis ranks are
+## clones of this differing only in `heal_pct` and `spirit`. Re-applying refreshes
+## (shared id "gliogenesis"); the passive re-grants it every combat.
+static func _make_gliogenesis(heal_pct: float, spirit: float) -> Dictionary:
+	var pct_txt := ("%.1f" % (heal_pct * 100.0)).trim_suffix(".0")
+	var spirit_txt := "" if spirit <= 0.0 else " and %d spirit" % int(round(spirit))
+	return Buff.make({
+		"id": "gliogenesis",
+		"source": "Gliogenesis",
+		"desc": "Gliogenesis: restores %s%% of maximum health%s at the start of each turn." % [pct_txt, spirit_txt],
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": -1,               # permanent for the fight; re-granted each combat by the passive
+		"stackable": false,
+		"weight": 1.0,
+		"resistible": false,
+		"element": "spiritual",
+		"heal_pct_per_turn": heal_pct,
+		"spirit_per_turn": spirit,
+	})
+
+## Build a Hypothermia debuff: a multiplicative alacrity reduction plus a flat 5
+## spirit drain per turn, for 8 turns. The two ranks differ only in `alac_mult`.
+static func _make_hypothermia(alac_mult: float) -> Dictionary:
+	return Buff.make({
+		"id": "hypothermia",
+		"source": "Hypothermia",
+		"desc": "Hypothermia: %d%% alacrity and drains 5 spirit at the start of each turn (8 turns)." % int(round(alac_mult * 100.0)),
+		"kind": Buff.KIND_DEBUFF,
+		"visible": true,
+		"duration": 8,
+		"stackable": false,
+		"weight": 1.0,
+		"resistible": true,
+		"element": "ice",
+		"mult": {"alacrity": alac_mult},
+		"spirit_per_turn": -5.0,
+	})
+
+## Build a Frost debuff: a multiplicative alacrity reduction plus an ice DoT for 2
+## turns. The DoT is SNAPSHOTTED from the CASTER at cast time (instinct_pct*Instinct
+## + vigor_pct*Vigor), mirroring how Scaled Skin snapshots its heal. The two ranks
+## differ in `alac_mult` and `instinct_pct` (vigor share is the same 25%).
+static func _make_frost(alac_mult: float, instinct_pct: float, vigor_pct: float, caster: CharacterBase) -> Dictionary:
+	var dmg := 0.0
+	if caster != null:
+		dmg = instinct_pct * maxf(0.0, caster.get_effective("instinct")) + vigor_pct * maxf(0.0, caster.get_effective("vigor"))
+	return Buff.make({
+		"id": "frost",
+		"source": "Frost",
+		"desc": "Frost: %d%% alacrity and %d ice damage at the start of each turn (2 turns)." % [int(round(alac_mult * 100.0)), int(round(dmg))],
+		"kind": Buff.KIND_DEBUFF,
+		"visible": true,
+		"duration": 2,
+		"stackable": false,
+		"weight": 1.0,
+		"resistible": true,
+		"element": "ice",
+		"mult": {"alacrity": alac_mult},
+		"dot": dmg,
+		"dot_element": "ice",
 	})
 
 ## True when `id` names a buff this library knows how to build.
