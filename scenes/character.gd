@@ -498,6 +498,40 @@ func invest(node_id: String, node_max: int, node_required_level: int = 0, parent
 	save_game()
 	return true
 
+## Refund ONE point from a node, handing it back to the skill-point pool — the
+## single-node inverse of respec(), bound to right-click on a SkillNode. Returns
+## false (changing nothing) when the node has no points to give back.
+##
+## THE GATE lives in the tree, not here: only SkillNode/SkillTreeView know which
+## nodes list this one as a `parent`, so SkillNode._try_refund refuses to spend the
+## LAST point of a node that still has invested dependents. This function is the
+## authoritative mutation and is deliberately permissive, exactly as respec() is —
+## if it ever runs without that check, _resync_unlocked_from_allocations() still
+## leaves the save internally consistent (orphaned children simply read as locked
+## until they are refunded too).
+func refund(node_id: String) -> bool:
+	if node_id == "":
+		return false
+	var current := get_points(node_id)
+	if current <= 0:
+		return false
+	if current == 1:
+		allocations.erase(node_id)   ## keep the dict clean: 0 points == absent
+	else:
+		allocations[node_id] = current - 1
+	skill_points += 1
+	# Dropping to 0 re-locks the node, so its ability (and anything that ability
+	# GRANTS) must leave the pool — the same cleanup respec() does, scoped to one node.
+	if current == 1:
+		_resync_unlocked_from_allocations()
+	# A rank change can shrink the wheel (Overmind) and/or lower an equipped per-rank
+	# passive's bonus (Beautiful Form), so re-normalize and rebuild exactly as invest does.
+	_normalize_wheel()
+	_refresh_passives_after_wheel_change()
+	changed.emit()
+	save_game()
+	return true
+
 func respec() -> void:
 	var refunded := 0
 	for v in allocations.values():

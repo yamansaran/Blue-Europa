@@ -1,8 +1,22 @@
-[gd_resource type="Resource" script_class="Ability" format=3]
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bsclerosis0001"]
 
 [ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_mmp15"]
 
 [resource]
 script = ExtResource("1_mmp15")
 id = &"binah"
-display_name = "Binah"
+display_name = "Sclerosis in Binah"
+description = "Passive. Understanding hardens the flesh. Grants spirit at the start of each turn, paid for with 5% of your maximum health as true damage."
+max_points = 4
+max_equipped = 1
+kind = 4
+target = 2
+cost_type = 0
+cost_amount = 0
+cooldown = 0
+base_power = 0.0
+power_per_point = 0.0
+description_ranks = Array[String](["Passive. Restores 5 spirit at the start of each turn, and deals 5% of your maximum health to you as true damage.", "Passive. Restores 8 spirit at the start of each turn, and deals 5% of your maximum health to you as true damage.", "Passive. Restores 12 spirit at the start of each turn, and deals 5% of your maximum health to you as true damage.", "Passive. Restores 15 spirit at the start of each turn, and deals 5% of your maximum health to you as true damage."])
+requires = Array[StringName]([])
+required_level = 0
+passive_buff = &"sclerosis"

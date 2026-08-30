@@ -50,6 +50,12 @@ static func _default_per_stack() -> Dictionary:
 		"dot": 0.0,                 # damage-over-time per turn (per stack)
 		"dot_element": "physical",  # element the DoT is dealt as
 		"dot_mult": 1.0,            # flat DoT multiplier (future buffs tune this)
+		"dot_pct_per_turn": 0.0,    # DoT per turn as a FRACTION of the bearer's current
+									#   max HP (0.05 = 5%); read LIVE each turn against
+									#   max_hp() and ADDED to the flat `dot`. The exact
+									#   mirror of heal_pct_per_turn. Dealt as dot_element,
+									#   so a "true" DoT ignores mitigation AND shields.
+									#   Used by Sclerosis in Binah.
 		"spirit_per_turn": 0.0,     # + regen / - drain per turn (per stack)
 		"heal_per_turn": 0.0,       # HP restored per turn (per stack); snapshotted at apply
 		"heal_pct_per_turn": 0.0,   # HP restored per turn as a FRACTION of the bearer's current
@@ -158,6 +164,7 @@ static func make(config: Dictionary) -> Dictionary:
 		"dot": 0.0,
 		"dot_element": str(per_stack["dot_element"]),
 		"dot_mult": float(per_stack["dot_mult"]),
+		"dot_pct_per_turn": 0.0,
 		"spirit_per_turn": 0.0,
 		"heal_per_turn": 0.0,
 		"heal_pct_per_turn": 0.0,
@@ -189,6 +196,7 @@ static func recompute_scaled(entry: Dictionary) -> void:
 	entry["dot"] = float(per_stack.get("dot", 0.0)) * s
 	entry["dot_element"] = str(per_stack.get("dot_element", "physical"))
 	entry["dot_mult"] = float(per_stack.get("dot_mult", 1.0))
+	entry["dot_pct_per_turn"] = float(per_stack.get("dot_pct_per_turn", 0.0)) * s
 	entry["spirit_per_turn"] = float(per_stack.get("spirit_per_turn", 0.0)) * s
 	entry["heal_per_turn"] = float(per_stack.get("heal_per_turn", 0.0)) * s
 	entry["heal_pct_per_turn"] = float(per_stack.get("heal_pct_per_turn", 0.0)) * s

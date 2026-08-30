@@ -165,7 +165,12 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 	# and there is NO overflow to health — if the unit has ANY shield when the hit
 	# lands, health takes ZERO this hit, whatever the leftover. Drain the shields,
 	# float the absorbed amount in grey, still let "when struck" reactions fire.
-	if amount > 0 and CombatShields.has_shield(body):
+	# TRUE DAMAGE IGNORES SHIELDS: the hidden "true" element already skips all
+	# mitigation in CombatMath; it now also skips this absorption layer and goes
+	# straight to health, leaving every shield instance untouched (it neither
+	# spends nor is stopped by them). That makes "true" the one element a shield
+	# is no answer to — the only clean way to threaten a shielded unit.
+	if amount > 0 and element != "true" and CombatShields.has_shield(body):
 		var absorbed := CombatShields.absorb(body, amount)
 		refresh_bar()
 		_spawn_number(absorbed, "shield", false, false)

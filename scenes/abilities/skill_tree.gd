@@ -161,6 +161,28 @@ func flash_unmet_dependencies(node: SkillNode) -> void:
 			if not unlocked:
 				(p as SkillNode).flash_red()
 
+## Every node in this tree that lists `node` as a parent AND still has points
+## invested — i.e. the children that would be stranded if `node` were refunded down
+## to zero. SkillNode._try_refund uses this to gate a node's LAST point; only the
+## tree knows the parent/child topology, which is why the check lives here.
+func invested_dependents(node: SkillNode) -> Array:
+	var result: Array = []
+	if node == null or node.node_id == "":
+		return result
+	var ch := get_node_or_null("/root/Character")
+	for n in _skill_nodes():
+		if n == node:
+			continue
+		if not n.parents.has(node.node_id):
+			continue
+		var pts := 0
+		if ch and ch.has_method("get_points") and n.node_id != "":
+			pts = int(ch.get_points(n.node_id))
+		if pts > 0:
+			result.append(n)
+	return result
+
+
 func hide_info() -> void:
 	if _tooltip:
 		_tooltip.hide_tip()

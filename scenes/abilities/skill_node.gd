@@ -222,6 +222,9 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_try_invest()
 		accept_event()
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		_try_refund()
+		accept_event()
 	elif event is InputEventMouseMotion and _hovered:
 		var tree := _skill_tree()
 		if tree:
@@ -247,8 +250,37 @@ func _try_invest() -> void:
 		print("[skilltree] %s is locked — needs level %d and parents %s." % [node_id, required_level, str(parents)])
 
 
+## RIGHT-CLICK: hand one point back from this node to the pool (the inverse of
+## _try_invest). Does nothing on a node with no points.
+##
+## THE DEPENDENCY GUARD: refunding the LAST point re-locks this node, which would
+## strand any child that lists it in `parents` — the child would keep its invested
+## points while its prerequisite reads locked. So when this node is down to its final
+## point we refuse if any dependent still holds points, and flash those dependents red
+## (the same cue an unmet prerequisite gets on invest) so it's obvious what to refund
+## first. Refunding 3->2->1 is always free; only the last point is gated.
+func _try_refund() -> void:
+	var ch := _character()
+	if ch == null or node_id == "" or not ch.has_method("refund"):
+		return
+	if points() <= 0:
+		return
+	if points() == 1:
+		var tree := _skill_tree()
+		if tree and tree.has_method("invested_dependents"):
+			var blockers: Array = tree.invested_dependents(self)
+			if blockers.size() > 0:
+				for b in blockers:
+					if b is SkillNode:
+						(b as SkillNode).flash_red()
+				print("[skilltree] can't refund %s — %d dependent node(s) still have points." % [node_id, blockers.size()])
+				return
+	ch.refund(node_id)
+
+
 ## Pulse a red ring on this node (1.0 -> 0.0 over ~1s). Called on each still-locked
-## parent when the player clicks a node whose dependencies aren't met yet.
+## parent when the player clicks a node whose dependencies aren't met yet, and on each
+## still-invested CHILD when the player tries to refund a node they still depend on.
 func flash_red() -> void:
 	if Engine.is_editor_hint():
 		return

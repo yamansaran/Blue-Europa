@@ -226,6 +226,14 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 			return _make_gliogenesis(0.075, 4.0)
 		"gliogenesis_4":
 			return _make_gliogenesis(0.10, 6.0)
+		"sclerosis_1":
+			return _make_sclerosis(5.0)
+		"sclerosis_2":
+			return _make_sclerosis(8.0)
+		"sclerosis_3":
+			return _make_sclerosis(12.0)
+		"sclerosis_4":
+			return _make_sclerosis(15.0)
 
 		# --- Stunned: blocks all actions for 1 turn ---------------------------
 		# Applied by Shatter when it consumes an ice debuff. The `stun` flag is read by
@@ -577,6 +585,36 @@ static func _make_gliogenesis(heal_pct: float, spirit: float) -> Dictionary:
 		"element": "spiritual",
 		"heal_pct_per_turn": heal_pct,
 		"spirit_per_turn": spirit,
+	})
+
+## Build a Sclerosis in Binah buff: a PERMANENT self buff that, at the start of each of
+## the bearer's turns, grants `spirit` flat spirit and takes 5% of the bearer's CURRENT
+## max HP as TRUE damage. The hardening trade — understanding bought with the body.
+##
+## The damage is LIVE (dot_pct_per_turn, not a snapshot), so it tracks max HP through the
+## fight, and it is dealt as "true", which means it ignores mitigation AND — since the
+## true-damage shield bypass — ignores absorbing shields. You cannot shield your way out
+## of the cost. Only the spirit differs across the four ranks; the 5% is flat, so higher
+## ranks are strictly better (more spirit for the same bill).
+##
+## NB: DoT is multiplied by the bearer's `vulnerability` when the turn tick collects it,
+## so a vulnerability debuff makes Sclerosis bite harder than 5%. That is intended — it
+## is the one dial that makes the cost situational.
+static func _make_sclerosis(spirit: float) -> Dictionary:
+	return Buff.make({
+		"id": "sclerosis",
+		"source": "Sclerosis in Binah",
+		"desc": "Sclerosis in Binah: +%d spirit at the start of each turn, paid for with 5%% of maximum health as true damage." % int(round(spirit)),
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": -1,               # permanent for the fight; re-granted each combat by the passive
+		"stackable": false,
+		"weight": 1.0,
+		"resistible": false,
+		"element": "true",
+		"spirit_per_turn": spirit,
+		"dot_pct_per_turn": 0.05,     # 5% of CURRENT max HP, read live
+		"dot_element": "true",        # ignores mitigation and shields
 	})
 
 ## Build a Hypothermia debuff: a multiplicative alacrity reduction plus a flat 5

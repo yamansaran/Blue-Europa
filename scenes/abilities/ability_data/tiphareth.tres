@@ -5,54 +5,10 @@
 [resource]
 script = ExtResource("1_ability")
 id = &"tiphareth"
-display_name = "Beautiful Form"
-description = "A body of impossible beauty. +5 Vigor, Vitality, Instinct, Magnificence and Disdain."
-max_points = 5
-max_equipped = 1
+display_name = "Overmind"
+description = "Expands the mind's command over the battle. Grants combat-wheel slots equal to the points invested. Always active — it never needs to be equipped."
+max_points = 3
 kind = 4
 target = 2
-description_ranks = Array[String](["A body of impossible beauty. +5 Vigor, Vitality, Instinct, Magnificence and Disdain.", "A body of impossible beauty. +15 Vigor, Vitality, Instinct, Magnificence and Disdain.", "A body of impossible beauty. +30 Vigor, Vitality, Instinct, Magnificence and Disdain.", "A body of impossible beauty. +30 Vigor, Vitality, Instinct, Magnificence and Disdain, and +10% to each.", "A body of impossible beauty. +30 Vigor, Vitality, Instinct, Magnificence and Disdain, and +25% to each."])
-passive_mods_ranks = Array[Dictionary]([{
-"disdain": 5.0,
-"instinct": 5.0,
-"magnificence": 5.0,
-"vigor": 5.0,
-"vitality": 5.0
-}, {
-"disdain": 15.0,
-"instinct": 15.0,
-"magnificence": 15.0,
-"vigor": 15.0,
-"vitality": 15.0
-}, {
-"disdain": 30.0,
-"instinct": 30.0,
-"magnificence": 30.0,
-"vigor": 30.0,
-"vitality": 30.0
-}, {
-"disdain": 30.0,
-"instinct": 30.0,
-"magnificence": 30.0,
-"vigor": 30.0,
-"vitality": 30.0
-}, {
-"disdain": 30.0,
-"instinct": 30.0,
-"magnificence": 30.0,
-"vigor": 30.0,
-"vitality": 30.0
-}])
-passive_mult_ranks = Array[Dictionary]([{}, {}, {}, {
-"disdain": 0.1,
-"instinct": 0.1,
-"magnificence": 0.1,
-"vigor": 0.1,
-"vitality": 0.1
-}, {
-"disdain": 0.25,
-"instinct": 0.25,
-"magnificence": 0.25,
-"vigor": 0.25,
-"vitality": 0.25
-}])
+wheel_slots_per_point = 1
+description_ranks = Array[String](["Always active — no need to equip. +1 combat-wheel slot.", "Always active — no need to equip. +2 combat-wheel slots.", "Always active — no need to equip. +3 combat-wheel slots."])

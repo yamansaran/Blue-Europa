@@ -199,7 +199,14 @@ static func collect_turn_start(body: CharacterBase) -> Dictionary:
 			if typeof(e) != TYPE_DICTIONARY:
 				continue
 			# --- effects for this turn (full current stack) ---
+			# FLAT stack-scaled DoT (dot × dot_mult) + LIVE % of the bearer's max HP
+			# (dot_pct_per_turn) — the exact mirror of the heal side below, so a DoT can
+			# be authored as "5% of my maximum health per turn" and track max HP changes
+			# during the fight instead of snapshotting. Sclerosis in Binah uses it.
 			var raw_dmg := Buff.dot_damage(e)
+			var dot_pct := float(e.get("dot_pct_per_turn", 0.0))
+			if dot_pct > 0.0:
+				raw_dmg += int(round(maxf(0.0, float(body.max_hp()) * dot_pct)))
 			if raw_dmg > 0:
 				var dmg := int(round(float(raw_dmg) * vuln))   # vulnerability applied here
 				if dmg > 0:
