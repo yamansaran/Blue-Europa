@@ -5,21 +5,29 @@
 [resource]
 script = ExtResource("1_ability")
 id = &"hod"
-display_name = "Hod"
-description = "Restore health equal to 300% of Instinct."
-max_points = 3
-kind = 3
+display_name = "Ionized"
+description = "Charge carried where it should not go. +5 Lightning pierce."
+max_points = 6
+max_equipped = 1
+kind = 4
 target = 2
-cost_type = 1
-cost_amount = 20
-cooldown = 2
-base_power = 0.0
-power_per_point = 0.0
-scaling_stat = &"instinct"
-scaling_mult = 3.0
-description_ranks = Array[String](["Restore health equal to 300% of Instinct.", "Restore health equal to 325% of Instinct.", "Restore health equal to 350% of Instinct."])
-cost_amount_ranks = Array[int]([20, 15, 15])
-scaling_mult_ranks = Array[float]([3.0, 3.25, 3.5])
+element = 4
+cost_type = 0
+cost_amount = 0
+description_ranks = Array[String](["Charge carried where it should not go. +5 Lightning pierce.", "Charge carried where it should not go. +10 Lightning pierce.", "Charge carried where it should not go. +15 Lightning pierce.", "Charge carried where it should not go. +20 Lightning pierce.", "Charge carried where it should not go. +25 Lightning pierce.", "Charge carried where it should not go. +30 Lightning pierce."])
+passive_mods_ranks = Array[Dictionary]([{
+"lightning_pierce": 5.0
+}, {
+"lightning_pierce": 10.0
+}, {
+"lightning_pierce": 15.0
+}, {
+"lightning_pierce": 20.0
+}, {
+"lightning_pierce": 25.0
+}, {
+"lightning_pierce": 30.0
+}])
 requires = Array[StringName]([])
 required_level = 1
 applies_buff = &""

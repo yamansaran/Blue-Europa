@@ -263,6 +263,134 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 		"frost_2":
 			return _make_frost(-0.22, 1.0, 0.25, caster)
 
+		# --- Arc Burn (Neurostatic): a lightning DoT, ranks 1..3 ---------------
+		# The per-turn damage is SNAPSHOTTED from the CASTER's Instinct at the moment
+		# the debuff lands (the `frost` pattern), so it does not drift if the caster's
+		# stats change mid-fight. 50 / 75 / 100% of Instinct for 3 turns.
+		"arc_burn_1":
+			return _make_arc_burn(0.50, caster)
+		"arc_burn_2":
+			return _make_arc_burn(0.75, caster)
+		"arc_burn_3":
+			return _make_arc_burn(1.00, caster)
+
+		# --- Electromyogenesis: +Alacrity equal to a % of the CASTER's Instinct -
+		# Ranks 1..4: 25/30/35/40% of Instinct, for 3/3/4/4 turns. Snapshotted at
+		# cast (a flat `mods` bonus), so it is the caster's Instinct that matters
+		# even when the buff is handed to an ally.
+		"electromyogenesis_1":
+			return _make_electromyogenesis(0.25, 3, caster)
+		"electromyogenesis_2":
+			return _make_electromyogenesis(0.30, 3, caster)
+		"electromyogenesis_3":
+			return _make_electromyogenesis(0.35, 4, caster)
+		"electromyogenesis_4":
+			return _make_electromyogenesis(0.40, 4, caster)
+
+		# --- Energized Form: the lightning ultimate (single rank) --------------
+		# +30 Alacrity, +50% to all lightning damage dealt (lightning_amp — the
+		# (A+1) coefficient in CombatMitigation), and a rider that adds 45% of the
+		# bearer's Vigor as Lightning damage to every hit it lands (on_hit_damage).
+		"energized_form":
+			return Buff.make({
+				"id": "energized_form",
+				"source": "Energized Form",
+				"desc": "Energized: +30 Alacrity, +50% Lightning damage, and every hit deals an extra 45% of Vigor as Lightning damage.",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 5,
+				"stackable": false,
+				"element": "lightning",
+				"weight": 2.0,
+				"resistible": false,
+				"mods": {
+					"alacrity": 30.0,
+					"lightning_amp": 0.50,
+				},
+				"on_hit_damage": [
+					{"element": "lightning", "scale_stat": "vigor", "pct": 0.45},
+				],
+			})
+
+		# --- Electrostimulated: a self/ally power buff with a lightning price ---
+		# Ranks 1..3. Every turn the bearer TAKES lightning damage equal to a % of the
+		# CASTER's Instinct (snapshotted, like Arc Burn) — 40/35/30%, i.e. the cost
+		# SHRINKS as the ability ranks up — and in exchange gains flat Alacrity, Vigor,
+		# Instinct and spirit regen for 6/8/10 turns.
+		"electrostimulated_1":
+			return _make_electrostimulated(6, 0.40, 10.0, 5.0, 5.0, caster)
+		"electrostimulated_2":
+			return _make_electrostimulated(8, 0.35, 20.0, 10.0, 10.0, caster)
+		"electrostimulated_3":
+			return _make_electrostimulated(10, 0.30, 30.0, 15.0, 15.0, caster)
+
+		# --- Pass Current (Bread): the caster's half of the ability ------------
+		# A small, flat self buff riding on an attack (applies_buff_self). Identical
+		# at every rank — only Pass Current's damage and its Arc Burn scale up.
+		"pass_current":
+			return Buff.make({
+				"id": "pass_current",
+				"source": "Pass Current",
+				"desc": "Carrying the current: +5 Alacrity for 3 turns.",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 3,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				"element": "lightning",
+				"mods": {"alacrity": 5.0},
+			})
+
+		# --- Lightning Shell (Geburah): overfilled spirit becomes shield -------
+		# The passive_buff of the Lightning Shell passive, ranks 1..10. Every 5 points
+		# of spirit that WOULD have refilled past the bearer's maximum are converted
+		# into an absorbing shield worth (10..100% of Vitality + 10% of Instinct) —
+		# read LIVE off the bearer at conversion time, so the shield tracks the stats.
+		# The shield carries no decay spec, so it lasts until it is spent. The engine
+		# side is BattleCharacter.change_spirit -> _convert_spirit_overflow.
+		"lightning_shell_1":
+			return _make_lightning_shell(1)
+		"lightning_shell_2":
+			return _make_lightning_shell(2)
+		"lightning_shell_3":
+			return _make_lightning_shell(3)
+		"lightning_shell_4":
+			return _make_lightning_shell(4)
+		"lightning_shell_5":
+			return _make_lightning_shell(5)
+		"lightning_shell_6":
+			return _make_lightning_shell(6)
+		"lightning_shell_7":
+			return _make_lightning_shell(7)
+		"lightning_shell_8":
+			return _make_lightning_shell(8)
+		"lightning_shell_9":
+			return _make_lightning_shell(9)
+		"lightning_shell_10":
+			return _make_lightning_shell(10)
+
+		# --- High Voltage: Lightning Shell's rank-10 capstone ------------------
+		# A permanent on-struck reflect scaled off the BEARER's own Instinct (35%),
+		# dealt as Lightning. Attacks-only like every other on_struck reaction — a
+		# spell cast at the bearer does not get shocked back.
+		"high_voltage":
+			return Buff.make({
+				"id": "high_voltage",
+				"source": "High Voltage",
+				"desc": "High Voltage: anything that strikes you in melee takes 35% of your Instinct as Lightning damage.",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": -1,              # -1 => permanent, never expires
+				"stackable": false,
+				"weight": 2.0,
+				"resistible": false,
+				"element": "lightning",
+				"on_struck": [
+					{"effect": "reflect", "scale_stat": "instinct", "pct": 0.35, "element": "lightning"},
+				],
+			})
+
 		# --- Rime Skin (Vav): -50% healing + self-damage when struck, 4 turns --
 		# One entry (identical at every rank; only the applying attack scales). The
 		# healing cut is a healing_received_mult -0.5 in mods; the on_struck reaction
@@ -492,6 +620,118 @@ static func _make_frost(alac_mult: float, instinct_pct: float, vigor_pct: float,
 		"dot": dmg,
 		"dot_element": "ice",
 	})
+
+## Build an Arc Burn debuff (Neurostatic): a pure lightning DoT for 3 turns whose
+## per-turn damage is SNAPSHOTTED from the caster's Instinct at application time
+## (instinct_pct * Instinct), mirroring how Frost / Scaled Skin snapshot theirs.
+static func _make_arc_burn(instinct_pct: float, caster: CharacterBase) -> Dictionary:
+	var dmg := 0.0
+	if caster != null:
+		dmg = instinct_pct * maxf(0.0, caster.get_effective("instinct"))
+	return Buff.make({
+		"id": "arc_burn",
+		"source": "Arc Burn",
+		"desc": "Arc Burn: %d Lightning damage at the start of each turn (3 turns)." % int(round(dmg)),
+		"kind": Buff.KIND_DEBUFF,
+		"visible": true,
+		"duration": 3,
+		"stackable": false,
+		"weight": 1.0,
+		"resistible": true,
+		"element": "lightning",
+		"dot": dmg,
+		"dot_element": "lightning",
+	})
+
+
+## Build an Electromyogenesis buff: flat Alacrity equal to `instinct_pct` of the
+## CASTER's Instinct at cast time, for `turns` turns. Snapshotted, so handing it to an
+## ally still pays out on the caster's Instinct.
+static func _make_electromyogenesis(instinct_pct: float, turns: int, caster: CharacterBase) -> Dictionary:
+	var alac := 0.0
+	if caster != null:
+		alac = instinct_pct * maxf(0.0, caster.get_effective("instinct"))
+	return Buff.make({
+		"id": "electromyogenesis",
+		"source": "Electromyogenesis",
+		"desc": "Electromyogenesis: +%d Alacrity (%d%% of Instinct) for %d turns." % [int(round(alac)), int(round(instinct_pct * 100.0)), turns],
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": turns,
+		"stackable": false,
+		"weight": 1.0,
+		"resistible": false,
+		"element": "lightning",
+		"mods": {"alacrity": alac},
+	})
+
+
+## Build an Electrostimulated buff: a big flat stat package plus spirit regen, paid for
+## with a self-inflicted lightning DoT equal to `instinct_pct` of the CASTER's Instinct
+## (snapshotted at cast). The DoT runs through the bearer's own lightning resistance and
+## `vulnerability` like any other DoT, so lightning resist is a real counterplay.
+static func _make_electrostimulated(turns: int, instinct_pct: float, alac: float, vig: float, inst: float, caster: CharacterBase) -> Dictionary:
+	var dmg := 0.0
+	if caster != null:
+		dmg = instinct_pct * maxf(0.0, caster.get_effective("instinct"))
+	return Buff.make({
+		"id": "electrostimulated",
+		"source": "Electrostimulated",
+		"desc": "Electrostimulated: +%d Alacrity, +%d Vigor, +%d Instinct and +5 spirit per turn, but take %d Lightning damage at the start of each turn (%d turns)." % [int(alac), int(vig), int(inst), int(round(dmg)), turns],
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": turns,
+		"stackable": false,
+		"weight": 2.0,
+		"resistible": false,
+		"element": "lightning",
+		"mods": {
+			"alacrity": alac,
+			"vigor": vig,
+			"instinct": inst,
+		},
+		"dot": dmg,
+		"dot_element": "lightning",
+		"spirit_per_turn": 5.0,
+	})
+
+
+## Build the Lightning Shell passive's hidden-machinery buff for invested `rank` (1..10).
+## It carries no stat mods at all — its whole payload is the `overflow_shield` spec:
+## every OVERFLOW_SHELL_PER_SPIRIT points of spirit the bearer would have gained above its
+## maximum become an absorbing shield worth (rank x 10% of Vitality + 10% of Instinct).
+## The scale fractions are read LIVE against the bearer when the conversion happens
+## (BattleCharacter._convert_spirit_overflow), NOT snapshotted here, so the shield follows
+## the bearer's Vitality and Instinct as gear and buffs move them. No "decay" key => the
+## shield never decays and lasts until it is spent.
+const OVERFLOW_SHELL_PER_SPIRIT := 5
+const OVERFLOW_SHELL_VIT_PER_RANK := 0.10
+const OVERFLOW_SHELL_INSTINCT := 0.10
+
+static func _make_lightning_shell(rank: int) -> Dictionary:
+	var r := clampi(rank, 1, 10)
+	var vit := OVERFLOW_SHELL_VIT_PER_RANK * float(r)
+	return Buff.make({
+		"id": "lightning_shell",
+		"source": "Lightning Shell",
+		"desc": "Lightning Shell: every %d Spirit that would refill past your maximum becomes a shield worth %d%% of Vitality + %d%% of Instinct. The shield does not decay." % [
+			OVERFLOW_SHELL_PER_SPIRIT, int(round(vit * 100.0)), int(round(OVERFLOW_SHELL_INSTINCT * 100.0))],
+		"kind": Buff.KIND_BUFF,
+		"visible": true,
+		"duration": -1,              # -1 => permanent, never expires
+		"stackable": false,
+		"weight": 1.0,
+		"resistible": false,
+		"element": "lightning",
+		"overflow_shield": {
+			"per_spirit": OVERFLOW_SHELL_PER_SPIRIT,
+			"scale": {
+				"vitality": vit,
+				"instinct": OVERFLOW_SHELL_INSTINCT,
+			},
+		},
+	})
+
 
 ## True when `id` names a buff this library knows how to build.
 static func has(id: String) -> bool:

@@ -191,16 +191,26 @@ func _apply_passive_buffs() -> void:
 		if ab == null or ab.kind != Ability.Kind.PASSIVE:
 			continue
 		var bid := String(ab.passive_buff)
-		if bid == "":
+		var has_cap: bool = ab.has_method("has_capstone_at") and ab.has_capstone_at(_ability_rank(ab))
+		if bid == "" and not has_cap:
 			continue
 		applied[aid] = true
 		var rank := _ability_rank(ab)
-		var built_id := "%s_%d" % [bid, clampi(rank, 1, maxi(1, ab.max_points))]
-		var entry := BuffLibrary.build(built_id, _player.body, _player.body)
-		if entry.is_empty():
-			push_warning("[combat] passive %s names unknown passive_buff '%s'." % [ab.display_name, built_id])
-			continue
-		CombatBuffs.apply(_player.body, entry)
+		if bid != "":
+			var built_id := "%s_%d" % [bid, clampi(rank, 1, maxi(1, ab.max_points))]
+			var entry := BuffLibrary.build(built_id, _player.body, _player.body)
+			if entry.is_empty():
+				push_warning("[combat] passive %s names unknown passive_buff '%s'." % [ab.display_name, built_id])
+			else:
+				CombatBuffs.apply(_player.body, entry)
+		# CAPSTONE: a passive may hand out a SECOND, UNSUFFIXED buff once its invested
+		# rank reaches passive_buff_capstone_rank (Lightning Shell -> High Voltage at 10).
+		if has_cap:
+			var cap := BuffLibrary.build(String(ab.passive_buff_capstone), _player.body, _player.body)
+			if cap.is_empty():
+				push_warning("[combat] passive %s names unknown capstone buff '%s'." % [ab.display_name, String(ab.passive_buff_capstone)])
+			else:
+				CombatBuffs.apply(_player.body, cap)
 	_player.body.init_vitals()
 
 func _spawn_unit(body: CharacterBase, team: int, ai: String) -> BattleCharacter:
@@ -548,6 +558,10 @@ func _use_ability(ability: Ability, tgt: BattleCharacter, slot: int = -1) -> voi
 
 		Ability.Kind.BUFF, Ability.Kind.DEBUFF:
 			if _maybe_apply_buff(ability, tgt, rank):
+				# A BUFF may also carry the one-time spirit gain/steal rider (Energized
+				# Form gains 75 Spirit on top of its buff). Harmless for every buff that
+				# sets neither — has_spirit_effect() gates it.
+				_apply_spirit_effects(ability, tgt, rank)
 				print("[combat] %s applied %s to %s." % [ability.display_name, String(ability.applies_buff), tgt.unit_name])
 				acted = true
 			else:
@@ -558,6 +572,9 @@ func _use_ability(ability: Ability, tgt: BattleCharacter, slot: int = -1) -> voi
 
 	if not acted:
 		return
+	# A SELF buff rides on top of whatever the ability just did, for every kind — Pass
+	# Current debuffs its target with Arc Burn and buffs its caster with +5 Alacrity.
+	_maybe_apply_self_buff(ability, rank)
 	if _player and sp_cost > 0:
 		_player.spend_spirit(sp_cost)
 	var cd := ability.cooldown_at(rank)
@@ -577,27 +594,35 @@ func _use_ability(ability: Ability, tgt: BattleCharacter, slot: int = -1) -> voi
 		print("[combat] %s is out of action points — ending turn." % _player.unit_name)
 		end_player_turn()
 
+## Map a bare buff id to its PER-RANK CLONE in BuffLibrary, when it has one. Several
+## buffs ship as a family of near-identical entries (one per invested rank of the ability
+## that applies them); the .tres names only the family (applies_buff = &"guard") and this
+## picks the member (guard_1..guard_4). Anything not listed here is returned unchanged.
+## Used by BOTH _maybe_apply_buff (the target's buff) and _maybe_apply_self_buff.
+func _rank_clone_id(bid: String, rank: int) -> String:
+	match bid:
+		# Guard: a different damage-reduction value per rank, 1..4.
+		"guard":              return "guard_%d" % clampi(rank, 1, 4)
+		# Scaled Skin (Yesod): longer duration + bigger per-turn heal each rank.
+		"scaled_skin":        return "scaled_skin_%d" % clampi(rank, 1, 3)
+		# Hematopoiesis (Altar of Water): same clone-per-rank pattern.
+		"hematopoiesis":      return "hematopoiesis_%d" % clampi(rank, 1, 3)
+		"hypothermia":        return "hypothermia_%d" % clampi(rank, 1, 2)
+		"frost":              return "frost_%d" % clampi(rank, 1, 2)
+		# Arc Burn (Neurostatic / Pass Current): a bigger Instinct-scaled lightning DoT
+		# each rank.
+		"arc_burn":           return "arc_burn_%d" % clampi(rank, 1, 3)
+		# Electromyogenesis: more Alacrity, longer, each rank.
+		"electromyogenesis":  return "electromyogenesis_%d" % clampi(rank, 1, 4)
+		# Electrostimulation: bigger package, SMALLER per-turn lightning cost, longer.
+		"electrostimulated":  return "electrostimulated_%d" % clampi(rank, 1, 3)
+	return bid
+
 ## Apply the ability's buff (if any) to `tgt`. Returns true if a buff was applied.
 func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter, rank: int = 1) -> bool:
-	var bid := String(ability.applies_buff)
+	var bid := _rank_clone_id(String(ability.applies_buff), rank)
 	if bid == "":
 		return false
-	# Guard is special-cased: it applies a different (cloned) damage-reduction buff
-	# per invested rank. The .tres names applies_buff = &"guard"; here rank 1..4 picks
-	# guard_1..guard_4 in BuffLibrary (each identical but for its reduction value).
-	if bid == "guard":
-		bid = "guard_%d" % clampi(rank, 1, 4)
-	# Scaled Skin (Yesod) is the same clone-per-rank pattern: rank 1..3 -> the
-	# scaled_skin_1..3 clones (each a longer duration + bigger per-turn heal).
-	elif bid == "scaled_skin":
-		bid = "scaled_skin_%d" % clampi(rank, 1, 3)
-	# Hematopoiesis (Altar of Water): same clone-per-rank pattern, ranks 1..3.
-	elif bid == "hematopoiesis":
-		bid = "hematopoiesis_%d" % clampi(rank, 1, 3)
-	elif bid == "hypothermia":
-		bid = "hypothermia_%d" % clampi(rank, 1, 2)
-	elif bid == "frost":
-		bid = "frost_%d" % clampi(rank, 1, 2)
 	var caster: CharacterBase = _player.body if _player else null
 	var entry := BuffLibrary.build(bid, caster, tgt.body)
 	if entry.is_empty():
@@ -607,12 +632,36 @@ func _maybe_apply_buff(ability: Ability, tgt: BattleCharacter, rank: int = 1) ->
 	tgt.refresh_buffs()
 	return true
 
+## Apply the ability's SELF buff (applies_buff_self) to the CASTER, whatever the ability
+## targeted. Runs for every kind once the ability's own effect resolved, so an attack, a
+## heal or a buff can all also buff their user — Pass Current sears its target with Arc
+## Burn and gives the caster +5 Alacrity for 3 turns. Goes through the same per-rank clone
+## mapping as the target buff. Returns true if a buff was applied.
+func _maybe_apply_self_buff(ability: Ability, rank: int = 1) -> bool:
+	if ability == null or _player == null or _player.body == null:
+		return false
+	var bid := _rank_clone_id(String(ability.applies_buff_self), rank)
+	if bid == "":
+		return false
+	var entry := BuffLibrary.build(bid, _player.body, _player.body)
+	if entry.is_empty():
+		push_warning("[combat] %s names unknown applies_buff_self '%s'." % [ability.display_name, bid])
+		return false
+	CombatBuffs.apply(_player.body, entry)
+	_player.refresh_bar()      # a max-HP / max-Spirit buff can move the ceilings
+	_player.refresh_buffs()
+	print("[combat] %s buffs %s with %s." % [ability.display_name, _player.unit_name, bid])
+	return true
+
 ## Apply an ability's one-time spirit effects: the CASTER (the player) GAINS
 ## spirit_gain_at(rank), and the TARGET LOSES spirit_steal_at(rank) — both instant,
 ## clamped to each unit's [0, max] by change_spirit. Called from the ATTACK branch
-## after the hit lands; a no-op unless the ability sets a gain/steal. A self/ally
-## target that is also the caster would both gain and lose, but Thermodynamic
-## Transfusion (the only user today) targets an ENEMY, so the two never collide.
+## after the hit lands; a no-op unless the ability sets a gain/steal. The GAIN is applied
+## first, so a Lightning Shell bearer converts any over-cap remainder before the steal
+## lands. NOTE the caster CAN be its own target: ZAP! targets ALLY, which includes the
+## player, so self-zapping nets gain - steal (-5 spirit) plus the self-damage. That is a
+## known temporary hole — there is no ALLY-but-not-me target class yet, and self-targeting
+## is the only way to test ZAP! until a second friendly unit exists.
 func _apply_spirit_effects(ability: Ability, tgt: BattleCharacter, rank: int) -> void:
 	if ability == null or not ability.has_spirit_effect(rank):
 		return

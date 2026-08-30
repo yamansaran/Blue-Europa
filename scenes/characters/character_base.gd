@@ -86,6 +86,7 @@ var baskets: Dictionary = {
 	"attributes": [],
 	"passives": [],
 	"crown": [],
+	"derived": [],
 	"buffs": [],
 	"debuffs": [],
 }
@@ -378,7 +379,7 @@ func from_dict(d: Dictionary) -> void:
 			base_stats[str(k)] = float(bs[k])
 
 	var bk = d.get("baskets", null)
-	baskets = {"items": [], "levels": [], "attributes": [], "passives": [], "crown": [], "buffs": [], "debuffs": []}
+	baskets = {"items": [], "levels": [], "attributes": [], "passives": [], "crown": [], "derived": [], "buffs": [], "debuffs": []}
 	if typeof(bk) == TYPE_DICTIONARY:
 		for name in bk:
 			if typeof(bk[name]) == TYPE_ARRAY:

@@ -41,7 +41,11 @@ enum CostType {
 @export var icon: Texture2D
 
 # --- skill-tree economy -----------------------------------------------------
-@export_range(1, 20) var max_points: int = 1
+## Skill-tree ranks. The ceiling is 99 so a "grind" node (Severity: +3 Vigor / +1
+## Vitality / -1 max Spirit per point, 99 ranks) can be authored. A node that deep
+## should express its per-rank values with passive_mods_per_point (below) rather
+## than a 99-entry passive_mods_ranks array.
+@export_range(1, 99) var max_points: int = 1
 
 # --- combat wheel -----------------------------------------------------------
 ## How many wheel slots a single copy of this ability may occupy at once.
@@ -143,6 +147,14 @@ enum CostType {
 ## BuffLibrary.build(). Used by BUFF / DEBUFF abilities (and any other kind that
 ## should also drop a buff on hit). Blank => this ability applies no buff.
 @export var applies_buff: StringName = &""
+## Id of a SECOND buff this ability drops on the CASTER (never the target) the moment
+## it resolves, resolved through the same BuffLibrary.build() + rank-clone mapping as
+## applies_buff. Lets one ability both debuff its victim and buff its user — Pass
+## Current sears the target with Arc Burn (applies_buff) AND gives the caster +5
+## Alacrity for 3 turns (applies_buff_self). Blank => no self buff, so every existing
+## .tres is unaffected with no re-save. Applied for EVERY kind, after the kind's own
+## effect resolved successfully (see combat._maybe_apply_self_buff).
+@export var applies_buff_self: StringName = &""
 
 # --- one-time spirit effects (on cast) --------------------------------------
 ## Instant, one-shot spirit adjustments applied the moment this ability resolves
@@ -183,6 +195,36 @@ enum CostType {
 ## passive_mult_at (Character rebuilds the passives basket at the invested rank).
 @export var passive_mods_ranks: Array[Dictionary] = []
 @export var passive_mult_ranks: Array[Dictionary] = []
+## PER-POINT passive bonus — the LINEAR alternative to the _ranks arrays, for a passive
+## with too many ranks to enumerate. Every entry here is multiplied by the invested rank
+## R and ADDED on top of whatever passive_mods / passive_mods_ranks resolved to, e.g.
+##   passive_mods_per_point = {"vigor": 3.0, "vitality": 1.0, "spirit": -1.0}
+## gives Severity +3 Vigor, +1 Vitality and -1 maximum Spirit for each of its 99 points.
+## passive_mult_per_point is the same idea for the multiplier layer. Empty => nothing is
+## added, so every existing passive is unaffected with no re-save.
+@export var passive_mods_per_point: Dictionary = {}
+@export var passive_mult_per_point: Dictionary = {}
+## Id of an ability this node UNLOCKS as a side effect of being invested in. The moment
+## any point sits in the granting node, the named ability is added to the player's pool
+## exactly as if its own node had been unlocked (Character.unlock_ability cascades into
+## it, and the respec resync keeps it alive only while the granting node still holds a
+## point). The granted ability needs no node of its own — with no node mapping its rank
+## falls back to 1, so author it as a single-rank ability. Severity uses this to hand the
+## player Vicious Strike. Blank => grants nothing.
+@export var unlocks_ability: StringName = &""
+
+# --- STAT-DERIVED passive bonus (Galvanism) ---------------------------------
+## A PASSIVE whose flat bonus is a FRACTION OF ANOTHER STAT rather than a fixed
+## number. Shape: { target_stat: { source_stat: fraction } }, e.g.
+##   {"alacrity": {"instinct": 0.30}}   =>  +Alacrity equal to 30% of Instinct.
+## Unlike passive_mods (a static dict) this is recomputed live by Character into a
+## dedicated "derived" basket, so it tracks the source stat as gear / levels / other
+## passives move it. The derived basket is cleared before it is rebuilt, so a passive
+## can never scale off its own output. Multiple passives naming the same target stat
+## simply sum. Per-rank override: passive_scale_ranks (same clamp rule as the other
+## _ranks arrays). Empty => no derived bonus (every existing passive).
+@export var passive_scale: Dictionary = {}
+@export var passive_scale_ranks: Array[Dictionary] = []
 ## A PASSIVE may also grant a per-turn / persistent BUFF while it sits in a wheel
 ## slot. This names a BuffLibrary id; at combat start, combat._apply_passive_buffs
 ## builds "<passive_buff>_<invested rank>" and applies it to the player as a permanent
@@ -191,6 +233,13 @@ enum CostType {
 ## Blank => the passive contributes only its passive_mods / passive_mult. Only read
 ## when kind == PASSIVE.
 @export var passive_buff: StringName = &""
+## CAPSTONE passive buff: a SECOND BuffLibrary id applied (as a permanent, fight-long
+## buff, like passive_buff) only once the invested rank reaches passive_buff_capstone_rank.
+## Unlike passive_buff the id is used VERBATIM — no "_<rank>" suffix is appended, since a
+## capstone has exactly one form. Lightning Shell uses it to grant High Voltage at rank 10.
+## Blank / rank 0 => no capstone. Only read when kind == PASSIVE.
+@export var passive_buff_capstone: StringName = &""
+@export var passive_buff_capstone_rank: int = 0
 
 # --- ALWAYS ACTIVE (a passive granted from the node, never equipped) ---------
 ## Marks a PASSIVE whose stat bonus is live from the moment ANY point sits in its
@@ -432,23 +481,76 @@ func has_passive_bonus() -> bool:
 	if (typeof(passive_mods) == TYPE_DICTIONARY and not passive_mods.is_empty()) \
 		or (typeof(passive_mult) == TYPE_DICTIONARY and not passive_mult.is_empty()):
 		return true
-	return not passive_mods_ranks.is_empty() or not passive_mult_ranks.is_empty()
+	if not passive_mods_ranks.is_empty() or not passive_mult_ranks.is_empty():
+		return true
+	# A purely PER-POINT passive (Severity) has no static dict and no rank arrays — its
+	# whole bonus is rank x per_point, so it must count as contributing too.
+	if (typeof(passive_mods_per_point) == TYPE_DICTIONARY and not passive_mods_per_point.is_empty()) \
+		or (typeof(passive_mult_per_point) == TYPE_DICTIONARY and not passive_mult_per_point.is_empty()):
+		return true
+	# A purely stat-DERIVED passive (Galvanism) has no static mods, but it must still
+	# count as "contributing" so the passive-basket scan doesn't skip it.
+	if typeof(passive_scale) == TYPE_DICTIONARY and not passive_scale.is_empty():
+		return true
+	return not passive_scale_ranks.is_empty()
 
-## The FLAT passive stat bonus for a given rank (passive_mods_ranks override, else the
-## passive_mods scalar). Always returns a Dictionary.
+## Add `per_point` x `points` onto a copy of `base`, key by key. Shared by
+## passive_mods_at / passive_mult_at so the per-point layer behaves identically for the
+## flat and multiplier dicts. Returns `base` untouched (but duplicated) when there is
+## no per-point layer, so nothing that doesn't use it pays for it.
+func _fold_per_point(base: Dictionary, per_point: Dictionary, points: int) -> Dictionary:
+	if typeof(per_point) != TYPE_DICTIONARY or per_point.is_empty():
+		return base
+	var r := float(maxi(points, 0))
+	var out := base.duplicate(true)
+	for k in per_point.keys():
+		out[k] = float(out.get(k, 0.0)) + float(per_point[k]) * r
+	return out
+
+## The FLAT passive stat bonus for a given rank: the passive_mods_ranks override (else the
+## passive_mods scalar), plus passive_mods_per_point x rank. Always returns a Dictionary.
 func passive_mods_at(points: int) -> Dictionary:
+	var base := {}
 	if not passive_mods_ranks.is_empty():
 		var d = passive_mods_ranks[_rank_index(points, passive_mods_ranks.size())]
-		return d if typeof(d) == TYPE_DICTIONARY else {}
-	return passive_mods if typeof(passive_mods) == TYPE_DICTIONARY else {}
+		base = d if typeof(d) == TYPE_DICTIONARY else {}
+	elif typeof(passive_mods) == TYPE_DICTIONARY:
+		base = passive_mods
+	return _fold_per_point(base, passive_mods_per_point, points)
 
-## The MULTIPLIER passive stat bonus for a given rank (passive_mult_ranks override,
-## else the passive_mult scalar). Always returns a Dictionary.
+## The MULTIPLIER passive stat bonus for a given rank: the passive_mult_ranks override
+## (else the passive_mult scalar), plus passive_mult_per_point x rank.
 func passive_mult_at(points: int) -> Dictionary:
+	var base := {}
 	if not passive_mult_ranks.is_empty():
 		var d = passive_mult_ranks[_rank_index(points, passive_mult_ranks.size())]
+		base = d if typeof(d) == TYPE_DICTIONARY else {}
+	elif typeof(passive_mult) == TYPE_DICTIONARY:
+		base = passive_mult
+	return _fold_per_point(base, passive_mult_per_point, points)
+
+## True when this PASSIVE should also hand the player a capstone buff at `points`.
+func has_capstone_at(points: int) -> bool:
+	return String(passive_buff_capstone) != "" \
+		and passive_buff_capstone_rank > 0 \
+		and points >= passive_buff_capstone_rank
+
+## The STAT-DERIVED passive bonus for a given rank (passive_scale_ranks override, else
+## the passive_scale scalar). Shape { target_stat: { source_stat: fraction } }.
+func passive_scale_at(points: int) -> Dictionary:
+	if not passive_scale_ranks.is_empty():
+		var d = passive_scale_ranks[_rank_index(points, passive_scale_ranks.size())]
 		return d if typeof(d) == TYPE_DICTIONARY else {}
-	return passive_mult if typeof(passive_mult) == TYPE_DICTIONARY else {}
+	return passive_scale if typeof(passive_scale) == TYPE_DICTIONARY else {}
+
+## True when this PASSIVE carries a stat-derived bonus (Character rebuilds the
+## "derived" basket from it — see Character._rebuild_derived_basket).
+func has_passive_scale() -> bool:
+	if not is_passive():
+		return false
+	if typeof(passive_scale) == TYPE_DICTIONARY and not passive_scale.is_empty():
+		return true
+	return not passive_scale_ranks.is_empty()
 
 ## True when this ability is an always-on WHEEL-SLOT passive (Overmind): its invested
 ## points add combat-wheel slots and it is never equipped (see wheel_slots_per_point

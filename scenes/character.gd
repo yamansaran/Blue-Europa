@@ -91,6 +91,7 @@ func _post_autoload_sync() -> void:
 	_normalize_wheel()
 	_rebuild_passive_basket()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.clamp_vitals()
 	changed.emit()
 
@@ -148,6 +149,7 @@ func _rebuild_body() -> void:
 	_rebuild_item_basket()
 	_rebuild_passive_basket()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.init_vitals()
 
 
@@ -296,6 +298,7 @@ func _rebuild_passive_basket() -> void:
 func _refresh_passives_after_wheel_change() -> void:
 	_rebuild_passive_basket()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.clamp_vitals()
 
 
@@ -330,6 +333,65 @@ func _rebuild_crown_basket() -> void:
 			mods[key] = float(mods.get(key, 0.0)) + bonus * factor
 	if not mods.is_empty():
 		body.add_entry("crown", CharacterBase.make_entry("crown", "Crown", mods))
+
+
+## Rebuild the DERIVED basket. A PASSIVE may express a flat bonus as a FRACTION OF
+## ANOTHER STAT (Ability.passive_scale, e.g. Galvanism: +Alacrity equal to 30% of
+## Instinct). passive_mods is a static dict and cannot do that, so those passives are
+## resolved here instead, live: the basket is cleared first and each target stat is
+## recomputed from the CURRENT effective value of its source stat, so the bonus tracks
+## gear, levels and other passives as they move. Clearing first also means a passive can
+## never scale off its own output. Sources scanned, mirroring _rebuild_passive_basket:
+## every EQUIPPED wheel slot holding a normal passive, plus every INVESTED node holding
+## an always-active one. Runs AFTER the passives + crown baskets so it sees their totals.
+func _rebuild_derived_basket() -> void:
+	body.clear_basket("derived")
+	var mods := {}
+	# --- equipped (normal) passives ---
+	for i in equipped_abilities.size():
+		var id := str(equipped_abilities[i])
+		if id == "":
+			continue
+		var ab := _resolve_ability(id)
+		if ab == null or not ab.has_method("has_passive_scale") or not ab.has_passive_scale():
+			continue
+		# always-active passives are sourced from the node below, never the wheel
+		if ab.has_method("is_always_active") and ab.is_always_active():
+			continue
+		_accumulate_derived(mods, ab, ability_rank(id))
+	# --- always-active passives, sourced from the INVESTED NODE ---
+	for nid in allocations.keys():
+		var pts := int(allocations[nid])
+		if pts <= 0:
+			continue
+		var aid := str(node_abilities.get(nid, nid))
+		var nab := _resolve_ability(aid)
+		if nab == null or not nab.has_method("is_always_active") or not nab.is_always_active():
+			continue
+		if not nab.has_method("has_passive_scale") or not nab.has_passive_scale():
+			continue
+		_accumulate_derived(mods, nab, pts)
+	if not mods.is_empty():
+		body.add_entry("derived", CharacterBase.make_entry("derived", "Derived", mods))
+
+
+## Fold one passive's stat-derived bonus (Ability.passive_scale_at) into `mods`.
+## Each target stat gains Σ (source stat's CURRENT effective value × fraction). The
+## derived basket was cleared by the caller, so these reads never include our own output.
+func _accumulate_derived(mods: Dictionary, ab, rank: int) -> void:
+	var spec = ab.passive_scale_at(rank)
+	if typeof(spec) != TYPE_DICTIONARY:
+		return
+	for target_stat in (spec as Dictionary):
+		var sources = spec[target_stat]
+		if typeof(sources) != TYPE_DICTIONARY:
+			continue
+		var add := 0.0
+		for src_stat in (sources as Dictionary):
+			add += body.get_effective(str(src_stat)) * float(sources[src_stat])
+		if add != 0.0:
+			var key := str(target_stat)
+			mods[key] = float(mods.get(key, 0.0)) + add
 
 
 # ============================================================================
@@ -467,6 +529,14 @@ func _resync_unlocked_from_allocations() -> void:
 			var aid := str(node_abilities.get(nid, ""))
 			if aid != "":
 				kept[aid] = true
+				# An invested node also keeps alive whatever its ability GRANTS
+				# (Severity -> Vicious Strike), so a respec drops the granted
+				# ability exactly when the granting node loses its last point.
+				var gab := _resolve_ability(aid)
+				if gab != null and "unlocks_ability" in gab:
+					var granted := String(gab.unlocks_ability)
+					if granted != "":
+						kept[granted] = true
 	var new_unlocked: Array = []
 	for id in unlocked_abilities:
 		var s := str(id)
@@ -508,6 +578,7 @@ func allocate_attribute(major: String) -> bool:
 	attribute_points -= 1
 	_rebuild_attribute_basket()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -522,6 +593,7 @@ func respec_attributes() -> void:
 	attribute_allocations.clear()
 	_rebuild_attribute_basket()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -561,6 +633,13 @@ func unlock_ability(id) -> void:
 	if ab != null and ab.has_method("is_always_active") and ab.is_always_active():
 		return
 	unlocked_abilities.append(s)
+	# CASCADE: an ability may GRANT another one (Severity hands out Vicious Strike).
+	# Append it too — inline rather than recursing, so the signal + save fire once, and
+	# so a granted ability that itself grants nothing can't loop.
+	if ab != null and "unlocks_ability" in ab:
+		var granted := String(ab.unlocks_ability)
+		if granted != "" and granted != s and not unlocked_abilities.has(granted):
+			unlocked_abilities.append(granted)
 	changed.emit()
 	save_game()
 
@@ -708,6 +787,7 @@ func equip_from_bag(bag_index: int, slot_key: String) -> bool:
 	}
 	_rebuild_item_basket()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -721,6 +801,7 @@ func unequip_item_slot(slot_key: String) -> bool:
 	equipped_items.erase(slot_key)
 	_rebuild_item_basket()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -881,6 +962,7 @@ func gain_rewards(money_amt: int, xp_amt: int, new_items: Array) -> void:
 		items.append(it)
 	_apply_xp_level()          # continuous xp may push the level up
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()
@@ -891,6 +973,7 @@ func gain_xp(xp_amt: int) -> void:
 	xp += xp_amt
 	_apply_xp_level()
 	_rebuild_crown_basket()
+	_rebuild_derived_basket()
 	body.init_vitals()
 	changed.emit()
 	save_game()

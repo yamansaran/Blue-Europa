@@ -228,13 +228,54 @@ func spend_spirit(amount: int) -> bool:
 	refresh_bar()
 	return true
 
-## Change spirit by a signed delta (per-turn regen/drain), clamped to [0, max].
-## Returns the actual change applied.
+## Change spirit by a signed delta (per-turn regen/drain, or an ability's one-time
+## gain/steal), clamped to [0, max]. Returns the actual change applied.
+## OVERFILL: spirit a GAIN would have pushed past the cap is normally just wasted. A
+## bearer of an overflow-shield effect (Lightning Shell) converts it instead — see
+## _convert_spirit_overflow. This is deliberately in change_spirit rather than in the
+## turn tick, so EVERY source of spirit counts: start-of-turn regen, a spirit_per_turn
+## buff, Acceleration's +25, ZAP!'s +5.
 func change_spirit(delta: int) -> int:
 	if body == null:
 		return 0
 	var before := body.current_spirit
 	body.current_spirit = clampi(body.current_spirit + delta, 0, body.max_spirit())
 	var applied := body.current_spirit - before
+	if delta > 0 and applied < delta:
+		_convert_spirit_overflow(delta - applied)
 	refresh_bar()
 	return applied
+
+## Turn `overflow` points of wasted (over-cap) spirit into absorbing shields, one grant
+## per overflow-shield effect this unit carries. Each spec converts in WHOLE CHUNKS of
+## `per_spirit` points — a remainder smaller than one chunk is simply lost, it does not
+## carry to the next gain — and each chunk is worth sum(fraction * this unit's effective
+## stat) across the spec's "scale" map, read LIVE so the shield tracks Vitality/Instinct.
+## The grant goes through gain_shield(), so the bearer's shield_power applies and the
+## grey "+N" floats like any other shield. A spec with no "decay" makes a shield that
+## never decays (Lightning Shell's lasts until it is spent).
+func _convert_spirit_overflow(overflow: int) -> void:
+	if body == null or overflow <= 0:
+		return
+	for spec in CombatBuffs.overflow_shield_specs(body):
+		var per := maxi(1, int(spec.get("per_spirit", 5)))
+		var chunks := overflow / per          # integer division: whole chunks only
+		if chunks <= 0:
+			continue
+		var scale = spec.get("scale", {})
+		if typeof(scale) != TYPE_DICTIONARY:
+			continue
+		var per_chunk := 0.0
+		for stat in scale.keys():
+			per_chunk += float(scale[stat]) * maxf(0.0, body.get_effective(str(stat)))
+		var amount := per_chunk * float(chunks)
+		if amount <= 0.0:
+			continue
+		var decay = spec.get("decay", {})
+		gain_shield({
+			"id": str(spec.get("id", "overflow_shield")),
+			"source": str(spec.get("source", "Shield")),
+			"element": str(spec.get("element", "")),
+			"amount": amount,
+			"decay": decay if typeof(decay) == TYPE_DICTIONARY else {},
+		})

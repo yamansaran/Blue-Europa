@@ -97,6 +97,30 @@ static func make(config: Dictionary) -> Dictionary:
 	if typeof(raw_on_hit) == TYPE_ARRAY:
 		on_hit_apply = (raw_on_hit as Array).duplicate(true)
 
+	# ON-HIT-DAMAGE: a list of "when the BEARER lands an attack, deal EXTRA damage to
+	# the target it hit" specs (see CombatBuffs.fire_on_hit). Each spec is a dict
+	# { "element": "lightning", (opt) "amount": float, (opt) "scale_stat": "vigor",
+	#   (opt) "pct": float } — the bonus hit is `amount + pct * attacker[scale_stat]`,
+	# resolved through the normal damage pipeline and dealt with NO source (so it can
+	# trigger no on-struck reaction and cannot recurse). Deep-copied; empty = none.
+	# Used by Energized Form (+45% of Vigor as Lightning damage on every hit).
+	var on_hit_damage: Array = []
+	var raw_on_hit_dmg = config.get("on_hit_damage", [])
+	if typeof(raw_on_hit_dmg) == TYPE_ARRAY:
+		on_hit_damage = (raw_on_hit_dmg as Array).duplicate(true)
+
+	# OVERFLOW-SHIELD: "spirit that refills past my maximum becomes an absorbing shield".
+	# A spec dict { "per_spirit": int, "scale": { stat_key: fraction }, (opt) "decay": {} }:
+	# for every `per_spirit` points of spirit the bearer WOULD have gained above its cap,
+	# it gains a shield of sum(fraction * bearer[stat]) — read LIVE off the bearer, not
+	# snapshotted, so it tracks Vitality/Instinct as they move. Read by
+	# BattleCharacter.change_spirit via CombatBuffs.overflow_shield_specs. Deep-copied;
+	# empty = overfilled spirit is wasted as usual. Used by Lightning Shell (Geburah).
+	var overflow_shield := {}
+	var raw_overflow = config.get("overflow_shield", {})
+	if typeof(raw_overflow) == TYPE_DICTIONARY:
+		overflow_shield = (raw_overflow as Dictionary).duplicate(true)
+
 	var stackable := bool(config.get("stackable", false))
 	var entry := {
 		"id": str(config.get("id", "buff")),
@@ -125,6 +149,8 @@ static func make(config: Dictionary) -> Dictionary:
 		"expire_effect": str(config.get("expire_effect", "")),
 		"on_struck": on_struck,
 		"on_hit_apply": on_hit_apply,
+		"on_hit_damage": on_hit_damage,
+		"overflow_shield": overflow_shield,
 		"per_stack": per_stack,
 		# scaled live fields (filled by recompute_scaled below):
 		"mods": {},
@@ -214,6 +240,20 @@ static func has_on_struck(entry: Dictionary) -> bool:
 static func on_hit_apply(entry: Dictionary) -> Array:
 	var r = entry.get("on_hit_apply", [])
 	return r if typeof(r) == TYPE_ARRAY else []
+
+## The list of on-hit-damage spec dicts on this entry ([] when none). Each is
+## { "element": s, "amount"?: f, "scale_stat"?: s, "pct"?: f } — bonus damage the
+## bearer deals to whatever it hits. NOT stack-scaled here; fire_on_hit scales by stacks.
+static func on_hit_damage(entry: Dictionary) -> Array:
+	var r = entry.get("on_hit_damage", [])
+	return r if typeof(r) == TYPE_ARRAY else []
+
+## This entry's overflow-shield spec ({} when it has none) —
+## { "per_spirit": int, "scale": { stat_key: fraction }, (opt) "decay": {} }. See the
+## comment in make(). Plain metadata, NOT stack-scaled.
+static func overflow_shield(entry: Dictionary) -> Dictionary:
+	var r = entry.get("overflow_shield", {})
+	return r if typeof(r) == TYPE_DICTIONARY else {}
 
 ## The RAW DoT damage this entry deals THIS turn (already stack-scaled), as an int.
 ## NOTE: this is BEFORE the bearer's `vulnerability` multiplier — CombatBuffs

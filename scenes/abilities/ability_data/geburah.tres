@@ -1,8 +1,20 @@
-[gd_resource type="Resource" script_class="Ability" format=3]
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://beab035"]
 
 [ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_32s2v"]
 
 [resource]
 script = ExtResource("1_32s2v")
 id = &"geburah"
-display_name = "Geburah"
+display_name = "Lightning Shell"
+description = "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 10% of Vitality and 10% of Instinct. The shield never decays."
+max_points = 10
+max_equipped = 1
+kind = 4
+target = 2
+element = 4
+cost_type = 0
+cost_amount = 0
+description_ranks = Array[String](["Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 10% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 20% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 30% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 40% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 50% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 60% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 70% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 80% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 90% of Vitality and 10% of Instinct. The shield never decays.", "Nothing is wasted. Every 5 Spirit that would refill past your maximum instead becomes a shield worth 100% of Vitality and 10% of Instinct. The shield never decays. HIGH VOLTAGE: anything that strikes you in melee takes 35% of your Instinct as Lightning damage."])
+passive_buff = &"lightning_shell"
+passive_buff_capstone = &"high_voltage"
+passive_buff_capstone_rank = 10

@@ -298,20 +298,30 @@ static func fire_on_struck(struck_unit, attacker_unit, damage_taken: int, elemen
 					continue
 				match str(r.get("effect", "")):
 					"reflect":
-						_react_reflect(r, e, stacks, attacker_unit, damage_taken)
+						_react_reflect(r, e, stacks, struck_unit, attacker_unit, damage_taken)
 					"self_pct_max_hp":
 						_react_self_pct_max_hp(r, e, struck_unit)
 					_:
 						pass
 
-## Reflect (thorns): deal amount*stacks + percent*damage_taken back to the
-## attacker as its own element. No source is passed, so it never re-triggers.
-static func _react_reflect(reaction: Dictionary, entry: Dictionary, stacks: int, attacker_unit, damage_taken: int) -> void:
+## Reflect (thorns / High Voltage): deal damage back to the attacker as the reaction's
+## element. The amount is the sum of three independent terms:
+##   "amount"     — a flat value, MULTIPLIED by the entry's stack count (thorns)
+##   "percent"    — a fraction of the damage this bearer just took (thorns)
+##   "scale_stat" + "pct" — a fraction of one of the BEARER's own effective stats, read
+##                  LIVE (High Voltage: 35% of Instinct as Lightning). NOT stack-scaled,
+##                  mirroring the on_hit_damage rider's scale_stat/pct pair.
+## No source is passed, so a reflect never re-triggers an on-struck reaction.
+static func _react_reflect(reaction: Dictionary, entry: Dictionary, stacks: int, struck_unit, attacker_unit, damage_taken: int) -> void:
 	if attacker_unit == null or not attacker_unit.has_method("is_alive") or not attacker_unit.is_alive():
 		return
 	var flat := float(reaction.get("amount", 0.0)) * float(stacks)
 	var pct := float(reaction.get("percent", 0.0)) * float(maxi(damage_taken, 0))
-	var total := int(round(maxf(0.0, flat + pct)))
+	var scaled := 0.0
+	var scale_stat := str(reaction.get("scale_stat", ""))
+	if scale_stat != "" and struck_unit != null and struck_unit.body != null:
+		scaled = float(reaction.get("pct", 0.0)) * maxf(0.0, struck_unit.body.get_effective(scale_stat))
+	var total := int(round(maxf(0.0, flat + pct + scaled)))
 	if total <= 0:
 		return
 	var rel := str(reaction.get("element", str(entry.get("element", ""))))
@@ -370,14 +380,70 @@ static func fire_on_hit(attacker_body: CharacterBase, struck_unit) -> void:
 					entry["duration"] = int(spec["duration"])
 				apply(struck_unit.body, entry)
 				applied_any = true
+			# ON-HIT-DAMAGE: an extra hit of a named element riding on every strike.
+			for spec in Buff.on_hit_damage(e):
+				if typeof(spec) != TYPE_DICTIONARY:
+					continue
+				_on_hit_damage(attacker_body, struck_unit, spec, Buff.stacks(e))
 	if applied_any and struck_unit.has_method("refresh_buffs"):
 		struck_unit.refresh_buffs()
+
+
+## Deal one on-hit-damage rider. The raw output is `amount + pct * attacker[scale_stat]`
+## (times the entry's stack count), run through the normal damage pipeline via
+## CombatMath.resolve_flat — so the attacker's damage_dealt_mult, pierce and amp for the
+## rider's element, the target's resistance and damage_taken_mult all apply. Dealt with
+## NO source, so it fires no on-struck reaction and cannot recurse. Crit is not rolled.
+static func _on_hit_damage(attacker_body: CharacterBase, struck_unit, spec: Dictionary, stacks: int) -> void:
+	if struck_unit == null or struck_unit.body == null:
+		return
+	if struck_unit.has_method("is_alive") and not struck_unit.is_alive():
+		return
+	var element := str(spec.get("element", "physical"))
+	var raw := float(spec.get("amount", 0.0))
+	var scale_stat := str(spec.get("scale_stat", ""))
+	if scale_stat != "" and attacker_body != null:
+		raw += float(spec.get("pct", 0.0)) * maxf(0.0, attacker_body.get_effective(scale_stat))
+	raw *= float(maxi(1, stacks))
+	if raw <= 0.0:
+		return
+	var dmg := CombatMath.resolve_flat(attacker_body, struck_unit.body, raw, element)
+	if dmg > 0:
+		struck_unit.take_damage(dmg, element, false)
 
 
 # ============================================================================
 # Queries
 # ============================================================================
 ## True if any active buff/debuff silences this body (blocks spirit-cost abilities).
+## Every OVERFLOW-SHIELD spec `body` currently carries (see Buff.overflow_shield):
+## { "per_spirit": int, "scale": { stat_key: fraction }, (opt) "decay": {}, plus the
+## "source"/"element" of the entry that granted it }. Spirit that would refill past the
+## bearer's maximum is converted into an absorbing shield through these — the conversion
+## itself lives in BattleCharacter.change_spirit, which is the one place that knows how
+## much spirit was actually wasted. Returns [] for a body with no such effect (everyone
+## but a Lightning Shell bearer), so the hot path costs one empty-array walk.
+static func overflow_shield_specs(body: CharacterBase) -> Array:
+	var out: Array = []
+	if body == null:
+		return out
+	for basket in ["buffs", "debuffs"]:
+		if not body.baskets.has(basket):
+			continue
+		for e in body.baskets[basket]:
+			if typeof(e) != TYPE_DICTIONARY:
+				continue
+			var spec := Buff.overflow_shield(e)
+			if spec.is_empty():
+				continue
+			var s := spec.duplicate(true)
+			s["id"] = str(e.get("id", "overflow_shield"))
+			s["source"] = str(e.get("source", "Shield"))
+			if not s.has("element"):
+				s["element"] = str(e.get("element", ""))
+			out.append(s)
+	return out
+
 static func is_silenced(body: CharacterBase) -> bool:
 	return _any_flag(body, "silence")
 
