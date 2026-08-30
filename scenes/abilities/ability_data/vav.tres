@@ -10,6 +10,7 @@ description = "Deal Ice damage equal to {scaling}. Apply Rime Skin for 4 turns: 
 max_points = 4
 max_equipped = 3
 kind = 0
+delivery = 1
 target = 0
 element = 2
 cost_type = 1

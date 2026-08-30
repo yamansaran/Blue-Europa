@@ -11,6 +11,7 @@ max_points = 1
 max_equipped = 3
 action_cost = 1.0
 kind = 0
+delivery = 1
 target = 0
 element = 0
 cost_type = 0

@@ -97,13 +97,11 @@ func _show_in_shell(scene_path: String) -> void:
 		get_tree().change_scene_to_file(SCENE_SHELL)
 
 # --- shell-content destinations ---
-## The overworld shown is the CURRENT campaign's own overworld scene. Before
-## loading it, resolve any pending LINEAR advance (a finished campaign with a
-## single next campaign moves on automatically; forks are left for the player to
-## choose on the overworld itself).
+## The overworld shown is the CURRENT campaign's own overworld scene. Nothing is
+## advanced on the way in: a finished campaign stays finished until the player
+## confirms the move on the overworld's own popup, whether it offers one way on
+## or several.
 func go_to_overworld() -> void:
-	if typeof(CampaignDB) != TYPE_NIL:
-		CampaignDB.auto_advance_if_linear()
 	_show_in_shell(current_overworld_path())
 
 ## res:// path of the current campaign's overworld scene (legacy fallback if the

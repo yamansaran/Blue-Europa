@@ -671,31 +671,31 @@ center_position = Vector2(370, 394)
 custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
-offset_left = 255.0
+offset_left = 325.0
 offset_top = 252.0
-offset_right = 275.0
+offset_right = 345.0
 offset_bottom = 272.0
 script = ExtResource("2_node")
 ability = ExtResource("43_misericordia")
 node_id = "misericordia"
 size_class = 0
 required_level = 23
-center_position = Vector2(265, 262)
+center_position = Vector2(335, 262)
 
 [node name="Severitas" type="Control" parent="." unique_id=313025145]
 custom_minimum_size = Vector2(20, 20)
 layout_mode = 1
 anchors_preset = 0
-offset_left = 325.0
+offset_left = 255.0
 offset_top = 252.0
-offset_right = 345.0
+offset_right = 275.0
 offset_bottom = 272.0
 script = ExtResource("2_node")
 ability = ExtResource("44_severitas")
 node_id = "severitas"
 size_class = 0
 required_level = 23
-center_position = Vector2(335, 262)
+center_position = Vector2(265, 262)
 
 [node name="NomenOrdinis" type="Control" parent="." unique_id=612679979]
 custom_minimum_size = Vector2(20, 20)

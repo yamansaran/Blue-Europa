@@ -10,6 +10,7 @@ description = "Deal Physical damage equal to 160% of Vigor. Gain 40 spirit and d
 max_points = 3
 max_equipped = 2
 kind = 0
+delivery = 1
 target = 0
 element = 0
 cost_type = 0

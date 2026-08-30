@@ -105,22 +105,46 @@ static func consume_oldest_debuff_of_element(body: CharacterBase, element: Strin
 ## unchanged when no such debuff is present. Called by BattleCharacter.take_damage
 ## for a sourced ice hit, so hoarfrost boosts the next ice attack and is then spent.
 static func apply_incoming_ice_amp(body: CharacterBase, amount: int) -> int:
-	if body == null or not body.baskets.has("debuffs"):
+	var bonus := ice_amp_bonus(body)
+	if bonus <= 0.0:
 		return amount
+	consume_ice_amp(body)
+	return int(round(maxf(0.0, float(amount) * (1.0 + bonus))))
+
+## READ-ONLY half of the hoarfrost consume: the total ice amplification currently on
+## `body` (Σ ice_amp_per_stack × stacks across its ice-amp debuffs), as a fraction —
+## 0.4 for two hoarfrost stacks at 20% each. 0.0 when the body carries none.
+## Split out so a caller can SAMPLE the amp BEFORE something else removes the debuff
+## carrying it: Shatter consumes the target's oldest ice debuff as its trigger, and
+## that debuff may BE the hoarfrost, so combat reads the bonus first and applies it to
+## the shatter damage afterwards. Does not mutate the body.
+static func ice_amp_bonus(body: CharacterBase) -> float:
+	if body == null or not body.baskets.has("debuffs"):
+		return 0.0
 	var total_amp := 0.0
+	for e in body.baskets["debuffs"]:
+		if typeof(e) == TYPE_DICTIONARY and float(e.get("ice_amp_per_stack", 0.0)) > 0.0:
+			total_amp += float(e.get("ice_amp_per_stack", 0.0)) * float(Buff.stacks(e))
+	return total_amp
+
+## WRITE half of the hoarfrost consume: remove every ice-amp debuff from `body`.
+## Returns true iff at least one was removed. Safe to call when none remain (e.g. the
+## trigger has already eaten the only hoarfrost entry).
+static func consume_ice_amp(body: CharacterBase) -> bool:
+	if body == null or not body.baskets.has("debuffs"):
+		return false
 	var kept := []
 	var consumed := false
 	for e in body.baskets["debuffs"]:
 		if typeof(e) == TYPE_DICTIONARY and float(e.get("ice_amp_per_stack", 0.0)) > 0.0:
-			total_amp += float(e.get("ice_amp_per_stack", 0.0)) * float(Buff.stacks(e))
 			consumed = true          # drop it (consumed by this ice instance)
 		else:
 			kept.append(e)
 	if not consumed:
-		return amount
+		return false
 	body.baskets["debuffs"] = kept
 	body.clamp_vitals()
-	return int(round(maxf(0.0, float(amount) * (1.0 + total_amp))))
+	return true
 
 ## Count the debuffs on `body` tagged with `element` (e.g. "ice"). Used by Snap to
 ## scale its damage by the number of ice debuffs the target carries. 0 when none.
@@ -245,7 +269,13 @@ static func fire_expiry(unit, entry: Dictionary) -> void:
 ##        percent is a fraction (0.25 = 25% of the damage taken). element defaults
 ##        to the reaction's, then the entry's, then "physical".
 ## Add new "effect" cases below as you build more on-struck effects.
-static func fire_on_struck(struck_unit, attacker_unit, damage_taken: int, element: String) -> void:
+##
+## ATTACKS ONLY: `from_attack` is the incoming hit's hidden delivery class (true when
+## the ability was an ATTACK, false for a SPELL — see Ability.is_attack_delivery()).
+## Every reaction is ATTACK-ONLY BY DEFAULT: thorns/frost_mantle reflects and Rime
+## Skin's self-damage fire on an attack and stay silent for a spell. A reaction that
+## should also answer spells opts in with `"any_delivery": true` in its own dict.
+static func fire_on_struck(struck_unit, attacker_unit, damage_taken: int, element: String, from_attack: bool = false) -> void:
 	if struck_unit == null or struck_unit.body == null:
 		return
 	var body: CharacterBase = struck_unit.body
@@ -261,6 +291,10 @@ static func fire_on_struck(struck_unit, attacker_unit, damage_taken: int, elemen
 			var stacks := Buff.stacks(e)
 			for r in reactions:
 				if typeof(r) != TYPE_DICTIONARY:
+					continue
+				# Attacks-only gate: skip this reaction when the hit was a spell,
+				# unless the reaction explicitly answers any delivery class.
+				if not from_attack and not bool(r.get("any_delivery", false)):
 					continue
 				match str(r.get("effect", "")):
 					"reflect":

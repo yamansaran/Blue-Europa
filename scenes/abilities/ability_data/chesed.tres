@@ -10,6 +10,7 @@ description = "For each Ice debuff on the target, deal Physical damage equal to 
 max_points = 2
 max_equipped = 2
 kind = 0
+delivery = 1
 target = 0
 element = 0
 cost_type = 1

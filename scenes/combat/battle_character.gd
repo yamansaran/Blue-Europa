@@ -149,7 +149,11 @@ func refresh_buffs() -> void:
 ## struck" reactions (thorns, ...) hit back. DoT / environmental damage passes no
 ## source and triggers no reaction. Reflected damage is dealt with no source too,
 ## so thorns can never recurse.
-func take_damage(amount: int, element: String = "physical", is_crit: bool = false, source = null, amp_ice: bool = true) -> void:
+## `from_attack` is the hidden ATTACK-vs-SPELL delivery class of the incoming hit
+## (Ability.is_attack_delivery()). Attacks-only on-struck reactions — thorns-style
+## reflects and Rime Skin — fire ONLY when it is true, so a spell never procs them.
+## It defaults to false, so any unsourced/incidental damage stays inert as before.
+func take_damage(amount: int, element: String = "physical", is_crit: bool = false, source = null, amp_ice: bool = true, from_attack: bool = false) -> void:
 	if body == null:
 		return
 	# Hoarfrost: a SOURCED ice hit (a player/ally attack) consumes the target's
@@ -166,7 +170,7 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 		refresh_bar()
 		_spawn_number(absorbed, "shield", false, false)
 		if source != null:
-			CombatBuffs.fire_on_struck(self, source, amount, element)
+			CombatBuffs.fire_on_struck(self, source, amount, element, from_attack)
 		return
 	body.current_hp = clampi(body.current_hp - amount, 0, body.max_hp())
 	refresh_bar()
@@ -181,7 +185,7 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 	# "When struck do X" — fire this unit's on-struck reactions against the source
 	# of the hit (thorns reflect, etc.). Only for sourced hits, never DoT/reflect.
 	if source != null:
-		CombatBuffs.fire_on_struck(self, source, amount, element)
+		CombatBuffs.fire_on_struck(self, source, amount, element, from_attack)
 
 ## Restore HP, floating a green "+N" over this unit. The amount is scaled by the
 ## target's healing-received multiplier (from its buffs/debuffs) AND by its RECEIVED

@@ -13,6 +13,16 @@ extends Resource
 
 enum Kind { ATTACK, BUFF, DEBUFF, HEAL, PASSIVE, SHIELD }
 enum Target { ENEMY, ALLY, SELF, ALL_ENEMIES, ALL_ALLIES }
+## DELIVERY CLASS — a HIDDEN tag (never shown in a tooltip) saying HOW the ability
+## reaches its target: SPELL = cast at range, ATTACK = a physical strike, PASSIVE =
+## it is never used at all. This is what "attacks-only" reactions key off: an
+## on-struck reaction like thorns (reflect) or Rime Skin fires when the incoming hit
+## was an ATTACK and stays silent for a SPELL. Nothing else reads it today.
+## Defaults to SPELL, so an existing .tres needs no re-save; the six real attacks
+## (claw, scour, qoph, netzach, vav, chesed) set `delivery = 1` explicitly.
+## PASSIVE is DERIVED, not authored — see delivery_class(): any PASSIVE-kind or
+## always-active ability reports PASSIVE whatever the exported value.
+enum Delivery { SPELL, ATTACK, PASSIVE }
 ## What resource an ability costs to use. Extend this list as new cost kinds are
 ## needed; cost_text() and combat's cost handling switch on it.
 enum CostType {
@@ -47,6 +57,10 @@ enum CostType {
 
 # --- Sonny-style combat stats ----------------------------------------------
 @export var kind: Kind = Kind.ATTACK
+## Hidden melee-vs-ranged tag (see the Delivery enum). Read it through
+## delivery_class() / is_attack_delivery(), never raw — the raw value is meaningless
+## on a passive.
+@export var delivery: Delivery = Delivery.SPELL
 @export var target: Target = Target.ENEMY
 ## Damage element. Drives which pierce/defence/amp stats apply (see CombatMath).
 ## TRUE ignores all mitigation.
@@ -456,6 +470,25 @@ func is_bonus_scaling() -> bool:
 ## for all of them, and Character.unlock_ability keeps every one out of the pool.
 func is_always_active() -> bool:
 	return always_active or is_upgrade_only() or is_wheel_slot_passive() or is_bonus_scaling()
+
+## The RESOLVED delivery class (the hidden attack/spell/passive tag). Anything that is
+## never cast — a PASSIVE-kind ability or one of the always-active node shapes — reports
+## PASSIVE regardless of what the .tres set, so a passive can never be mistaken for a
+## spell. Everything else reports its exported `delivery` (SPELL unless authored ATTACK).
+func delivery_class() -> Delivery:
+	if is_passive() or is_always_active():
+		return Delivery.PASSIVE
+	return delivery
+
+## True when this ability lands as a physical ATTACK. This is the gate for attacks-only
+## reactions: thorns-style reflects and Rime Skin proc on true here and stay silent for
+## a spell. A passive is never an attack.
+func is_attack_delivery() -> bool:
+	return delivery_class() == Delivery.ATTACK
+
+## True when this ability lands as a SPELL (cast, not struck). Passives are neither.
+func is_spell_delivery() -> bool:
+	return delivery_class() == Delivery.SPELL
 
 ## The cost as a human phrase WITHOUT the "Cost:" prefix, for a given rank (e.g.
 ## "20 spirit", "10% of maximum health", "nothing"). Add new cases as CostType grows.

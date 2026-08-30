@@ -10,13 +10,20 @@ extends Node
 ##   - total progression (fights cleared across every campaign)
 ##   - the path of forks the player has chosen
 ##
+## THE MAP: c1 (The Arctic) opens onto THREE paths. You commit to the one you
+## pick and walk it a campaign at a time; the only mid-run choice is at LEVEL 5,
+## where each camp opens onto its own path's next stop OR its neighbour's. All
+## three paths rejoin at c9 (Berlin). Nothing ever advances by itself — the
+## player confirms every step on the post-boss popup, even when there is only
+## one way on. (The world map screen stays a DEBUG jump.)
+##
 ## Persists to user://campaign.save (JSON). Register as an autoload named
 ## "CampaignDB" and RESTART Godot after adding it (it also references the
 ## class_name globals Campaign + CampaignModule*).
 ## ----------------------------------------------------------------------------
 
 const SAVE_PATH := "user://campaign.save"
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2      # bumped when the map was rebuilt to 23 campaigns
 const START_ID := "c1"
 
 # --- the graph --------------------------------------------------------------
@@ -40,19 +47,58 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------
 # Graph build  —  add a campaign here to extend the map
 # ---------------------------------------------------------------------------
+## Registration order is also the world map's draw order, so these are listed by
+## LEVEL (the column on the map), then by path a / b / c (the row).
 func _build_all() -> void:
 	campaigns.clear()
 	order.clear()
+
+	# level 1 — the start; forks into all three paths
 	_register(CampaignModuleC1.build())
+
+	# level 2
 	_register(CampaignModuleC2A.build())
 	_register(CampaignModuleC2B.build())
+	_register(CampaignModuleC2C.build())
+
+	# level 3
 	_register(CampaignModuleC3A.build())
 	_register(CampaignModuleC3B.build())
-	_register(CampaignModuleC4.build())
+	_register(CampaignModuleC3C.build())
+
+	# level 4
+	_register(CampaignModuleC4A.build())
+	_register(CampaignModuleC4B.build())
+	_register(CampaignModuleC4C.build())
+
+	# level 5 — the map's one mid-run choice (each opens onto two level-6 camps)
+	_register(CampaignModuleC5A.build())
+	_register(CampaignModuleC5B.build())
+	_register(CampaignModuleC5C.build())
+
+	# level 6
+	_register(CampaignModuleC6A.build())
+	_register(CampaignModuleC6B.build())
+	_register(CampaignModuleC6C.build())
+
+	# level 7
+	_register(CampaignModuleC7A.build())
+	_register(CampaignModuleC7B.build())
+	_register(CampaignModuleC7C.build())
+
+	# level 8 — all three rejoin at Berlin
+	_register(CampaignModuleC8A.build())
+	_register(CampaignModuleC8B.build())
+	_register(CampaignModuleC8C.build())
+
+	# level 9 — the end of the map
+	_register(CampaignModuleC9.build())
 
 func _register(c: Campaign) -> void:
 	if c == null:
 		return
+	if campaigns.has(c.id):
+		push_warning("CampaignDB: duplicate campaign id '%s' — the later one wins." % c.id)
 	campaigns[c.id] = c
 	order.append(c.id)
 
@@ -96,7 +142,18 @@ func available_next() -> Array:
 	var c := get_current()
 	return c.next_ids.duplicate() if c else []
 
-## The current campaign is finished AND there is more than one way forward.
+## The current campaign's TRAINING fights (same spec shape as campaign fights).
+func training_fights() -> Array:
+	var c := get_current()
+	return c.training_pool.duplicate(true) if c else []
+
+## The current campaign is finished AND there is somewhere to go. TRUE for a
+## single onward step as well as a fork — the player always confirms the move,
+## so this is what the overworld uses to decide whether to show the popup.
+func can_advance() -> bool:
+	return is_current_complete() and available_next().size() >= 1
+
+## More than one way on — used only to word the popup ("choose your path").
 func needs_choice() -> bool:
 	return is_current_complete() and available_next().size() > 1
 
@@ -118,15 +175,8 @@ func record_fight_win() -> void:
 		completed_campaigns[current_id] = true
 	save_game()
 
-## If the current campaign is finished and has EXACTLY ONE next campaign, move to
-## it automatically (no fork prompt needed). Forks are left for the player.
-func auto_advance_if_linear() -> void:
-	if is_current_complete():
-		var nexts := available_next()
-		if nexts.size() == 1 and has_campaign(nexts[0]):
-			advance_to(nexts[0])
-
-## Move to a specific next campaign (used by the fork chooser and auto-advance).
+## Move to a specific next campaign. Always player-driven: the post-boss popup
+## calls this with whichever id was clicked, even when it offered only one.
 func advance_to(next_id: String) -> void:
 	if not has_campaign(next_id):
 		return

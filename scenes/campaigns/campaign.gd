@@ -3,16 +3,18 @@ class_name Campaign
 ## ============================================================================
 ## CAMPAIGN  —  one modular campaign in the world-map graph
 ## ============================================================================
-## A campaign is a self-contained module: an ordered list of fights, a training
-## pool, links to the next campaign(s) in the map, its OWN overworld scene, its
-## SHOP STOCK, plus a free-form `extra` dict for future per-campaign data.
+## A campaign is a self-contained MODULE. Everything a campaign IS lives in its
+## own module file (scenes/campaigns/modules/<id>/<id>.gd): its identity, its
+## place on the map, where it leads, its SHOP STOCK, its own ordered list of
+## campaign FIGHTS and its own list of TRAINING FIGHTS. This resource is just
+## the container those modules fill in, and CampaignDB is the registry that
+## holds them all.
 ##
-## Campaigns are built in code by their module scripts
-## (scenes/campaigns/modules/<id>/<id>.gd) and registered in CampaignDB. The
-## module can either call Campaign.ice_campaign(...) for the standard test layout
-## (5 ice sprites in a row + one large ice sprite boss) or hand-build `fights`
-## itself for a bespoke campaign later. The shop that campaign shows is whatever
-## the module puts in `shop_stock` (a list of Item ids from ItemDB).
+## THIS FILE HOLDS NO CONTENT. Reusable fight sets (the shared "ice" set, the
+## enemy specs, the loot tables) live in CampaignFights (campaign_fights.gd) so
+## a module can either call one of those builders or hand-build its own array.
+## Characters are NOT defined here either — a fight's enemy specs just NAME a
+## character module in scenes/characters/units/ (see CHARACTER_PRIMER).
 ## ----------------------------------------------------------------------------
 
 # --- identity / presentation ------------------------------------------------
@@ -25,21 +27,25 @@ class_name Campaign
 @export var map_position: Vector2 = Vector2(0.5, 0.5)
 
 # --- graph links ------------------------------------------------------------
-## Ids of the campaign(s) this one leads to. 0 = end, 1 = linear, >1 = fork.
+## Ids of the campaign(s) this one leads to. 0 = map end, 1 = a single onward
+## step, >1 = a fork the player picks between. Either way the player confirms it
+## on the post-boss popup; nothing advances automatically.
 var next_ids: Array = []
 
 # --- content ----------------------------------------------------------------
-## Ordered fights; each is a plain spec Dictionary (see the fight builders).
+## This campaign's ordered campaign battles. Each is a plain fight spec:
 ##   { "id", "name", "is_boss":bool, "enemies":[spec...], "loot_table":{...} }
+## Filled by the module's fights().
 var fights: Array = []
-## Training fights available from this campaign's igloo (dummy for now).
+## This campaign's training fights, available from its igloo. SAME fight spec
+## shape as `fights`. Filled by the module's training_fights().
 var training_pool: Array = []
 ## Clickable objects on this campaign's overworld. Buttons can be placed
 ## differently per campaign. Each: { "name", "rect":Rect2, "action" }.
 var overworld_objects: Array = []
 ## The items this campaign's SHOP sells: a list of Item ids (Strings) that exist
-## in ItemDB. Set per-module in <id>.gd; the shop screen reads this from the
-## current campaign. Empty -> the shop shows nothing for this campaign.
+## in ItemDB. Set per-module; the shop screen reads this from the current
+## campaign. Empty -> the shop shows nothing for this campaign.
 var shop_stock: Array = []
 ## Free-form room for future per-campaign data (story flags, rewards, etc.).
 var extra: Dictionary = {}
@@ -55,6 +61,14 @@ func fight_at(i: int) -> Dictionary:
 		return {}
 	return fights[i]
 
+func training_count() -> int:
+	return training_pool.size()
+
+func training_at(i: int) -> Dictionary:
+	if i < 0 or i >= training_pool.size():
+		return {}
+	return training_pool[i]
+
 ## The shop stock as a clean Array of String ids (defensive copy).
 func shop_stock_ids() -> Array:
 	var out := []
@@ -63,64 +77,13 @@ func shop_stock_ids() -> Array:
 	return out
 
 # ---------------------------------------------------------------------------
-# Default overworld layout (matches the old single overworld placement)
+# Construction  (what every module's build() starts from)
 # ---------------------------------------------------------------------------
-static func default_objects() -> Array:
-	return [
-		{"name": "shop",     "rect": Rect2(180, 270, 160, 160),  "action": "shop"},
-		{"name": "training", "rect": Rect2(688, 270, 160, 160),  "action": "training"},
-		{"name": "campaign", "rect": Rect2(1060, 240, 360, 220), "action": "campaign"},
-	]
-
-# ---------------------------------------------------------------------------
-# Enemy / fight builders  (the standard "ice" content for now)
-# ---------------------------------------------------------------------------
-## Enemy specs now just NAME a character module (see scenes/characters/units/).
-## The creature's stats, colour, size, AI and permanent buffs all live in its
-## module file — CharacterRegistry.build() instantiates it. A fight can still add
-## per-fight overrides to the returned dict (e.g. {"character":"ice_spirit",
-## "level":3, "stats":{"vigor":20}}) and apply_spec_overrides layers them on top.
-static func ice_sprite_spec() -> Dictionary:
-	return { "character": "ice_spirit" }
-
-## The boss: its own module (LargeIceSpirit) — the same creature, bigger + tougher.
-static func large_ice_sprite_spec() -> Dictionary:
-	return { "character": "large_ice_spirit" }
-
-static func normal_loot() -> Dictionary:
-	return {
-		"money_min": 15, "money_max": 40,
-		"xp_min": 500, "xp_max": 800,
-		"items": [
-			{"id": "frost_shard", "name": "Frost Shard", "chance": 0.8},
-			{"id": "sprite_dust", "name": "Sprite Dust", "chance": 0.4},
-		],
-	}
-
-static func boss_loot() -> Dictionary:
-	return {
-		"money_min": 80, "money_max": 150,
-		"xp_min": 2000, "xp_max": 3000,
-		"items": [
-			{"id": "frost_core", "name": "Frost Core", "chance": 1.0},
-			{"id": "sprite_dust", "name": "Sprite Dust", "chance": 0.75},
-		],
-	}
-
-static func dummy_training_pool(p_id: String) -> Array:
-	return [
-		{
-			"id": "%s_dummy" % p_id, "name": "Training Dummy",
-			"type": "enemy", "max_hp": 9999, "ai": "none",
-		},
-	]
-
-# ---------------------------------------------------------------------------
-# Standard test campaign: 5 ice sprites in a row + one large ice sprite boss.
-# ---------------------------------------------------------------------------
-## NOTE: this factory does NOT set shop_stock — each module declares its own so
-## the shop's contents live in that campaign's file, not hard-coded in the shop.
-static func ice_campaign(p_id: String, p_name: String, p_scene: String,
+## Makes an EMPTY campaign shell: identity, map placement, links and the default
+## overworld layout. It deliberately sets NO fights, NO training fights and NO
+## shop stock — the module supplies those, so a campaign's content never comes
+## from somewhere the module's author can't see.
+static func make(p_id: String, p_name: String, p_scene: String,
 		p_next: Array, p_map: Vector2,
 		p_bg: Color = Color(0.10, 0.55, 0.75)) -> Campaign:
 	var c := Campaign.new()
@@ -131,23 +94,17 @@ static func ice_campaign(p_id: String, p_name: String, p_scene: String,
 	c.map_position = p_map
 	c.background_color = p_bg
 	c.overworld_objects = default_objects()
-	c.training_pool = dummy_training_pool(p_id)
-
 	c.fights = []
-	for n in range(1, 6):   # fights 1..5 — one ice sprite each, in a row
-		c.fights.append({
-			"id": "%s_fight_%d" % [p_id, n],
-			"name": "Ice Sprite %d" % n,
-			"is_boss": false,
-			"enemies": [ ice_sprite_spec() ],
-			"loot_table": normal_loot(),
-		})
-	# fight 6 — the boss
-	c.fights.append({
-		"id": "%s_boss" % p_id,
-		"name": "Large Ice Sprite",
-		"is_boss": true,
-		"enemies": [ large_ice_sprite_spec() ],
-		"loot_table": boss_loot(),
-	})
+	c.training_pool = []
+	c.shop_stock = []
 	return c
+
+# ---------------------------------------------------------------------------
+# Default overworld layout (a module can replace c.overworld_objects wholesale)
+# ---------------------------------------------------------------------------
+static func default_objects() -> Array:
+	return [
+		{"name": "shop",     "rect": Rect2(180, 270, 160, 160),  "action": "shop"},
+		{"name": "training", "rect": Rect2(688, 270, 160, 160),  "action": "training"},
+		{"name": "campaign", "rect": Rect2(1060, 240, 360, 220), "action": "campaign"},
+	]

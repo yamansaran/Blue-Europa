@@ -31,8 +31,10 @@ var _battle_over: bool = false
 
 # --- turn cycle --------------------------------------------------------
 var _round: int = 1
-## Player ability cooldowns: ability id (String) -> turns remaining. Shared by
-## reference with the wheel so it can grey out abilities that are cooling down.
+## Player ability cooldowns: wheel SLOT INDEX (int) -> turns remaining. Keyed by
+## slot, not ability id, so two copies of the same ability on the wheel cool down
+## independently. Shared by reference with the wheel so it can grey out the exact
+## slot that is cooling down.
 var _player_cooldowns: Dictionary = {}
 
 ## Action-point economy. The player refills to their `action_points` stat at the
@@ -414,8 +416,8 @@ func _on_wheel_slot_selected(index: int, ability_id: String) -> void:
 	if CombatBuffs.is_stunned(_player.body):
 		print("[combat] %s is stunned and cannot act." % _player.unit_name)
 		return
-	if _ability_on_cooldown(ability_id):
-		print("[combat] %s is on cooldown (%d turns)." % [ability.display_name, _cooldown_left(ability_id)])
+	if _ability_on_cooldown(index):
+		print("[combat] %s is on cooldown (%d turns)." % [ability.display_name, _cooldown_left(index)])
 		return
 	if ability.spirit_cost() > 0 and CombatBuffs.is_silenced(_player.body):
 		print("[combat] %s is silenced — cannot use %s." % [_player.unit_name, ability.display_name])
@@ -424,7 +426,7 @@ func _on_wheel_slot_selected(index: int, ability_id: String) -> void:
 	if ability.action_cost > _player_ap + AP_EPSILON:
 		print("[combat] not enough action points for %s (need %.2f, have %.2f)." % [ability.display_name, ability.action_cost, _player_ap])
 		return
-	_use_ability(ability, tgt)
+	_use_ability(ability, tgt, index)
 
 func _get_ability(id: String) -> Ability:
 	var db := get_node_or_null("/root/AbilityDB")
@@ -470,7 +472,7 @@ func _valid_target(ability: Ability, tgt: BattleCharacter) -> bool:
 ## Resolve a used ability. Spirit cost is checked/spent for EVERY kind now; the
 ## effect branches on kind. On a successful active use the ability's cooldown is
 ## started and the wheel state is re-synced.
-func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
+func _use_ability(ability: Ability, tgt: BattleCharacter, slot: int = -1) -> void:
 	# The player's invested rank drives cost, effect and cooldown for this cast.
 	var rank := _ability_rank(ability)
 	var sp_cost := ability.spirit_cost_at(rank)
@@ -501,8 +503,9 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 			if per_elem != "":
 				dmg *= CombatBuffs.count_debuffs_of_element(tgt.body, per_elem)
 			# Pass the attacker as the source so the target's "when struck"
-			# reactions (thorns, ...) can hit back.
-			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]), _player, not ability.skip_ice_amp)
+			# reactions (thorns, ...) can hit back — plus the hidden delivery class,
+			# since those reactions answer ATTACKS only and stay silent for a spell.
+			tgt.take_damage(dmg, str(hit["element"]), bool(hit["is_crit"]), _player, not ability.skip_ice_amp, ability.is_attack_delivery())
 			# an attack may also drop a buff/debuff on the target (transient effect)
 			_maybe_apply_buff(ability, tgt, rank)
 			# ...and apply any one-time spirit gain (caster) / steal (target).
@@ -558,8 +561,10 @@ func _use_ability(ability: Ability, tgt: BattleCharacter) -> void:
 	if _player and sp_cost > 0:
 		_player.spend_spirit(sp_cost)
 	var cd := ability.cooldown_at(rank)
-	if cd > 0:
-		_player_cooldowns[String(ability.id)] = cd
+	if cd > 0 and slot >= 0:
+		# Cool down THIS wheel slot only — another copy of the same ability in a
+		# different slot keeps its own independent cooldown.
+		_player_cooldowns[slot] = cd
 	# spend action points; when the budget is exhausted the player's turn ends.
 	_player_ap = maxf(0.0, _player_ap - ability.action_cost)
 	_sync_wheel_state()
@@ -625,13 +630,23 @@ func _apply_spirit_effects(ability: Ability, tgt: BattleCharacter, rank: int) ->
 ## buff (e.g. a stun) to the target, and deal bonus damage equal to a fraction of the
 ## target's max HP as the shatter element. A no-op for an attack that sets no
 ## consume_debuff_element, or when the target carries no matching debuff. The bonus
-## damage is dealt with NO source, so it triggers no on-struck reaction.
+## damage is a real hit of that element — mitigated by the target's resistance, helped
+## by the attacker's pierce/amp, and amplified by hoarfrost — but it is dealt with NO
+## source, so it triggers no on-struck reaction and cannot recurse.
 func _apply_shatter(ability: Ability, tgt: BattleCharacter, rank: int) -> void:
 	if ability == null or not ability.has_shatter():
 		return
 	if tgt == null or tgt.body == null:
 		return
 	var elem := String(ability.consume_debuff_element)
+	var s_elem := String(ability.shatter_damage_element)
+	# HOARFROST, SAMPLED FIRST. Hoarfrost is itself an ICE-tagged debuff, so the gate
+	# below can consume the very entry that carries the amp (it is usually the only ice
+	# debuff on the target). Read the bonus BEFORE the gate runs; it is applied to — and
+	# consumed by — the shatter damage further down. 0.0 when there is no hoarfrost.
+	var ice_amp := 0.0
+	if s_elem == "ice" and not ability.skip_ice_amp:
+		ice_amp = CombatBuffs.ice_amp_bonus(tgt.body)
 	# The gate: consuming succeeds iff the target actually had such a debuff.
 	if not CombatBuffs.consume_oldest_debuff_of_element(tgt.body, elem):
 		return
@@ -642,12 +657,26 @@ func _apply_shatter(ability: Ability, tgt: BattleCharacter, rank: int) -> void:
 		var entry := BuffLibrary.build(bid, caster, tgt.body)
 		if not entry.is_empty():
 			CombatBuffs.apply(tgt.body, entry)
-	# 2) bonus damage as a fraction of the target's max HP, as the shatter element
+	# 2) bonus damage as a fraction of the target's max HP, as the shatter element.
+	# The raw %-max-HP figure is only the ABILITY OUTPUT: it is run through the normal
+	# damage pipeline (CombatMath.resolve_flat) so the attacker's damage_dealt_mult,
+	# the target's resistance (flat + the multiplicative resist layer), the attacker's
+	# pierce + amp for the shatter element and the target's damage_taken_mult all apply,
+	# exactly as they would for the attack's own hit. Crit is deliberately NOT rolled.
 	var pct := ability.shatter_pct_max_hp_at(rank)
 	if pct > 0.0 and tgt.is_alive():
-		var bonus := int(round(maxf(0.0, float(tgt.get_max_hp()) * pct)))
+		var s_atk: CharacterBase = _player.body if _player else null
+		var raw := maxf(0.0, float(tgt.get_max_hp()) * pct)
+		var bonus := CombatMath.resolve_flat(s_atk, tgt.body, raw, s_elem)
+		# Hoarfrost is applied HERE rather than inside take_damage: this hit is dealt with
+		# no source, and take_damage only amps a SOURCED ice hit. `ice_amp` was sampled
+		# above the gate, so the boost lands even when the gate ate the hoarfrost entry
+		# itself; consume whatever ice-amp debuffs are still on the target either way.
+		if bonus > 0 and ice_amp > 0.0:
+			bonus = int(round(maxf(0.0, float(bonus) * (1.0 + ice_amp))))
+			CombatBuffs.consume_ice_amp(tgt.body)
 		if bonus > 0:
-			tgt.take_damage(bonus, String(ability.shatter_damage_element), false)
+			tgt.take_damage(bonus, s_elem, false)
 	tgt.refresh_bar()
 	tgt.refresh_buffs()
 	print("[combat] %s shatters a %s debuff on %s." % [ability.display_name, elem, tgt.unit_name])
@@ -658,19 +687,19 @@ func _gui_input(event: InputEvent) -> void:
 			_wheel.close()
 
 # ---- cooldowns --------------------------------------------------------
-func _ability_on_cooldown(id: String) -> bool:
-	return int(_player_cooldowns.get(id, 0)) > 0
+func _ability_on_cooldown(slot: int) -> bool:
+	return int(_player_cooldowns.get(slot, 0)) > 0
 
-func _cooldown_left(id: String) -> int:
-	return int(_player_cooldowns.get(id, 0))
+func _cooldown_left(slot: int) -> int:
+	return int(_player_cooldowns.get(slot, 0))
 
 func _decrement_player_cooldowns() -> void:
-	for id in _player_cooldowns.keys():
-		var v := int(_player_cooldowns[id]) - 1
+	for slot in _player_cooldowns.keys():
+		var v := int(_player_cooldowns[slot]) - 1
 		if v <= 0:
-			_player_cooldowns.erase(id)
+			_player_cooldowns.erase(slot)
 		else:
-			_player_cooldowns[id] = v
+			_player_cooldowns[slot] = v
 
 ## Hand the wheel the current caster body + the (shared) cooldown map so it can
 ## grey out silenced / cooling-down / stunned abilities.

@@ -64,8 +64,9 @@ func set_mode_edit() -> void:
 		_tooltip.hide_tip()
 	queue_redraw()
 
-## Combat hands over the caster's body + the (shared-by-reference) cooldown map so
-## the wheel can grey out unusable abilities. Safe to call with null.
+## Combat hands over the caster's body + the (shared-by-reference) cooldown map
+## (SLOT INDEX -> turns left) so the wheel can grey out unusable slots. Safe to
+## call with null.
 func set_use_state(caster_body: CharacterBase, cooldowns: Dictionary) -> void:
 	_caster_body = caster_body
 	_cooldowns = cooldowns
@@ -168,7 +169,9 @@ func _ability_at_slot(i: int) -> Ability:
 func _cooldown_of(i: int) -> int:
 	if mode != Mode.USE:
 		return 0
-	return int(_cooldowns.get(_id_at_slot(i), 0))
+	# Cooldowns are keyed by SLOT INDEX, so each copy of an ability greys out on its
+	# own cooldown rather than sharing one with every other copy.
+	return int(_cooldowns.get(i, 0))
 
 ## An ability is unusable (greyed, unselectable) when the caster is stunned, the
 ## slot is on cooldown, or it costs spirit while the caster is silenced.

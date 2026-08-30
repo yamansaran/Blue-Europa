@@ -8,10 +8,11 @@ class_name CampaignOverworld
 ## campaign's own overworld_objects, so different campaigns can lay them out
 ## differently), and a campaign PROGRESS BAR that fills as fights are cleared.
 ##
-## When the current campaign is finished it shows the FORK chooser (pick the next
-## campaign) — or, at the end of the map, a "Campaign Complete!" note. Linear
-## (single-next) advances happen automatically before this screen loads, in
-## GameManager.go_to_overworld().
+## When the current campaign is finished it shows the ADVANCE popup — one button
+## per campaign this one leads to. Nothing ever advances by itself: a single way
+## on is a one-button popup, a real choice (c1's opening split, the level-5 fork)
+## is two or three. At the end of the map there is a "Campaign Complete!" note
+## instead.
 ## ----------------------------------------------------------------------------
 
 var _objects: Array = []          # {name, rect, action}
@@ -28,7 +29,7 @@ func _ready() -> void:
 		camp = CampaignDB.get_current()
 	_build(camp)
 	if typeof(CampaignDB) != TYPE_NIL:
-		if CampaignDB.needs_choice():
+		if CampaignDB.can_advance():
 			_show_fork(camp)
 		elif CampaignDB.is_final():
 			_show_final(camp)
@@ -98,6 +99,8 @@ func _object_label(action: String) -> String:
 			if typeof(CampaignDB) != TYPE_NIL and CampaignDB.is_current_complete():
 				if CampaignDB.needs_choice():
 					return "EXPANSE (choose path)"
+				if CampaignDB.can_advance():
+					return "EXPANSE (move on)"
 				return "EXPANSE (cleared)"
 			return "EXPANSE (Campaign Battle)"
 	return action
@@ -126,14 +129,15 @@ func _do(action: String) -> void:
 			GameManager.go_to_training()
 		"campaign":
 			if typeof(CampaignDB) != TYPE_NIL and CampaignDB.is_current_complete():
-				# Finished: either open the fork chooser or (at the end) do nothing.
-				if CampaignDB.needs_choice():
+				# Finished: re-open the advance popup, or (at the map end) do nothing.
+				if CampaignDB.can_advance():
 					_show_fork(CampaignDB.get_current())
 			else:
 				GameManager.go_to_campaign_battle()
 
 # ---------------------------------------------------------------------------
-# Fork chooser (shown when a finished campaign has more than one next)
+# Advance popup (shown whenever a finished campaign has ANY next campaign —
+# one button per next, so a single way on is still a deliberate click)
 # ---------------------------------------------------------------------------
 func _show_fork(camp: Campaign) -> void:
 	if _fork_overlay != null or camp == null:
@@ -158,7 +162,9 @@ func _show_fork(camp: Campaign) -> void:
 	overlay.add_child(box)
 
 	var q := Label.new()
-	q.text = "%s cleared!  Choose your path:" % camp.display_name
+	var many: bool = camp.next_ids.size() > 1
+	q.text = "%s cleared!  %s" % [camp.display_name,
+			"Choose your path:" if many else "Press on to:"]
 	q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	q.add_theme_font_size_override("font_size", 22)
 	q.add_theme_color_override("font_color", Color(1, 1, 1))

@@ -117,6 +117,45 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 	result["damage"] = int(round(maxf(0.0, final_dmg)))
 	return result
 
+## Resolve a FLAT damage amount — one that does NOT come from an ability's power
+## formula (Shatter's %-of-max-HP bonus hit, and anything else that hands us a number
+## directly) — through the same pipeline as a normal hit, minus the crit stage:
+##   1. PRE-MITIGATION : amount * (1 + the attacker's damage_dealt_mult basket)
+##                       (pass apply_pre_mult = false to skip this stage)
+##   2. MITIGATION     : the defender's element defense * (1 + resist_mult) vs the
+##                       attacker's pierce (+ extra_pierce) and amp, on the defender's
+##                       mitigation_stiffness curve. Skipped for the TRUE element.
+##   2b. the defender's damage_taken_mult (element-independent, so it scales TRUE too).
+## A null attacker means no pre-multiplier, no pierce and no amp (environmental damage);
+## a null defender means no mitigation. Returns the final integer damage.
+## NOTE: DoT and reflect damage deliberately do NOT route through here — they stay raw.
+static func resolve_flat(attacker: CharacterBase, defender: CharacterBase, amount: float, element: String = "physical", extra_pierce: float = 0.0, apply_pre_mult: bool = true) -> int:
+	var pre := maxf(0.0, amount)
+	if attacker != null and apply_pre_mult:
+		pre = maxf(0.0, pre * (1.0 + _pre_mitigation_bonus(attacker)))
+
+	var post := pre
+	if element != "true":
+		var resistance := 0.0
+		if defender != null:
+			resistance = defender.get_effective(Stats.defense_key(element))
+			resistance = maxf(0.0, resistance * (1.0 + CombatBuffs.resist_mult_bonus(defender, element)))
+		var pierce := 0.0
+		var amp := 0.0
+		if attacker != null:
+			pierce = attacker.get_effective(Stats.pierce_key(element)) + maxf(0.0, extra_pierce)
+			amp = attacker.get_effective(Stats.amp_key(element))
+		var stiffness := CombatMitigation.STIFFNESS_FALLBACK
+		if defender != null:
+			var s := defender.get_effective("mitigation_stiffness")
+			if s > 0.0:
+				stiffness = s
+		post = CombatMitigation.apply(pre, resistance, pierce, amp, stiffness)
+
+	if defender != null:
+		post = maxf(0.0, post * maxf(0.0, 1.0 + _damage_taken_bonus(defender)))
+	return int(round(maxf(0.0, post)))
+
 ## Convenience wrapper: just the final integer damage (backward compatible with
 ## the old signature used by combat.gd).
 static func resolve_damage(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1) -> int:
