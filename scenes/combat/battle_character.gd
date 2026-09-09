@@ -19,6 +19,55 @@ var buff_bar: BuffBar = null
 ## combat engine reads an enemy spec's "size_scale" and applies it in layout.
 var size_scale: float = 1.0
 
+# ---- formation slot (rev32) -------------------------------------------------
+## Where this unit stands in ITS SIDE'S BattleGrid: `grid_col` is 0 = BACK /
+## 1 = FRONT, `grid_row` is 0 (top) .. 4 (bottom). -1 = not seated yet, which is
+## the signal combat._place_units uses to deal this unit a slot; set both BEFORE
+## placement to pin a unit to a specific slot instead. The grid owns occupancy —
+## always seat a unit through BattleGrid.place/assign rather than by writing these
+## two directly, or the slot it left will still think it is there.
+## NOTHING reads these to make a decision yet (rev32 is slots and data only); they
+## drive position, draw order and the debug overlay.
+var grid_col: int = -1
+var grid_row: int = -1
+
+# ---- per-turn action state (EVERY unit has these, not just the player) ----
+## This unit's ability ids in SLOT order, snapshotted by combat at battle start.
+## For the PLAYER these are the wheel's equipped_abilities; for everyone else they
+## are body.abilities. Slot indices must stay stable for the whole fight — that is
+## what lets `cooldowns` key by them.
+var loadout: Array = []
+## Action points left THIS turn. Refilled to the body's (buffable) `action_points`
+## stat at the start of THIS UNIT'S OWN turn. An ability spends its action_cost
+## from here; the acting unit's turn auto-ends when the budget is gone.
+var ap: float = 0.0
+## Action points this unit has ACTUALLY SPENT during the current turn. rev30: the
+## timeline advance at the end of a turn is `interval * (ap_spent / max_ap)`, so
+## a unit that only spent half its budget before ending its turn waits only half
+## an interval for its next one. Reset alongside `ap`.
+var ap_spent: float = 0.0
+## Ability cooldowns for THIS unit: SLOT INDEX (int) -> turns remaining. Keyed by
+## slot rather than by ability id so two copies of the same ability cool down
+## independently. For the player this dict is handed to the ActionWheel BY
+## REFERENCE, so the wheel greys the exact slot that is cooling down.
+## rev30: a "turn" here is THIS UNIT'S OWN turn — cooldowns tick when this unit
+## acts, not on a global round boundary.
+var cooldowns: Dictionary = {}
+
+# ---- timeline state (rev30) -------------------------------------------------
+## The combat CLOCK VALUE at which this unit next acts. combat.gd advances its
+## clock to the smallest next_turn_at among the living and gives that unit a
+## turn; TurnTimeline draws this unit's bars starting here and repeating every
+## turn_interval() ticks. See CombatTimeline.
+var next_turn_at: float = 0.0
+## How many turns this unit has taken this fight. Bookkeeping / logs only.
+var turns_taken: int = 0
+## The interval this unit was last seen to have, so combat.gd can spot a change
+## (a haste buff landing, alacrity being drained) and rescale the REMAINING wait
+## proportionally instead of leaving the already-scheduled turn where it was.
+## 0.0 means "not sampled yet".
+var cached_interval: float = 0.0
+
 var _rect: ColorRect
 var _portrait: TextureRect
 var _label: Label
@@ -106,6 +155,61 @@ func get_spirit() -> int:
 
 func is_alive() -> bool:
 	return get_hp() > 0
+
+# ---- per-turn action state --------------------------------------------
+## Refill this unit's action-point budget to its EFFECTIVE action_points stat, so a
+## buff that grants an extra action just works. Called at the start of THIS UNIT'S
+## OWN turn; a dead unit refills to 0 and can't act. Also clears the spend counter
+## the timeline advance is computed from.
+func reset_ap() -> void:
+	ap_spent = 0.0
+	if body == null or not is_alive():
+		ap = 0.0
+		return
+	ap = maxf(0.0, body.get_effective("action_points"))
+
+## This unit's FULL action-point budget for a turn (as opposed to `ap`, what is
+## left of it). The denominator of the timeline-advance fraction.
+func max_ap() -> float:
+	if body == null:
+		return 1.0
+	return maxf(0.0, body.get_effective("action_points"))
+
+# ---- timeline ---------------------------------------------------------
+## How many clock TICKS pass between this unit's turns, from its LIVE effective
+## alacrity and turn_rate — so a haste buff shortens it (and visibly shortens the
+## unit's bars on the TurnTimeline) the moment it lands. See CombatTimeline.
+func turn_interval() -> float:
+	return CombatTimeline.interval_for(body)
+
+## The ability id in `slot` of this unit's loadout ("" when the slot is empty or out
+## of range — the wheel's slot array is padded, so empty slots are normal).
+func ability_at(slot: int) -> String:
+	if slot < 0 or slot >= loadout.size():
+		return ""
+	return str(loadout[slot])
+
+func cooldown_left(slot: int) -> int:
+	return int(cooldowns.get(slot, 0))
+
+func on_cooldown(slot: int) -> bool:
+	return cooldown_left(slot) > 0
+
+## Start `turns` of cooldown on `slot`. A slot of -1 (an ability used from no slot)
+## simply doesn't cool down.
+func start_cooldown(slot: int, turns: int) -> void:
+	if slot < 0 or turns <= 0:
+		return
+	cooldowns[slot] = turns
+
+## Tick every cooling slot down one turn, dropping the ones that finished.
+func tick_cooldowns() -> void:
+	for slot in cooldowns.keys():
+		var v := int(cooldowns[slot]) - 1
+		if v <= 0:
+			cooldowns.erase(slot)
+		else:
+			cooldowns[slot] = v
 
 func refresh_bar() -> void:
 	if health_bar:
@@ -222,6 +326,37 @@ func _spawn_number(amount: int, element: String, is_crit: bool, is_heal: bool) -
 		return
 	var point := position + Vector2(size.x * 0.5, size.y * 0.30)   # our upper-centre
 	DamageNumber.spawn(host, point, amount, element, is_crit, is_heal)
+
+## Float a STATUS word over this unit — "DODGE" when it evades an attack, "RESIST"
+## when it shrugs off a debuff. Same host/positioning rules as a damage number, so
+## it is neither clipped to our rect nor dimmed by the death grey-out.
+func float_status(label: String, color: Color, font_size: int = DamageNumber.STATUS_FONT_SIZE) -> void:
+	var host := get_parent()
+	if host == null:
+		return
+	var point := position + Vector2(size.x * 0.5, size.y * 0.30)
+	DamageNumber.spawn_text(host, point, label, color, font_size)
+
+## Convenience wrappers so combat.gd never has to know the palette.
+func float_dodge() -> void:
+	float_status("DODGE", DamageNumber.DODGE_COLOR)
+
+func float_resist() -> void:
+	float_status("RESIST", DamageNumber.RESIST_COLOR)
+
+## A debuff landed AMPLIFIED by the caster's surplus Disdain. Reports what was
+## actually gained: the potency multiplier when it grew, and "+NT" when the duration
+## roll paid out. Called only when at least one of the two happened, so an unempowered
+## cast floats nothing and the screen stays quiet at parity.
+func float_empowered(potency: float, extra_turns: int) -> void:
+	var parts := []
+	if potency > 1.0:
+		parts.append("x%.2f" % potency)
+	if extra_turns > 0:
+		parts.append("+%dT" % extra_turns)
+	if parts.is_empty():
+		return
+	float_status(" ".join(parts), DamageNumber.EMPOWER_COLOR, DamageNumber.EMPOWER_FONT_SIZE)
 
 ## Spend spirit (the resource formerly called focus). Returns false if short.
 func spend_spirit(amount: int) -> bool:

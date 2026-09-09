@@ -95,6 +95,12 @@ func _build_form() -> void:
 	# Hidden DoT-vulnerability multiplier (1.0 = normal). Editable here so DoT +
 	# debuff interactions can be tested against the dummy.
 	_add_field(misc_grid, "vulnerability", "Vulnerability", _body.get_base("vulnerability"), 0.0, 100.0, 0.05)
+	# TIMELINE knobs (rev30). turn_rate DIVIDES the unit's turn interval — 2.0 gives
+	# it twice as many turns — while action_points is how many actions it gets INSIDE
+	# one turn. Editable here so the scrolling turn counter can be exercised against
+	# the dummy without authoring a spec.
+	_add_field(misc_grid, "turn_rate", "Turn Rate", _turn_rate_base(), 0.05, 20.0, 0.05)
+	_add_field(misc_grid, "action_points", "Action Points", _body.get_base("action_points"), 0.0, 20.0, 0.5)
 
 	# --- PER-ELEMENT defense / pierce / amp ---
 	for e in Stats.REAL_ELEMENTS:
@@ -124,6 +130,13 @@ func _build_form() -> void:
 	close_btn.text = "Close"
 	close_btn.pressed.connect(hide)
 	btn_row.add_child(close_btn)
+
+## turn_rate's base, defaulting a body built before the stat existed to 1.0 rather
+## than to get_base's 0.0 (which the form would then WRITE BACK as 0 on Apply).
+func _turn_rate_base() -> float:
+	if _body == null or not _body.base_stats.has("turn_rate"):
+		return Stats.TURN_RATE_DEFAULT
+	return _body.get_base("turn_rate")
 
 func _section(parent: Control, text: String) -> void:
 	var lbl := Label.new()

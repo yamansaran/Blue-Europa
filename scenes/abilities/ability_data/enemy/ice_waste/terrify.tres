@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bz1ice003"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"terrify"
+display_name = "Terrify"
+description = "It is not doing anything. That is the problem. The target bleeds resolve and spirit for 4 turns."
+max_points = 3
+max_equipped = 1
+action_cost = 1.0
+kind = 2
+delivery = 0
+target = 0
+element = 7
+cost_type = 1
+cost_amount = 20
+cooldown = 4
+cooldown_ranks = Array[int]([4, 3, 3])
+cost_amount_ranks = Array[int]([20, 20, 15])
+applies_buff = &"terrified"

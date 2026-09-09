@@ -22,7 +22,14 @@ extends Node
 signal changed
 
 const SAVE_PATH := "user://character.save"
-const SAVE_VERSION := 3          # bump discards any older save (fresh start)
+const SAVE_VERSION := 4          # bump discards any older save (fresh start)
+								 # 3 -> 4: the LevelTable XP curve was retuned
+								 # (821,575 -> 216,000 total to level 50). Level is
+								 # re-derived from xp on load, so a v3 save would
+								 # have jumped up to 15 levels WITHOUT ever running
+								 # _grant_level_up_rewards — arriving at the new
+								 # level owing skill and attribute points it never
+								 # received. Discarding is the honest fix.
 const WHEEL_SLOTS := 10       # BASE wheel slots; Overmind adds on top (wheel_slot_count)
 
 ## Each attribute point adds this much to its major stat.
@@ -526,7 +533,9 @@ func refund(node_id: String) -> bool:
 		_resync_unlocked_from_allocations()
 	# A rank change can shrink the wheel (Overmind) and/or lower an equipped per-rank
 	# passive's bonus (Beautiful Form), so re-normalize and rebuild exactly as invest does.
-	_normalize_wheel()
+	# allow_drop: the player deliberately gave the point back, so an ability left in a
+	# now-gone slot is auto-unequipped rather than blocking the wheel from shrinking.
+	_normalize_wheel(true)
 	_refresh_passives_after_wheel_change()
 	changed.emit()
 	save_game()
@@ -541,9 +550,9 @@ func respec() -> void:
 	# Refunding the points also re-locks every node, so the abilities those nodes
 	# granted must leave the pool — otherwise they linger as unlocked forever.
 	_resync_unlocked_from_allocations()
-	# Overmind's bonus slots are gone now — shrink the wheel back (only trailing empty
-	# slots are dropped) and rebuild passives at their reset ranks.
-	_normalize_wheel()
+	# Overmind's bonus slots are gone now — shrink the wheel back (auto-unequipping
+	# anything still parked in a bonus slot) and rebuild passives at their reset ranks.
+	_normalize_wheel(true)
 	_refresh_passives_after_wheel_change()
 	changed.emit()
 	save_game()
@@ -769,16 +778,31 @@ func move_equipped(from_slot: int, to_slot: int) -> bool:
 	return true
 
 ## Size equipped_abilities to the current wheel_slot_count() (base + Overmind bonus).
-## GROWS to the target, but only SHRINKS by dropping TRAILING EMPTY slots — so an
-## equipped ability is never silently deleted if the count drops (e.g. AbilityDB not
-## ready yet at cold boot, or a respec removed Overmind). The deferred post-load sync
-## re-runs this once AbilityDB is available to restore any bonus slots.
-func _normalize_wheel() -> void:
+## GROWS to the target by appending empty slots. SHRINKING has two modes:
+##
+##   allow_drop == false (the default, used by the LOAD paths) — only TRAILING EMPTY
+##     slots are dropped, so an equipped ability is never silently deleted when the
+##     count reads low for a reason that is not real progression (e.g. AbilityDB is not
+##     ready yet at cold boot, so Overmind's bonus reads as 0). The deferred post-load
+##     sync re-runs this once AbilityDB is available to restore any bonus slots.
+##
+##   allow_drop == true (used by refund()/respec(), where the player really did hand
+##     the Overmind points back) — any ability still sitting in a slot past the new
+##     target is AUTOMATICALLY UNEQUIPPED first, so the wheel actually shrinks instead
+##     of getting stuck at its old size because the last slot happened to be occupied.
+##     Callers rebuild the passives basket right after, which is what a slotted passive
+##     losing its slot this way needs.
+func _normalize_wheel(allow_drop: bool = false) -> void:
 	for i in equipped_abilities.size():
 		equipped_abilities[i] = str(equipped_abilities[i])
 	var target := wheel_slot_count()
 	while equipped_abilities.size() < target:
 		equipped_abilities.append("")
+	if allow_drop:
+		# Clear every slot past the new last one BEFORE truncating, so the trailing-empty
+		# loop below can always shrink the array all the way down to `target`.
+		for i in range(target, equipped_abilities.size()):
+			equipped_abilities[i] = ""
 	while equipped_abilities.size() > target and str(equipped_abilities[equipped_abilities.size() - 1]) == "":
 		equipped_abilities.remove_at(equipped_abilities.size() - 1)
 

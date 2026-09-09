@@ -87,18 +87,26 @@ static func ice_fights(p_id: String) -> Array:
 	})
 	return out
 
+## THE PRACTICE DUMMY as a training fight spec. It gets its own builder because it
+## is BOTH the default training pool AND the debug fallback that
+## GameManager.go_to_training_dummy always reaches, and those two must not drift.
+static func training_dummy_fight(p_id: String) -> Dictionary:
+	return {
+		"id": "%s_training_dummy" % p_id,
+		"name": "Training Dummy",
+		"is_boss": false,
+		"enemies": [ training_dummy_spec() ],
+		"loot_table": no_loot(),
+	}
+
 ## THE STANDARD TRAINING SET: one unkillable dummy. Training fights use the SAME
-## spec shape as campaign fights (id / name / is_boss / enemies / loot_table), so
-## a training fight can hold several characters and its own loot just like a real
-## one. (The training SCREEN is still a placeholder — this data is authored and
-## waiting for it.)
+## spec shape as campaign fights (id / name / is_boss / enemies / loot_table) PLUS
+## the optional weight / min_cleared / max_cleared keys that make a pool a weighted,
+## progress-gated SELECTION rather than a fixed menu (Campaign.training_roll).
+##
+## This set sets none of those three, so it is one always-available entry at weight
+## 1 and rolling from it can only ever produce the dummy — which is why the twenty-
+## two campaigns still calling it are completely unaffected by training becoming a
+## roll. A campaign that wants a real training selection writes its own array (c1).
 static func ice_training(p_id: String) -> Array:
-	return [
-		{
-			"id": "%s_training_dummy" % p_id,
-			"name": "Training Dummy",
-			"is_boss": false,
-			"enemies": [ training_dummy_spec() ],
-			"loot_table": no_loot(),
-		},
-	]
+	return [ training_dummy_fight(p_id) ]

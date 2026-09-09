@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://b83aspl5gnjgm"]
 
-[ext_resource type="Script" path="res://scenes/victory/victory.gd" id="1_victory"]
+[ext_resource type="Script" uid="uid://c8krxk3yri8it" path="res://scenes/victory/victory.gd" id="1_victory"]
 
-[node name="Victory" type="Control"]
+[node name="Victory" type="Control" unique_id=13388173]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bz1cha001"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"never_rest"
+display_name = "Never Rest"
+description = "He has not stopped since the crash and he does not intend to. Restore health equal to {scaling} to an ally."
+max_points = 3
+max_equipped = 1
+action_cost = 1.0
+kind = 3
+delivery = 0
+target = 1
+element = 1
+cost_type = 1
+cost_amount = 25
+cooldown = 2
+base_power = 0.0
+scaling_stat = &"instinct"
+scaling_mult = 0.65
+scaling_mult_ranks = Array[float]([0.65, 0.81, 0.98])

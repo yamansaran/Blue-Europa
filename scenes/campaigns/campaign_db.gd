@@ -147,6 +147,21 @@ func training_fights() -> Array:
 	var c := get_current()
 	return c.training_pool.duplicate(true) if c else []
 
+## The training fights currently OFFERED — the subset of the pool whose progress
+## gate contains the player's position in this campaign. Debug/UI use; the game
+## itself only ever wants training_fight() below.
+func training_selection() -> Array:
+	var c := get_current()
+	return c.training_available(fight_index) if c else []
+
+## ROLL the next training fight: one weighted pick out of the current selection,
+## which moves as the player clears this campaign's fights. Returns {} when the
+## campaign has no training pool at all, which is the caller's cue to fall back to
+## the bare practice dummy.
+func training_fight() -> Dictionary:
+	var c := get_current()
+	return c.training_roll(fight_index) if c else {}
+
 ## The current campaign is finished AND there is somewhere to go. TRUE for a
 ## single onward step as well as a fork — the player always confirms the move,
 ## so this is what the overworld uses to decide whether to show the popup.
@@ -184,6 +199,31 @@ func advance_to(next_id: String) -> void:
 	current_id = next_id
 	fight_index = 0
 	path_history.append(next_id)
+	save_game()
+
+## DEBUG (the overworld's fight picker): set which of the CURRENT campaign's fights
+## is the next one — i.e. rewrite how far through the zone the player is, so any
+## fight can be reached without playing the ones before it.
+##
+## Gated on GameManager.is_debug() HERE as well as at the button that calls it, for
+## the same reason go_to_campaign_map is: a debug mutation of saved progression
+## should not be reachable just because someone found a way to call it.
+##
+## `i` is clamped to [0, fight_count]; passing fight_count marks the campaign COMPLETE
+## (which is what makes the advance popup reachable for testing). completed_campaigns
+## is kept in step both ways, so stepping BACKWARDS off a completed campaign really
+## un-completes it rather than leaving a stale flag behind.
+func debug_set_fight_index(i: int) -> void:
+	if typeof(GameManager) != TYPE_NIL and GameManager.has_method("is_debug") \
+	and not GameManager.is_debug():
+		return
+	var total := fights_total()
+	fight_index = clampi(i, 0, total)
+	if is_current_complete():
+		completed_campaigns[current_id] = true
+	else:
+		completed_campaigns.erase(current_id)
+	print("[debug] campaign '%s': next fight set to %d/%d." % [current_id, fight_index, total])
 	save_game()
 
 ## DEBUG (world map): jump straight to a campaign and restart its fights.

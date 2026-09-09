@@ -73,12 +73,17 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 				"id": "resist_down_drain",
 				"source": "Dalet — Sap",
 				"desc": "Lowers all resistances by 15 (flat) and drains 20 spirit at the start of each turn for 5 turns.",
+				"desc_template": "Lowers all resistances by {modabs:ice_defense} (flat) and drains {spiritabs} spirit at the start of each turn ({turns} left).",
 				"kind": Buff.KIND_DEBUFF,
 				"visible": true,
 				"duration": 5,
 				"stackable": false,
 				"weight": 1.0,
 				"resistible": true,
+				# DISDAIN SCALING: a broad stat-cut + drain. Scales well on both axes,
+				# though not as hard as a pure damage-over-time.
+				"potency_scale": 0.75,
+				"duration_scale": 0.75,
 				"mods": _all_resist_mods(-15.0),   # flat resist reduction (additive)
 				"spirit_per_turn": -20.0,          # drain
 			})
@@ -250,7 +255,14 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 				"duration": 1,
 				"stackable": false,
 				"weight": 1.0,
-				"resistible": false,
+				"resistible": false,   # already paid for by consuming an ice debuff
+				# DISDAIN SCALING: a stun has no magnitude to amplify, and an extra turn
+				# of it is the single most powerful thing a debuff can gain — so potency
+				# is off entirely and the duration roll is the stingiest in the catalogue,
+				# capped at ONE extra turn however far Disdain runs ahead.
+				"potency_scale": 0.0,
+				"duration_scale": 0.2,
+				"max_extra_duration": 1,
 				"stun": true,
 			})
 
@@ -408,12 +420,17 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 				"id": "rime_skin",
 				"source": "Rime Skin",
 				"desc": "Rime Skin: healing received cut by 50%; when struck by an attack, takes 5% of maximum health as ice damage.",
+				"desc_template": "Rime Skin: healing received cut by {modpctabs:healing_received_mult}%; when struck by an attack, takes 5% of maximum health as ice damage. ({turns} left)",
 				"kind": Buff.KIND_DEBUFF,
 				"visible": true,
 				"duration": 4,
 				"stackable": false,
 				"weight": 1.0,
 				"resistible": true,
+				# DISDAIN SCALING: modest — this already fires on every strike, so a big
+				# amplification compounds fast.
+				"potency_scale": 0.5,
+				"duration_scale": 0.5,
 				"element": "ice",
 				"mods": {"healing_received_mult": -0.5},
 				"on_struck": [
@@ -436,7 +453,12 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 				"stackable": true,
 				"max_stacks": 0,
 				"weight": 1.0,
-				"resistible": false,
+				"resistible": false,   # a combo marker other abilities read; must land
+				# DISDAIN SCALING: the amp itself grows (Buff.scale_potency reaches the
+				# top-level ice_amp_per_stack), but the duration never does — this is a
+				# one-turn marker meant to be spent, not sat on.
+				"potency_scale": 0.5,
+				"duration_scale": 0.0,
 				"element": "ice",
 				"ice_amp_per_stack": 0.2,
 			})
@@ -457,6 +479,11 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 				"stackable": false,
 				"weight": 1.0,
 				"resistible": true,
+				# DISDAIN SCALING: control, like the stun — nothing to amplify, and a
+				# sparing duration roll capped at one extra turn.
+				"potency_scale": 0.0,
+				"duration_scale": 0.35,
+				"max_extra_duration": 1,
 				"silence": true,
 			})
 
@@ -485,8 +512,226 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 				],
 			})
 
+		# ====================================================================
+		# ZONE 1 — THE ARCTIC  (the enemy catalogue; see the Menagerie)
+		# ====================================================================
+		# Seven entries, and the ratio is worth noting: everything above this line was
+		# written for the PLAYER and almost none of it fits a creature. Budget roughly
+		# one new buff per new creature until the enemy library is as deep.
+
+		# --- Frenzied (Shambling Corpse): the zone's one CHARGED buff ----------
+		# +200% damage dealt for the next THREE ATTACKS, expiring after 4 of the
+		# bearer's own turns regardless — the charges are the real limit, the duration
+		# only the outer bound. This is the first user of `charges`: nothing before it
+		# measured a lifetime in USES. CombatBuffs.spend_attack_charges decrements it
+		# on every attack the bearer lands, a killing blow included.
+		#
+		# The turn-one ban is NOT here — a buff cannot know whose turn it is. It lives
+		# on the Frenzy .tres as ai_not_before_turn = 2, which keeps the ability out of
+		# the AI's usable set entirely on the opening turn.
+		"frenzied":
+			return Buff.make({
+				"id": "frenzied",
+				"source": "Frenzy",
+				"desc": "Frenzied: deals 200% more damage for its next 3 attacks (4 turns).",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 4,
+				"charges": 3,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				# The severity gauge earns a real number here: tripled damage is the
+				# biggest single swing anything in the zone applies to itself.
+				"magnitude": 3.5,
+				"mods": {"damage_dealt_mult": 2.0},
+			})
+
+		# --- Thorns, PERMANENT (The Scavenger) -------------------------------
+		# Identical to `thorns` above but duration -1, because a creature's innate
+		# aura is granted through permanent_buffs and a 5-turn "permanent" buff would
+		# quietly lapse partway through the boss fight. Not stackable either — the
+		# stacking on `thorns` is a player mechanic (re-apply to build it up), and
+		# nothing re-applies an innate hide. Same id, so if the player ever lands
+		# thorns on the boss it refreshes rather than doubling.
+		"thorns_permanent":
+			return Buff.make({
+				"id": "thorns",
+				"source": "Thorns",
+				"desc": "Thorns: reflects %d (+%d%% of the damage taken) back at anything that strikes it." % [
+					int(THORNS_FLAT), int(round(THORNS_PCT * 100.0))],
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": -1,
+				"stackable": false,
+				"weight": 1.0,
+				"resistible": false,
+				"on_struck": [
+					{"effect": "reflect", "amount": THORNS_FLAT, "percent": THORNS_PCT, "element": "physical"},
+				],
+			})
+
+		# --- Frostnip (Frozen Corpse): a small ice DoT ------------------------
+		# 50% of the CASTER's Instinct as ice per turn for 3 turns, snapshotted at
+		# application (the arc_burn pattern) so it never drifts with the caster's
+		# stats — and so the same creature met again at a higher ability rank in a
+		# later zone bites harder with no second entry.
+		"frostnip":
+			return _make_snapshot_dot("frostnip", "Frostnip", "ice", 0.50, 3, caster)
+
+		# --- Infected (The Old Ice): the zone's only toxic DoT ----------------
+		# 25% of the caster's Instinct per turn for 4 turns. Deliberately SMALL per
+		# instance: five Old Ice SPREADING it across the party is the threat, not any
+		# one application — which is what makes their hexer profile legible rather
+		# than just painful.
+		"infected":
+			return _make_snapshot_dot("infected", "Infected", "toxic", 0.25, 4, caster)
+
+		# --- Terrified (Unknown Entity): a mental DoT that also drains spirit --
+		# The zone's only mental damage and its only spirit pressure. 25% of the
+		# caster's Instinct per turn AND -15 spirit per turn for 4 turns: the damage is
+		# incidental, the drain is the point. It makes the player spend before they
+		# meant to, in the fight that has nothing else going on.
+		"terrified":
+			var t_inst := 0.0
+			if caster != null:
+				t_inst = maxf(0.0, caster.get_effective("instinct"))
+			var t_dmg := 0.25 * t_inst
+			return Buff.make({
+				"id": "terrified",
+				"source": "Terrified",
+				"desc": "Terrified: %d mental damage at the start of each turn (4 turns)." % int(round(t_dmg)),
+				"desc_template": "Terrified: {dot} mental damage at the start of each turn ({turns} left).",
+				"kind": Buff.KIND_DEBUFF,
+				"visible": true,
+				"duration": 4,
+				"stackable": true,      # independent instances, like every snapshot DoT
+				"max_stacks": 0,
+				"weight": 1.0,
+				"magnitude": 2.0,
+				"resistible": true,
+				# DISDAIN SCALING: full rate on both axes — a damage-over-time with a
+				# resource cost bolted on, and neither half is control.
+				"potency_scale": 1.0,
+				"duration_scale": 1.0,
+				"element": "mental",
+				"dot": t_dmg,
+				"dot_element": "mental",
+				#"spirit_per_turn": -15.0,
+			})
+
+		# --- Rejuvenating Salve (Hunter): heal over time ----------------------
+		# 40% of the CASTER's Instinct per turn for 5 turns, snapshotted — about 7 a
+		# turn from a hunter, which is exactly what keeps the pair standing through the
+		# Old Ice swarm. The numbers come from whoever CAST it, so handing it to a
+		# partner does not silently rescale off the recipient.
+		"rejuvenating_salve":
+			var s_inst := 0.0
+			if caster != null:
+				s_inst = maxf(0.0, caster.get_effective("instinct"))
+			var s_heal := 0.40 * s_inst
+			return Buff.make({
+				"id": "rejuvenating_salve",
+				"source": "Rejuvenating Salve",
+				"desc": "Rejuvenating Salve: restores %d health at the start of each turn (5 turns)." % int(round(s_heal)),
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 5,
+				"stackable": false,
+				"weight": 1.0,
+				"magnitude": 2.0,
+				"resistible": false,
+				"heal_per_turn": s_heal,
+			})
+
+		# --- Dark Blessing (the Chaplain): borrowed spiritual damage ----------
+		# The blessed ally deals an extra 25% of THE CHAPLAIN'S Instinct as Spiritual
+		# damage on every hit it lands — the energized_form on_hit_damage rider, aimed
+		# at somebody else. Snapshotted at cast, so the number stays his even though
+		# the buff lives on a Guard: the guards hit harder BECAUSE he is alive, which
+		# is the fight's whole argument stated in damage rather than in dialogue.
+		"dark_blessing":
+			var d_inst := 0.0
+			if caster != null:
+				d_inst = maxf(0.0, caster.get_effective("instinct"))
+			var d_bonus := 0.25 * d_inst
+			return Buff.make({
+				"id": "dark_blessing",
+				"source": "Dark Blessing",
+				"desc": "Dark Blessing: every hit deals an extra %d Spiritual damage (5 turns)." % int(round(d_bonus)),
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 5,
+				"stackable": false,
+				"weight": 2.0,
+				"magnitude": 2.0,
+				"resistible": false,
+				"element": "spiritual",
+				"on_hit_damage": [
+					{"element": "spiritual", "amount": d_bonus},
+				],
+			})
+
+		# --- Gorged (The Scavenger): the boss's clock -------------------------
+		# 3% of its OWN current max HP per turn for 2 turns, read LIVE
+		# (heal_pct_per_turn, not a snapshot) — about 3.2 a turn against a player
+		# netting 18.8, which is what stretches the boss from a 9-turn fight to an
+		# 11-turn one. Self-applied by Gorge through applies_buff_self, so it never
+		# rolls a resist.
+		"gorged":
+			return Buff.make({
+				"id": "gorged",
+				"source": "Gorged",
+				"desc": "Gorged: restores 3% of maximum health at the start of each turn (2 turns).",
+				"kind": Buff.KIND_BUFF,
+				"visible": true,
+				"duration": 2,
+				"stackable": false,
+				"weight": 1.0,
+				"magnitude": 1.5,
+				"resistible": false,
+				"element": "blood",
+				"heal_pct_per_turn": 0.03,
+			})
+
 		_:
 			return {}
+
+## A plain SNAPSHOT damage-over-time: `inst_pct` of the CASTER's Instinct per turn,
+## as `element`, for `turns` of the bearer's own turns. The arc_burn / frost pattern
+## generalised, because zone 1 wanted three of them (frostnip, infected, and the
+## damage half of terrified) that differ in nothing but element, fraction and length.
+##
+## Snapshotting is what disconnects the debuff from its caster: the caster's Instinct
+## and Disdain are baked in when it lands, and nothing afterwards reaches back to
+## change it. Stacking as INDEPENDENT instances follows from that — a second, stronger
+## application lands beside the first rather than overwriting it.
+static func _make_snapshot_dot(p_id: String, p_source: String, element: String,
+		inst_pct: float, turns: int, caster: CharacterBase) -> Dictionary:
+	var dmg := 0.0
+	if caster != null:
+		dmg = inst_pct * maxf(0.0, caster.get_effective("instinct"))
+	return Buff.make({
+		"id": p_id,
+		"source": p_source,
+		"desc": "%s: %d %s damage at the start of each turn (%d turns)." % [
+			p_source, int(round(dmg)), element, turns],
+		"desc_template": "%s: {dot} %s damage at the start of each turn ({turns} left)." % [p_source, element],
+		"kind": Buff.KIND_DEBUFF,
+		"visible": true,
+		"duration": turns,
+		"stackable": true,
+		"max_stacks": 0,          # unlimited independent instances
+		"weight": 1.0,
+		"resistible": true,
+		# DISDAIN SCALING: pure damage-over-time — full rate on both axes, exactly
+		# like arc_burn, which is the entry this one generalises.
+		"potency_scale": 1.0,
+		"duration_scale": 1.0,
+		"element": element,
+		"dot": dmg,
+		"dot_element": element,
+	})
 
 ## Build a Guard damage-reduction buff: a self buff that reduces ALL incoming damage
 ## by `reduction` (0.80 = take 80% less) until the caster's next turn (duration 1, so
@@ -624,12 +869,17 @@ static func _make_hypothermia(alac_mult: float) -> Dictionary:
 		"id": "hypothermia",
 		"source": "Hypothermia",
 		"desc": "Hypothermia: %d%% alacrity and drains 5 spirit at the start of each turn (8 turns)." % int(round(alac_mult * 100.0)),
+		"desc_template": "Hypothermia: {mult:alacrity}% alacrity and drains {spiritabs} spirit at the start of each turn ({turns} left).",
 		"kind": Buff.KIND_DEBUFF,
 		"visible": true,
 		"duration": 8,
 		"stackable": false,
 		"weight": 1.0,
 		"resistible": true,
+		# DISDAIN SCALING: the alacrity cut deepens readily; the duration is already
+		# a long 8 turns, so that axis is held back.
+		"potency_scale": 0.75,
+		"duration_scale": 0.5,
 		"element": "ice",
 		"mult": {"alacrity": alac_mult},
 		"spirit_per_turn": -5.0,
@@ -647,12 +897,17 @@ static func _make_frost(alac_mult: float, instinct_pct: float, vigor_pct: float,
 		"id": "frost",
 		"source": "Frost",
 		"desc": "Frost: %d%% alacrity and %d ice damage at the start of each turn (2 turns)." % [int(round(alac_mult * 100.0)), int(round(dmg))],
+		"desc_template": "Frost: {mult:alacrity}% alacrity and {dot} ice damage at the start of each turn ({turns} left).",
 		"kind": Buff.KIND_DEBUFF,
 		"visible": true,
 		"duration": 2,
 		"stackable": false,
 		"weight": 1.0,
 		"resistible": true,
+		# DISDAIN SCALING: a damage-over-time is the cheapest thing to hand an extra
+		# turn, so both axes run at full rate. This is the shape a Disdain build wants.
+		"potency_scale": 1.0,
+		"duration_scale": 1.0,
 		"element": "ice",
 		"mult": {"alacrity": alac_mult},
 		"dot": dmg,
@@ -670,12 +925,21 @@ static func _make_arc_burn(instinct_pct: float, caster: CharacterBase) -> Dictio
 		"id": "arc_burn",
 		"source": "Arc Burn",
 		"desc": "Arc Burn: %d Lightning damage at the start of each turn (3 turns)." % int(round(dmg)),
+		"desc_template": "Arc Burn: {dot} Lightning damage at the start of each turn ({turns} left).",
 		"kind": Buff.KIND_DEBUFF,
 		"visible": true,
 		"duration": 3,
-		"stackable": false,
+		# STACKS, as independent instances. Every fresh Neurostatic / Pass Current adds
+		# ANOTHER arc_burn entry carrying the Instinct snapshot and Disdain empowerment of
+		# THAT cast, ticking and expiring on its own three-turn clock. Build Instinct or
+		# Disdain mid-fight and the next application burns harder while the ones already
+		# on the target keep their original numbers. No cap.
+		"stackable": true,
 		"weight": 1.0,
 		"resistible": true,
+		# DISDAIN SCALING: pure damage-over-time — full rate on both axes.
+		"potency_scale": 1.0,
+		"duration_scale": 1.0,
 		"element": "lightning",
 		"dot": dmg,
 		"dot_element": "lightning",

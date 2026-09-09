@@ -34,6 +34,12 @@ const BORDER_COLOR := Color(0, 0, 0, 0.85)
 const HOVER_BORDER := Color(1, 1, 1, 0.9)
 const COUNTER_COLOR := Color(1, 1, 1)
 const COUNTER_OUTLINE := Color(0, 0, 0)
+## A debuff amplified by its caster's surplus Disdain (CombatResist) gets a violet
+## cap along its BOTTOM edge — the mirror of the buff/debuff cap along the top, so
+## the two never compete for the same pixels. Matches DamageNumber.EMPOWER_COLOR so
+## the cast-time float and the lasting chip marker read as the same idea.
+const EMPOWER_COLOR := Color(0.76, 0.55, 0.98)
+const EMPOWER_CAP_H := 3.0
 
 # Row colours for the hover card (title reads like an ability name).
 const TITLE_BG := Color(0.80, 0.80, 0.82)
@@ -89,7 +95,10 @@ func _ensure_tooltip() -> void:
 ## Pop the shared hover card for `entry`, anchored to the chip's global rect.
 func show_tip(entry: Dictionary, anchor_global: Rect2) -> void:
 	_ensure_tooltip()
-	var desc := str(entry.get("desc", ""))
+	# Buff.describe, not the raw `desc`: an entry empowered by its caster's Disdain
+	# re-renders its description from its LIVE numbers, so the card states what THIS
+	# instance actually does rather than the base figure it was authored with.
+	var desc := Buff.describe(entry)
 	var rows := [
 		{"text": str(entry.get("source", "Buff")), "bg": TITLE_BG, "fg": TITLE_TX, "stage": 0},
 		# meta is rich so an element tag ("Fire", ...) colours to match the chip.
@@ -113,6 +122,15 @@ func _meta_line(entry: Dictionary) -> String:
 	var st := int(entry.get("stacks", 1))
 	if st > 1:
 		parts.append("x%d stacks" % st)
+	# What the caster's Disdain bought, spelled out: the potency multiplier baked into
+	# this entry and any extra turns its duration roll won. Absent on an ordinary
+	# debuff, so unempowered meta lines are unchanged.
+	var pot := float(entry.get("potency_applied", 1.0))
+	if pot > 1.0:
+		parts.append("Empowered x%.2f" % pot)
+	var dbonus := int(entry.get("duration_bonus", 0))
+	if dbonus > 0:
+		parts.append("+%d turn%s from Disdain" % [dbonus, "" if dbonus == 1 else "s"])
 	var elem := str(entry.get("element", ""))
 	if elem != "":
 		parts.append(elem.capitalize())
@@ -169,6 +187,12 @@ class _Chip extends Control:
 		# a top cap in white/black to distinguish buff vs debuff at a glance
 		var cap := Color(1, 1, 1, 0.55) if Buff.is_buff(_entry) else Color(0, 0, 0, 0.55)
 		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x, 3)), cap, true)
+		# EMPOWERED: a violet cap along the BOTTOM edge when the caster's Disdain
+		# amplified this debuff's potency or rolled it extra turns. Deliberately the
+		# opposite edge from the buff/debuff cap so both are readable at once.
+		if CombatResist.is_empowered(_entry):
+			draw_rect(Rect2(Vector2(0, size.y - BuffBar.EMPOWER_CAP_H),
+				Vector2(size.x, BuffBar.EMPOWER_CAP_H)), BuffBar.EMPOWER_COLOR, true)
 		# border
 		var border := BuffBar.HOVER_BORDER if _hovered else BuffBar.BORDER_COLOR
 		draw_rect(r, border, false, 1.5)
@@ -180,7 +204,12 @@ class _Chip extends Control:
 		var ctext := BuffBar._counter_text(_entry)
 		var cfs := 9
 		var cw := font.get_string_size(ctext, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs)
-		var cpos := Vector2(size.x - cw.x - 1.0, size.y - 1.5)
+		# Lifted clear of the violet empowered cap when one is drawn, so the counter
+		# and the marker never overlap in the bottom-right corner.
+		var cbot := size.y - 1.5
+		if CombatResist.is_empowered(_entry):
+			cbot -= BuffBar.EMPOWER_CAP_H
+		var cpos := Vector2(size.x - cw.x - 1.0, cbot)
 		# faux outline for readability over any chip colour
 		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
 			draw_string(font, cpos + off, ctext, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs, BuffBar.COUNTER_OUTLINE)

@@ -38,7 +38,14 @@ var next_ids: Array = []
 ## Filled by the module's fights().
 var fights: Array = []
 ## This campaign's training fights, available from its igloo. SAME fight spec
-## shape as `fights`. Filled by the module's training_fights().
+## shape as `fights` PLUS three optional keys that turn the list into a weighted,
+## progress-gated SELECTION rather than a fixed menu (see training_roll below):
+##   "weight"      float  relative chance within the current selection (default 1.0)
+##   "min_cleared" int    earliest campaign fight_index this entry appears at (default 0)
+##   "max_cleared" int    last fight_index it appears at (default: no upper limit)
+## An entry that sets none of the three is simply always in the pool at weight 1,
+## which is exactly the old behaviour — so a pool of one dummy is unchanged.
+## Filled by the module's training_fights().
 var training_pool: Array = []
 ## Clickable objects on this campaign's overworld. Buttons can be placed
 ## differently per campaign. Each: { "name", "rect":Rect2, "action" }.
@@ -68,6 +75,53 @@ func training_at(i: int) -> Dictionary:
 	if i < 0 or i >= training_pool.size():
 		return {}
 	return training_pool[i]
+
+# ---------------------------------------------------------------------------
+# The training pool  —  a weighted selection that moves with the player
+# ---------------------------------------------------------------------------
+## THE SELECTION at a given point in the campaign: every training entry whose
+## min_cleared / max_cleared gate contains `cleared` (the campaign's fight_index,
+## i.e. how many of its fights are done). An ungated entry is in every selection.
+##
+## WHY A GATE RATHER THAN ONE POOL PER TIER: the pool is authored as a flat list and
+## each entry says when it is available, so a zone whose training changes twice is
+## still ONE array in ONE function, and an entry that spans two tiers is written
+## once rather than copied into both.
+func training_available(cleared: int) -> Array:
+	var out := []
+	for e in training_pool:
+		if typeof(e) != TYPE_DICTIONARY:
+			continue
+		if cleared < int(e.get("min_cleared", 0)):
+			continue
+		if e.has("max_cleared") and cleared > int(e["max_cleared"]):
+			continue
+		out.append(e)
+	return out
+
+## ROLL one training fight out of the current selection, weighted. Returns a deep
+## COPY (so the caller can hand it straight to BattleState and nothing can mutate
+## the campaign's own data), or {} when the selection is empty.
+##
+## Weights are relative, not percentages — [0.2, 0.4, 0.4] and [1, 2, 2] roll the
+## same. A non-positive weight is treated as 0 and can never come up; if every
+## weight in the selection is 0 the pick falls back to uniform, so a typo produces
+## a fight rather than an empty igloo.
+func training_roll(cleared: int) -> Dictionary:
+	var pool := training_available(cleared)
+	if pool.is_empty():
+		return {}
+	var total := 0.0
+	for e in pool:
+		total += maxf(0.0, float(e.get("weight", 1.0)))
+	if total <= 0.0:
+		return (pool[randi() % pool.size()] as Dictionary).duplicate(true)
+	var roll := randf() * total
+	for e in pool:
+		roll -= maxf(0.0, float(e.get("weight", 1.0)))
+		if roll <= 0.0:
+			return (e as Dictionary).duplicate(true)
+	return (pool[pool.size() - 1] as Dictionary).duplicate(true)
 
 ## The shop stock as a clean Array of String ids (defensive copy).
 func shop_stock_ids() -> Array:

@@ -1,25 +1,42 @@
 extends Node
-## AbilityDB — indexes every Ability (.tres) in ability_data/ by its `id`.
+## AbilityDB — indexes every Ability (.tres) under ability_data/ by its `id`.
 ## Both the abilities screen (pool) and combat (execution) resolve ids through here.
+##
+## The scan is RECURSIVE (rev2): ability_data/ is organised into subfolders
+## (player/<class>, player/general, player/debug, ally/<ally>, enemy/<family>,
+## special/) purely for authoring convenience. The INDEX IS FLAT — `id` is the
+## only key anything resolves by, so an id must be unique across the WHOLE tree,
+## not just within its folder. Moving a .tres between folders changes nothing at
+## runtime; it is a filing operation, not a gameplay one.
 
 const ABILITY_DIR := "res://scenes/abilities/ability_data/"
 
 var _by_id: Dictionary = {}
+var _path_by_id: Dictionary = {}   ## id -> the .tres it was loaded from (collision reporting)
 
 func _ready() -> void:
 	reload()
 
 func reload() -> void:
 	_by_id.clear()
-	var seen := {}
-	var dir := DirAccess.open(ABILITY_DIR)
+	_path_by_id.clear()
+	_scan_dir(ABILITY_DIR)
+
+## Recursive worker. `path` always ends in "/".
+func _scan_dir(path: String) -> void:
+	var dir := DirAccess.open(path)
 	if dir == null:
-		push_warning("AbilityDB: cannot open %s" % ABILITY_DIR)
+		push_warning("AbilityDB: cannot open %s" % path)
 		return
+	var seen := {}
 	dir.list_dir_begin()
 	var fname := dir.get_next()
 	while fname != "":
-		if not dir.current_is_dir():
+		if dir.current_is_dir():
+			# skip "." / ".." and any hidden folder (.godot, .import, ...)
+			if not fname.begins_with("."):
+				_scan_dir(path.path_join(fname) + "/")
+		else:
 			var clean := fname
 			if clean.ends_with(".remap"):
 				clean = clean.trim_suffix(".remap")
@@ -27,9 +44,14 @@ func reload() -> void:
 				clean = clean.trim_suffix(".import")
 			if clean.ends_with(".tres") and not seen.has(clean):
 				seen[clean] = true
-				var res = load(ABILITY_DIR + clean)
+				var full := path.path_join(clean)
+				var res = load(full)
 				if res is Ability:
-					_by_id[String(res.id)] = res
+					var key := String(res.id)
+					if _by_id.has(key):
+						push_warning("AbilityDB: duplicate ability id '%s' — %s overrides %s" % [key, full, _path_by_id[key]])
+					_by_id[key] = res
+					_path_by_id[key] = full
 		fname = dir.get_next()
 	dir.list_dir_end()
 
@@ -46,3 +68,7 @@ func all_ids() -> Array:
 
 func all_abilities() -> Array:
 	return _by_id.values()
+
+## Where an id's .tres actually lives — handy in the creation studio / debug.
+func source_path(id) -> String:
+	return _path_by_id.get(String(id), "")

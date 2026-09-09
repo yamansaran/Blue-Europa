@@ -13,6 +13,38 @@ const SCENE_OPTIONS      := "res://scenes/options/options.tscn"
 const SCENE_ACHIEVEMENTS := "res://scenes/achievements/achievements.tscn"
 const SCENE_CAMPAIGN_MAP := "res://scenes/campaigns/campaign_map.tscn"
 
+# ---------------------------------------------------------------------------
+# DEBUG MASTER SWITCH
+# ---------------------------------------------------------------------------
+## One flag that every debug-only feature in the game obeys. When false, none of
+## them are built at all (no button, no panel, no entry point) — the game shows
+## only the real player-facing UI.
+##
+## Currently gated by this flag:
+##   - shell toolbar: the "CS" Creation Studio button
+##   - shell toolbar: the World Map button (jump to any campaign)
+##   - shell toolbar: the Save button's SAVE-WIPING behaviour (with the flag off
+##     the Save button performs a normal Character.save_game())
+##   - combat: the training-fight "DEBUG" button + dummy stat panel
+##   - combat: the floating COMBAT LOG terminal (CombatLog) — one line per
+##     ability any unit resolves. EVERY fight, not just the training one.
+##   - combat: the unit-AI decision ledger (AITurn) and the AI primitive
+##     self-test run at battle start (AIDebug)
+##   - abilities screen: the skill-tree node-UID readout
+##   - overworld: the "DUMMY" button floating over the IGLOO — the unkillable
+##     practice dummy, bypassing the campaign's rolled training pool
+##     (go_to_training_dummy)
+##   - overworld: the "FIGHT ▾" box floating over the EXPANSE — a picker that sets
+##     which campaign fight is next, i.e. edits progress through the current zone
+##     (CampaignDB.debug_set_fight_index, itself flag-gated a second time)
+##
+## Anything debug-only added from here on should check GameManager.is_debug()
+## before it builds itself.
+var debug_enabled: bool = true
+
+func is_debug() -> bool:
+	return debug_enabled
+
 var active_shell: Node = null
 
 # When set, the next shell boot loads this content instead of the overworld.
@@ -113,7 +145,11 @@ func current_overworld_path() -> String:
 			return c.overworld_scene
 	return SCENE_OVERWORLD
 
+## DEBUG-only screen (jump to any campaign). Refuses to open with the debug flag
+## off, so the shell's hidden World Map button isn't the only thing guarding it.
 func go_to_campaign_map() -> void:
+	if not is_debug():
+		return
 	_show_in_shell(SCENE_CAMPAIGN_MAP)
 
 func go_to_shop() -> void:
@@ -138,7 +174,32 @@ func go_to_victory() -> void:
 	get_tree().change_scene_to_file(SCENE_SHELL)
 
 # --- full-screen destinations (leave the shell) ---
+## THE TRAINING FIGHT. No longer a fixed practice dummy: the current campaign owns a
+## training POOL, and this ROLLS one fight out of it — a weighted pick from the
+## entries whose progress gate contains the player's position in the campaign, so
+## the SELECTION moves as the zone is cleared (Campaign.training_roll).
+##
+## A training fight is staged exactly like a campaign fight — same spec shape, same
+## enemies / allies / loot keys — with ONE difference: `is_campaign` stays FALSE, so
+## winning never reaches CampaignDB.record_fight_win and training can never advance
+## the campaign, however real the fight is.
+##
+## FALLBACK: a campaign with no pool (or a roll that somehow comes back empty) drops
+## through to the bare dummy, so training is never a dead button.
 func go_to_training() -> void:
+	var fight: Dictionary = {}
+	if typeof(CampaignDB) != TYPE_NIL:
+		fight = CampaignDB.training_fight()
+	if fight.is_empty():
+		go_to_training_dummy()
+		return
+	_stage_fight(fight, false)
+
+## DEBUG-only entry point: the practice dummy, whatever the campaign's training pool
+## says. Reached by the small button over the igloo (campaign_overworld.gd), and used
+## as the fallback above. Worth keeping precisely because a real fight is no use for
+## exercising a stat edit or a new buff — which is what the dummy is for.
+func go_to_training_dummy() -> void:
 	active_shell = null
 	BattleState.clear()
 	BattleState.clear_result()
@@ -157,18 +218,30 @@ func go_to_campaign_battle() -> void:
 	if fight.is_empty():
 		go_to_overworld()
 		return
+	_stage_fight(fight, true)
+
+## Stage ONE fight spec into BattleState and enter combat. Shared by the campaign
+## battle and the training roll, because a training fight IS a fight spec — the only
+## thing that differs is `is_campaign`, which is what decides whether a win advances
+## the campaign. Reads `allies` as well as `enemies` (a fight can hand the player
+## temporary companions — c1's hunters), and takes the background from the campaign.
+func _stage_fight(fight: Dictionary, is_campaign: bool) -> void:
 	active_shell = null
 	BattleState.clear()
 	BattleState.clear_result()
-	BattleState.is_campaign = true
-	BattleState.battle_id = str(fight.get("id", "campaign_fight"))
+	BattleState.is_campaign = is_campaign
+	BattleState.battle_id = str(fight.get("id", "campaign_fight" if is_campaign else "training"))
 	var enemies = fight.get("enemies", [])
 	if typeof(enemies) == TYPE_ARRAY:
 		BattleState.enemies = (enemies as Array).duplicate(true)
+	var allies = fight.get("allies", [])
+	if typeof(allies) == TYPE_ARRAY:
+		BattleState.allies = (allies as Array).duplicate(true)
 	var lt = fight.get("loot_table", null)
 	if typeof(lt) == TYPE_DICTIONARY:
 		BattleState.loot_table = (lt as Dictionary).duplicate(true)
-	var camp = CampaignDB.get_current()
-	if camp != null:
-		BattleState.background_color = camp.background_color
+	if typeof(CampaignDB) != TYPE_NIL:
+		var camp = CampaignDB.get_current()
+		if camp != null:
+			BattleState.background_color = camp.background_color
 	get_tree().change_scene_to_file(SCENE_COMBAT)

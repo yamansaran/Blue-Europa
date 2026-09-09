@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scenes/abilities/skill_tree.gd" id="1_tree"]
 [ext_resource type="Script" path="res://scenes/abilities/skill_node.gd" id="2_node"]
-[ext_resource type="Resource" path="res://scenes/abilities/ability_data/do_thing.tres" id="3_ability"]
+[ext_resource type="Resource" uid="uid://cdothing0001" path="res://scenes/abilities/ability_data/player/debug/do_thing.tres" id="3_ability"]
 
 [sub_resource type="StyleBoxFlat" id="sb_info"]
 bg_color = Color(0.08, 0.08, 0.09, 0.96)

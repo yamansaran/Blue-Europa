@@ -27,11 +27,15 @@ const HEALING_RECEIVED_MULT_KEY := "healing_received_mult"  # additive around 0,
 # ============================================================================
 # Applying
 # ============================================================================
-## Apply a buff/debuff entry to `body`. Handles stacking (same id already present
-## + stackable => bump stacks up to max_stacks and refresh duration) and refresh
-## (same id, not stackable => refresh to the longer duration). Returns the entry
-## that now lives in the basket. Re-clamps vitals in case a max-HP / max-Spirit
-## mod changed the ceilings.
+## Apply a buff/debuff entry to `body`. A STACKING entry (the default) is appended as
+## its own INDEPENDENT INSTANCE — its numbers are frozen at apply time and never
+## revisited, so it is fully disconnected from its caster once it lands. A NON-stacking
+## entry with the same id already present just has its duration refreshed to the longer
+## of the two. Returns the entry that now lives in the basket. Re-clamps vitals in case
+## a max-HP / max-Spirit mod changed the ceilings.
+##
+## NOTE this is the RAW applier — no resist roll, no Disdain scaling. Anything cast BY
+## someone AT someone goes through try_apply below instead.
 static func apply(body: CharacterBase, entry: Dictionary) -> Dictionary:
 	if body == null or entry.is_empty():
 		return {}
@@ -40,27 +44,99 @@ static func apply(body: CharacterBase, entry: Dictionary) -> Dictionary:
 		body.baskets[basket] = []
 
 	var incoming: Dictionary = entry.duplicate(true)
-	# _find returns a Dictionary OR null, so it must stay untyped (no := inference).
-	var existing = _find(body, basket, str(incoming.get("id", "")))
-
+	var id := str(incoming.get("id", ""))
 	var result: Dictionary
-	if existing != null:
-		if bool(existing.get("stackable", false)):
-			var add_stacks := maxi(1, int(incoming.get("stacks", 1)))
-			var cap := int(existing.get("max_stacks", 1))
-			var new_stacks := int(existing.get("stacks", 1)) + add_stacks
-			if cap > 0:
-				new_stacks = mini(new_stacks, cap)
-			existing["stacks"] = new_stacks
-			Buff.recompute_scaled(existing)
-		existing["duration"] = _combine_duration(int(existing.get("duration", -1)), int(incoming.get("duration", -1)))
-		result = existing
+
+	if bool(incoming.get("stackable", true)):
+		# INDEPENDENT INSTANCES. A stacking effect does NOT merge into one entry with a
+		# bumped `stacks` count — every application appends its OWN entry, carrying the
+		# numbers it was built with and its own duration. This is what disconnects an
+		# applied debuff from its caster: the caster's Disdain, Instinct and buffs are
+		# baked in at apply time and NOTHING later reaches back to change them, so a
+		# second, stronger cast lands as a second, stronger instance while the first
+		# keeps ticking at its original strength and expires on its own schedule.
+		# Only the TARGET's own layer (vulnerability, resistance, damage_taken_mult)
+		# still modulates an instance after it lands, because those are read live at
+		# tick time off the bearer.
+		# Every reader already walks the basket and sums per entry — DoT collection,
+		# resist_mult, get_bonus, the ice amp, on-struck reflects — so N instances
+		# total exactly as N stacks of one entry used to, with none of the coupling.
+		var cap := int(incoming.get("max_stacks", Buff.DEFAULT_MAX_STACKS))
+		var arr: Array = body.baskets[basket]
+		if cap > 0 and _count_instances(body, basket, id) >= cap:
+			# At the authored cap: the new cast displaces whichever instance was closest
+			# to falling off, so a cast at cap is never simply wasted. Permanent
+			# instances (-1) are treated as infinitely long and are never displaced.
+			var idx := _shortest_instance_index(body, basket, id)
+			if idx >= 0:
+				arr[idx] = incoming
+			result = incoming
+		else:
+			arr.append(incoming)
+			result = incoming
 	else:
-		body.baskets[basket].append(incoming)
-		result = incoming
+		# NON-STACKING: one instance only, so a re-application just refreshes the
+		# duration to the longer of the two (permanent wins). The entry's numbers are
+		# NOT recomputed — the original cast's values stand, same as above.
+		# _find returns a Dictionary OR null, so it must stay untyped (no := inference).
+		var existing = _find(body, basket, id)
+		if existing != null:
+			existing["duration"] = _combine_duration(int(existing.get("duration", -1)), int(incoming.get("duration", -1)))
+			# CHARGES refresh to the HIGHER of the two rather than adding, for the same
+			# reason the duration takes the longer: re-casting Frenzy means "three more
+			# attacks", not "three on top of the two you had left".
+			if Buff.has_charges(incoming):
+				existing["charges"] = maxi(Buff.charges(existing), Buff.charges(incoming))
+			result = existing
+		else:
+			body.baskets[basket].append(incoming)
+			result = incoming
 
 	body.clamp_vitals()
 	return result
+
+## Apply a buff/debuff entry to `body` AS A CAST BY `caster` — i.e. run it through the
+## MAGNIFICENCE / DISDAIN system (CombatResist) first. This is the entry point for any
+## application that has a caster and a distinct target:
+##   - an ability's applies_buff        (combat._maybe_apply_buff)
+##   - Shatter's shatter_apply_buff     (combat._apply_shatter)
+##   - an on_hit_apply rider            (fire_on_hit, below)
+## SELF-application does NOT come through here — applies_buff_self, a character's
+## permanent_buffs and a passive's passive_buff all call apply() directly, because you
+## never resist your own buff.
+##
+## Two things happen, in order:
+##   1. THE RESIST ROLL. If the entry is resistible (every debuff, unless it sets
+##      `resistible: false`), the target's magnificence is rolled against the caster's
+##      disdain. On a resist NOTHING is applied and { applied = false, resisted = true }
+##      comes back, so the caller can float a "RESIST".
+##   2. DISDAIN SCALING. On a hit, the caster's surplus disdain amplifies the entry
+##      before it lands — potency through the entry's potency_scale, and a rolled
+##      extra-turn bonus through its duration_scale.
+## Returns { applied, resisted, chance, overpower, potency, extra_turns, entry }.
+static func try_apply(body: CharacterBase, entry: Dictionary, caster: CharacterBase = null) -> Dictionary:
+	var report := {
+		"applied": false, "resisted": false, "chance": 0.0,
+		"overpower": 0.0, "potency": 1.0, "extra_turns": 0, "entry": {},
+	}
+	if body == null or entry.is_empty():
+		return report
+
+	var chance := CombatResist.resist_chance(caster, body, entry)
+	report["chance"] = chance
+	if CombatResist.rolls_resist(chance):
+		report["resisted"] = true
+		return report
+
+	var op := CombatResist.overpower(caster, body)
+	report["overpower"] = op
+	var scaled := CombatResist.apply_scaling(entry, op)
+	report["potency"] = scaled["potency"]
+	report["extra_turns"] = scaled["extra_turns"]
+
+	report["entry"] = apply(body, entry)
+	report["applied"] = true
+	return report
 
 ## Remove a buff/debuff by id from BOTH baskets (no expiry event fired). Returns
 ## true if something was removed. Use for a dispel / cleanse.
@@ -385,8 +461,12 @@ static func fire_on_hit(attacker_body: CharacterBase, struck_unit) -> void:
 					continue
 				if spec.has("duration"):
 					entry["duration"] = int(spec["duration"])
-				apply(struck_unit.body, entry)
-				applied_any = true
+				# Goes through the magnificence/disdain roll like any other cast
+				# debuff — the rider's owner is the caster. A resisted rider is
+				# simply skipped (no float; an on-hit rider firing every swing
+				# would spam the screen).
+				var rep := try_apply(struck_unit.body, entry, attacker_body)
+				applied_any = applied_any or bool(rep["applied"])
 			# ON-HIT-DAMAGE: an extra hit of a named element riding on every strike.
 			for spec in Buff.on_hit_damage(e):
 				if typeof(spec) != TYPE_DICTIONARY:
@@ -394,6 +474,40 @@ static func fire_on_hit(attacker_body: CharacterBase, struck_unit) -> void:
 				_on_hit_damage(attacker_body, struck_unit, spec, Buff.stacks(e))
 	if applied_any and struck_unit.has_method("refresh_buffs"):
 		struck_unit.refresh_buffs()
+
+
+## SPEND ONE ATTACK CHARGE on every charged entry the attacker carries, and drop
+## the ones that just ran out. This is the whole "for the next N attacks" mechanic:
+## a buff's `duration` is turns, and nothing else in the engine counts USES.
+##
+## Called from combat's ATTACK branch once per resolved attack, DELIBERATELY OUTSIDE
+## the `tgt.is_alive()` gate that guards fire_on_hit — a killing blow is still one of
+## your three swings, and a Frenzy that survives because its last attack happened to
+## kill something would be a strictly better buff than the one that was authored.
+##
+## Charges are NOT stack-scaled and NOT delivery-gated: any kind-ATTACK use spends
+## one, strike or spell, exactly like the on-hit riders beside it.
+## Returns true when at least one entry was removed (the caller may want to refresh).
+static func spend_attack_charges(attacker_body: CharacterBase) -> bool:
+	if attacker_body == null:
+		return false
+	var removed := false
+	for basket in ["buffs", "debuffs"]:
+		if not attacker_body.baskets.has(basket):
+			continue
+		var kept := []
+		for e in attacker_body.baskets[basket]:
+			if typeof(e) != TYPE_DICTIONARY or not Buff.has_charges(e):
+				kept.append(e)
+				continue
+			if Buff.spend_charge(e):
+				removed = true          # spent its last charge — drop the entry
+			else:
+				kept.append(e)
+		attacker_body.baskets[basket] = kept
+	if removed:
+		attacker_body.clamp_vitals()    # a charged buff may have moved max HP / spirit
+	return removed
 
 
 ## Deal one on-hit-damage rider. The raw output is `amount + pct * attacker[scale_stat]`
@@ -503,6 +617,38 @@ static func visible_entries(body: CharacterBase) -> Array:
 # ============================================================================
 # Internals
 # ============================================================================
+## How many INSTANCES of `id` currently sit in `basket`. With independent-instance
+## stacking, this is what `max_stacks` caps.
+static func _count_instances(body: CharacterBase, basket: String, id: String) -> int:
+	if id == "" or not body.baskets.has(basket):
+		return 0
+	var n := 0
+	for e in body.baskets[basket]:
+		if typeof(e) == TYPE_DICTIONARY and str(e.get("id", "")) == id:
+			n += 1
+	return n
+
+## Index of the instance of `id` with the LEAST remaining duration (a permanent -1
+## counts as infinite and is never chosen). -1 when there is none. Used only to decide
+## which instance a cast made at the cap displaces.
+static func _shortest_instance_index(body: CharacterBase, basket: String, id: String) -> int:
+	if id == "" or not body.baskets.has(basket):
+		return -1
+	var best := -1
+	var best_dur := 0
+	var arr: Array = body.baskets[basket]
+	for i in arr.size():
+		var e = arr[i]
+		if typeof(e) != TYPE_DICTIONARY or str(e.get("id", "")) != id:
+			continue
+		var d := int(e.get("duration", -1))
+		if d < 0:
+			continue
+		if best < 0 or d < best_dur:
+			best = i
+			best_dur = d
+	return best
+
 static func _find(body: CharacterBase, basket: String, id: String):
 	if id == "" or not body.baskets.has(basket):
 		return null

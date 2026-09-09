@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bfoe005"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"glacial_crush"
+display_name = "Glacial Crush"
+description = "The whole weight of the floe, brought down. Deal Ice damage equal to {scaling}."
+max_points = 3
+max_equipped = 1
+action_cost = 1.0
+kind = 0
+delivery = 1
+target = 0
+element = 2
+cost_type = 1
+cost_amount = 30
+cooldown = 3
+base_power = 15.0
+power_per_point = 0.0
+scaling_stat = &"vigor"
+scaling_mult = 1.25
+scaling_stat2 = &"instinct"
+scaling_mult2 = 1.25
+base_power_ranks = Array[float]([15.0, 22.0, 30.0])
+scaling_mult_ranks = Array[float]([1.25, 1.6, 2.0])
+scaling_mult2_ranks = Array[float]([1.25, 1.6, 2.0])
+cooldown_ranks = Array[int]([3, 3, 2])
+requires = Array[StringName]([])
+required_level = 1

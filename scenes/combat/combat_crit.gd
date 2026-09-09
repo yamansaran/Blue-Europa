@@ -8,14 +8,35 @@ class_name CombatCrit
 ## one place. CombatMath.resolve() asks it for the chance, whether the hit crits,
 ## and the crit damage multiplier.
 ##
-## CRIT CHANCE (dev-specified):
-##   crit% = ( ( luck + (X + Y + Z) * (user_level / target_level) )
-##             * ability.crit_chance_mult ) + ability.crit_chance_add
+## CRIT CHANCE:
+##   crit% = ( ( luck + (X + Y + Z) * L ) * ability.crit_chance_mult )
+##           + ability.crit_chance_add
 ##   X = alacrity / 5            (attacker's alacrity)
-##   Y = pierce   / 3            (attacker's pierce for the attack's element)
-##   Z = crit-chance bonus summed from the attacker's buffs + debuffs (0 for now)
+##   Y = (pierce + DEFENSE_DEFAULT - resistance) / 3
+##   Z = crit-chance bonus summed from the attacker's buffs + debuffs
+##   L = clampf(user_level / target_level, LEVEL_RATIO_MIN, LEVEL_RATIO_MAX)
 ##   luck = attacker's hidden luck stat
 ## The result is clamped to 0..100.
+##
+## THE Y TERM IS A DIFFERENCE, ANCHORED. It used to be a bare `pierce / 3`, which
+## meant a target's elemental defence did nothing to its odds of being critically
+## struck. It is now the GAP between the attacker's pierce and the defender's
+## resistance for the attack's element — offset by Stats.DEFENSE_DEFAULT (45) so
+## the scale stays anchored to a STANDARD defender:
+##   - against a target at the default 45 defence, Y collapses to exactly pierce/3,
+##     i.e. IDENTICAL to the old formula. Nothing rebalances at baseline.
+##   - against a 90-defence boss:  Y = (15 + 45 - 90)/3 = -10  -> crit collapses
+##     unless you actually build pierce for that element.
+##   - against a 0-defence target: Y = (15 + 45 - 0)/3  = +20  -> crit rewards you.
+## `resistance` includes the defender's MULTIPLICATIVE resist layer (the same
+## CombatBuffs.resist_mult_bonus the mitigation stage uses), so a Netzach-buffed
+## target is harder to crit as well as harder to hurt.
+##
+## THE LEVEL TERM IS CLAMPED. `user_level / target_level` was unbounded, so a
+## level-100 attacker against a level-1 enemy multiplied its (X+Y+Z) group by 100
+## and was GUARANTEED to crit every hit. It is now clamped to [0.5, 1.5]: out-
+## levelling a target is worth up to +50% of the group and no more, and being
+## out-levelled never costs more than half of it.
 ##
 ## THE ROLL:
 ##   crit_floor = a random int in 0..99. If crit_floor < crit% -> critical strike.
@@ -31,7 +52,16 @@ class_name CombatCrit
 
 # --- tuning knobs -----------------------------------------------------------
 const ALACRITY_DIVISOR := 5.0     # X = alacrity / 5
-const PIERCE_DIVISOR   := 3.0     # Y = pierce   / 3
+const PIERCE_DIVISOR   := 3.0     # Y = (pierce + anchor - resistance) / 3
+## The defence level the pierce-vs-resistance gap is measured against. Set to the
+## standard defender (Stats.DEFENSE_DEFAULT, 45) so a fight against a stock-defence
+## target produces exactly the old `pierce / 3` — the rework is a pure generalisation
+## at baseline, and only bites for targets that are unusually armoured or unusually
+## soft in the attack's element.
+const CRIT_GAP_ANCHOR := Stats.DEFENSE_DEFAULT
+## Bounds on the user/target level ratio, so a huge level lead can't guarantee crits.
+const LEVEL_RATIO_MIN := 0.5
+const LEVEL_RATIO_MAX := 1.5
 const DEFAULT_CHAR_CRIT_DAMAGE := 3.0   # fallback if the body has no crit_damage_mult
 
 # --- basket stat keys (read from buffs + debuffs) ---------------------------
@@ -48,19 +78,30 @@ static func _buff_debuff_bonus(body: CharacterBase, key: String) -> float:
 
 # ----------------------------------------------------------------------------
 ## Crit chance as a number in 0..100.
-static func chance(attacker: CharacterBase, defender: CharacterBase, ability: Ability) -> float:
+## `extra_pierce` is the same per-hit pierce rider the mitigation stage receives
+## (Cryonecrosis' pierce-per-ice-debuff); it counts toward the crit gap too, so a
+## setup that shreds resistance also improves the odds of a crit.
+static func chance(attacker: CharacterBase, defender: CharacterBase, ability: Ability, extra_pierce: float = 0.0) -> float:
 	if attacker == null or ability == null:
 		return 0.0
 
 	var element := ability.element_key()
 	var luck := attacker.get_effective("luck")
 	var x := attacker.get_effective("alacrity") / ALACRITY_DIVISOR
-	var y := attacker.get_effective(Stats.pierce_key(element)) / PIERCE_DIVISOR
+	# Y is the pierce-vs-resistance GAP, anchored to a standard-defence target. The
+	# defender's multiplicative resist layer counts here exactly as it does in the
+	# mitigation stage, so a resist buff also protects against crits.
+	var resistance := 0.0
+	if defender != null:
+		resistance = defender.get_effective(Stats.defense_key(element))
+		resistance = maxf(0.0, resistance * (1.0 + CombatBuffs.resist_mult_bonus(defender, element)))
+	var pierce := attacker.get_effective(Stats.pierce_key(element)) + maxf(0.0, extra_pierce)
+	var y := (pierce + CRIT_GAP_ANCHOR - resistance) / PIERCE_DIVISOR
 	var z := _buff_debuff_bonus(attacker, CRIT_CHANCE_BONUS_KEY)
 
 	var user_level := maxi(1, attacker.level)
 	var target_level := maxi(1, defender.level) if defender != null else 1
-	var level_ratio := float(user_level) / float(target_level)
+	var level_ratio := clampf(float(user_level) / float(target_level), LEVEL_RATIO_MIN, LEVEL_RATIO_MAX)
 
 	var ability_mult := _ability_crit_chance_mult(ability)
 	var ability_add := _ability_crit_chance_add(ability)

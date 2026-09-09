@@ -68,6 +68,20 @@ class_name CharacterBase
 ## counts down.
 @export var permanent_buffs: Array = []
 
+# --- ability loadout --------------------------------------------------------
+## The ability ids this character brings to a fight, in SLOT order. The PLAYER does
+## NOT use this list — its loadout is the wheel (Character.equipped_abilities) — but
+## every other combatant carries its own here, set by its module or by a spec's
+## "abilities" key. The INDEX into this array is the unit's slot index, which is what
+## combat keys per-unit cooldowns by, exactly as it keys the player's by wheel slot.
+## Combat-only and never saved (enemies are rebuilt from their module every fight).
+@export var abilities: Array = []
+## Invested RANK per ability id (id -> int). Only the player invests points (the skill
+## tree, read from the Character autoload); this lets a MODULE or a per-fight spec hand
+## a creature the rank-3 version of an ability without authoring a second .tres —
+## `{"character":"ice_spirit", "ability_ranks":{"frost_bolt":3}}`. Missing id = rank 1.
+@export var ability_ranks: Dictionary = {}
+
 # --- stats ------------------------------------------------------------------
 ## Untouched base numbers. Defaults come from Stats.default_base_stats().
 var base_stats: Dictionary = Stats.default_base_stats()
@@ -260,6 +274,8 @@ func clone() -> CharacterBase:
 	cb.ai = ai
 	cb.size_scale = size_scale
 	cb.permanent_buffs = permanent_buffs.duplicate()
+	cb.abilities = abilities.duplicate()
+	cb.ability_ranks = ability_ranks.duplicate(true)
 	cb.base_stats = base_stats.duplicate(true)
 	cb.baskets = baskets.duplicate(true)
 	cb.init_vitals()
@@ -270,6 +286,7 @@ func clone() -> CharacterBase:
 # ============================================================================
 ## Spec keys (all optional): name, level, type ("character"/"ally"/"enemy" or int),
 ## race, organic, incorporeal, ai, size_scale, color, permanent_buffs[],
+## abilities[], ability_ranks{id: rank},
 ## stats{stat_key: value overrides onto base}. Legacy bridges: "max_hp" sets
 ## hp_base so the derived HP matches; "focus" maps onto spirit. This keeps the old
 ## dict-based enemy defs working alongside the character-module system.
@@ -326,6 +343,20 @@ static func apply_spec_overrides(cb: CharacterBase, spec: Dictionary) -> void:
 		for b in spec["permanent_buffs"]:
 			pb.append(str(b))
 		cb.permanent_buffs = pb
+
+	# ABILITY LOADOUT: a fight can hand a creature its ability list (and per-ability
+	# ranks) without a new module — {"character":"ice_spirit", "abilities":["frost_bolt"]}.
+	# Both REPLACE the module's own lists when present, so a variant is explicit.
+	if spec.has("abilities") and typeof(spec["abilities"]) == TYPE_ARRAY:
+		var ab := []
+		for a in spec["abilities"]:
+			ab.append(str(a))
+		cb.abilities = ab
+	if spec.has("ability_ranks") and typeof(spec["ability_ranks"]) == TYPE_DICTIONARY:
+		var ar := {}
+		for k in spec["ability_ranks"]:
+			ar[str(k)] = int(spec["ability_ranks"][k])
+		cb.ability_ranks = ar
 
 	cb.init_vitals()
 	if spec.has("current_hp"):

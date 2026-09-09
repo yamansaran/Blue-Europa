@@ -170,6 +170,15 @@ enum CostType {
 @export var spirit_gain_ranks: Array[int] = []
 @export var spirit_steal: int = 0
 @export var spirit_steal_ranks: Array[int] = []
+## GRANT: flat spirit given TO THE TARGET — the exact mirror of spirit_steal with the
+## sign flipped, and the third and last member of this family. `spirit_gain` feeds the
+## caster and `spirit_steal` drains the victim; before this there was no way to GIVE
+## spirit to somebody else, which is all a support ability like Haunted Choir does.
+## Applied in the same pass (combat._apply_spirit_effects), AFTER the caster's own gain,
+## and clamped by change_spirit like the other two. When target = ALLY the caster can be
+## its own target, in which case the gain and the grant both land on it.
+@export var spirit_grant: int = 0
+@export var spirit_grant_ranks: Array[int] = []
 
 # --- PASSIVE stat bonus (kind == PASSIVE) -----------------------------------
 ## A PASSIVE ability grants a CONSTANT stat bonus while it sits in a combat-wheel
@@ -293,6 +302,28 @@ enum CostType {
 ## Element the shatter bonus damage is dealt as (a string key for take_damage).
 @export var shatter_damage_element: StringName = &"ice"
 
+# --- SECOND ELEMENT: one attack, two damage types ----------------------------
+## An ATTACK has exactly one `element`, which is wrong for a strike that is two
+## things at once — a claw AND a cold. These three generalise the shatter shape
+## above into a plain SECOND HIT that rides on the first: after the main damage
+## lands, an extra hit of `bonus_damage_element` worth
+## `bonus_scaling_mult × caster[bonus_scaling_stat]` is dealt to the same target.
+##
+## It is a REAL hit of that element, resolved through CombatMath.resolve_flat, so
+## the target's resistance for the SECOND element, the caster's pierce/amp for it,
+## damage_dealt_mult and damage_taken_mult all apply — which is the entire point:
+## authoring a two-element attack as a single-element one loses the half of it that
+## a lopsided resistance profile is supposed to answer. Dealt with NO source, so it
+## fires no on-struck reaction and cannot recurse, and it is never a crit.
+##
+## Blank element (the default) => no second hit, so every existing .tres is
+## unaffected with no re-save. A dodged attack skips this exactly as it skips
+## everything else the attack carries.
+@export var bonus_damage_element: StringName = &""
+@export var bonus_scaling_stat: StringName = &""
+@export var bonus_scaling_mult: float = 0.0
+@export var bonus_scaling_mult_ranks: Array[float] = []
+
 # --- HOARFROST: this attack's own ice damage bypasses the hoarfrost amp ------
 ## When true, this ATTACK's own ice damage does NOT benefit from or consume the
 ## target's hoarfrost stacks (so casting Hoarfrost neither eats nor is boosted by
@@ -320,6 +351,15 @@ enum CostType {
 @export var pierce_per_debuff: float = 0.0
 @export var pierce_per_debuff_ranks: Array[float] = []
 
+# --- accuracy (see CombatDodge) ---------------------------------------------
+## Flat percentage points SUBTRACTED from the target's dodge chance for this ability.
+## The baseline accuracy tier is already decided by kind + delivery (a physical strike
+## is fully dodgeable, a damaging spell is half as dodgeable, a non-damaging ability is
+## never dodged), so this is only for per-ability exceptions: a large positive value
+## (100) makes an ability effectively unmissable, a negative value makes it wild.
+## 0.0 = use the tier as-is, so every existing .tres is unaffected.
+@export var accuracy_mod: float = 0.0
+
 # --- crit (see CombatCrit) --------------------------------------------------
 ## Multiplies the base crit CHANCE for this ability (base 1.0 = no change).
 @export var crit_chance_mult: float = 1.0
@@ -328,6 +368,81 @@ enum CostType {
 ## Multiplies crit DAMAGE for this ability (base 1.0). Combined with the
 ## character's base crit-damage multiplier and any buff/debuff crit-damage bonus.
 @export var crit_damage_mult: float = 1.0
+
+# --- unit AI (see AI_PRIMER §9.4) -------------------------------------------
+## The four INTENTS the AI decides between, as the strings every AI file keys by.
+## They live here, on the one class both sides already depend on, so the ability
+## layer and the AI layer can never drift on a spelling.
+const AI_OFFENSE := "offense"
+const AI_DEFENSE := "defense"
+const AI_BUFF := "buff"
+const AI_DEBUFF := "debuff"
+
+## Which intents this ability serves. EMPTY = derive from kind + target
+## (ai_intents_default below), which is correct for every ability shipped today —
+## so this is an OVERRIDE, not something an author has to fill in. Use it to
+## NARROW ("this attack exists to land its debuff: ["debuff"], stop competing for
+## offense") or to WIDEN. For "the AI never picks this", use ai_priority = 0.0.
+@export var ai_intents: Array[String] = []
+
+## Flat multiplier on this ability's score in the AI's ability layer. THE ONLY
+## PER-ABILITY AI KNOB, and it matters more than it looks: an archetype's stat
+## block cannot say "prefer the stun", because the stun is an ability, not a stat.
+## So a disabler's stun .tres carries ai_priority = 3.0 and the archetype simply
+## raises its debuff appetite. 0.0 means "the AI never picks this", which is how a
+## player-only ability can live on a .tres a creature also carries.
+@export var ai_priority: float = 1.0
+
+## TURN GATE: the earliest of ITS OWN turns on which a unit may use this ability.
+## 0 / 1 (the default) = no gate. 2 = "never on the opening turn", which is the
+## whole reason it exists — a tutorial enemy that opens by tripling its own damage
+## teaches the wrong lesson in the wrong order, and a boss the player never gets to
+## see before its ultimate lands is a worse boss.
+##
+## Read by AIContext when it builds the usable (ability, slot) set, so it works at
+## every AI phase: it narrows the legal set the choice is drawn from rather than
+## competing inside the scoring. It is an AI-ONLY gate — the player's wheel is not
+## filtered by it, because a skill-tree ability with a turn gate isn't a thing that
+## exists and pretending otherwise would put a rule in the UI with nothing behind it.
+@export var ai_not_before_turn: int = 0
+
+## The intents this ability serves when it declares none of its own, derived from
+## kind + target. Deriving rather than authoring is what lets every existing .tres
+## work with no re-save.
+##
+## NB an ATTACK aimed at a FRIENDLY (ZAP! is kind ATTACK, target ALLY) derives to
+## NOTHING. It deals damage to your own side, and no intent in the model wants
+## that; an ability that genuinely should be cast on an ally — to steal their
+## spirit, say — must say so explicitly with `ai_intents`.
+func ai_intents_default() -> Array:
+	# Never castable: a PASSIVE, or any of the always-active node shapes.
+	if is_passive() or is_always_active():
+		return []
+	match kind:
+		Kind.ATTACK:
+			if target == Target.ENEMY or target == Target.ALL_ENEMIES:
+				# An attack that also drops a debuff competes for BOTH intents.
+				if String(applies_buff) != "":
+					return [AI_OFFENSE, AI_DEBUFF]
+				return [AI_OFFENSE]
+			return []
+		Kind.DEBUFF:
+			return [AI_DEBUFF]
+		Kind.BUFF:
+			# A self-buff is how a unit DEFENDS itself; it is also a legitimate
+			# thing to do for its own sake, so it serves both.
+			if target == Target.SELF:
+				return [AI_DEFENSE, AI_BUFF]
+			return [AI_BUFF]
+		Kind.HEAL:
+			if target == Target.SELF:
+				return [AI_DEFENSE]
+			return [AI_BUFF, AI_DEFENSE]
+		Kind.SHIELD:
+			if target == Target.SELF:
+				return [AI_DEFENSE]
+			return [AI_BUFF, AI_DEFENSE]
+	return []
 
 ## Element as its string prefix ("fire", "true", ...) for stat lookups.
 func element_key() -> String:
@@ -459,10 +574,45 @@ func spirit_steal_at(points: int) -> int:
 		return int(spirit_steal_ranks[_rank_index(points, spirit_steal_ranks.size())])
 	return spirit_steal
 
-## True when this ability carries any one-time spirit effect (gain or steal) at
-## the given rank — lets combat skip the work when there is nothing to do.
+## Flat spirit the TARGET gains when this ability resolves, at a given rank
+## (spirit_grant_ranks override, else the scalar). 0 = no grant.
+func spirit_grant_at(points: int) -> int:
+	if not spirit_grant_ranks.is_empty():
+		return int(spirit_grant_ranks[_rank_index(points, spirit_grant_ranks.size())])
+	return spirit_grant
+
+## True when this ability carries any one-time spirit effect (gain, steal or grant)
+## at the given rank — lets combat skip the work when there is nothing to do.
 func has_spirit_effect(points: int) -> bool:
-	return spirit_gain_at(points) != 0 or spirit_steal_at(points) != 0
+	return spirit_gain_at(points) != 0 or spirit_steal_at(points) != 0 \
+		or spirit_grant_at(points) != 0
+
+## The second element's scaling multiplier at a given rank (bonus_scaling_mult_ranks
+## override, else the scalar). 0.0 => the bonus hit computes to nothing.
+func bonus_scaling_mult_at(points: int) -> float:
+	if not bonus_scaling_mult_ranks.is_empty():
+		return float(bonus_scaling_mult_ranks[_rank_index(points, bonus_scaling_mult_ranks.size())])
+	return bonus_scaling_mult
+
+## True when this ATTACK carries a second hit of a DIFFERENT element. Both the
+## element and a stat to scale it off are required — a bonus element with no
+## scaling would compute to 0 and float a pointless "0" over the target.
+func has_bonus_damage() -> bool:
+	return String(bonus_damage_element) != "" and String(bonus_scaling_stat) != ""
+
+## The raw (pre-mitigation) second-element damage this attack deals at `points`,
+## off the given caster stat snapshot. 0.0 when it carries no second element.
+func compute_bonus_damage(caster_stats: Dictionary, points: int = 1) -> float:
+	if not has_bonus_damage():
+		return 0.0
+	var stat := float(caster_stats.get(String(bonus_scaling_stat), 0.0))
+	return maxf(0.0, bonus_scaling_mult_at(points) * stat)
+
+## The earliest of a unit's OWN turns on which the AI may use this ability. Floors
+## at 1 so 0 (the default) and 1 both mean "no gate", and `turns_taken >= this` is
+## the whole test.
+func not_before_turn() -> int:
+	return maxi(1, ai_not_before_turn)
 
 ## Spirit actually spent at a given rank (only SPIRIT costs are deducted today).
 func spirit_cost_at(points: int) -> int:

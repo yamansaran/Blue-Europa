@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bfoe002"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"rime_touch"
+display_name = "Rime Touch"
+description = "A cold hand laid on you, barely a gesture. Deal Ice damage equal to {scaling}."
+max_points = 1
+max_equipped = 1
+action_cost = 0.5
+kind = 0
+delivery = 1
+target = 0
+element = 2
+cost_type = 0
+cost_amount = 0
+cooldown = 0
+base_power = 2.0
+power_per_point = 0.0
+scaling_stat = &"vigor"
+scaling_mult = 0.5
+requires = Array[StringName]([])
+required_level = 1

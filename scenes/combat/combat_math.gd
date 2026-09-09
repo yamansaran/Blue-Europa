@@ -6,6 +6,14 @@ class_name CombatMath
 ## ============================================================================
 ## Everything routes through resolve() / resolve_damage(). The pipeline is:
 ##
+##   0. DODGE           — CombatDodge rolls the defender's alacrity against the
+##                        attacker's, scaled by the ability's accuracy tier. On a
+##                        dodge, resolve() returns immediately with damage 0 and
+##                        "dodged": true, and the CALLER must skip everything the
+##                        hit would otherwise have carried (rider debuffs, spirit
+##                        steal, Shatter, on-hit riders). resolve_flat() has NO
+##                        dodge stage — a rider hit that already got through can't
+##                        be dodged a second time.
 ##   1. PRE-MITIGATION  — the ability's damage output * pre-mitigation multipliers
 ##                        (stored as buffs/debuffs on the attacker, visible or
 ##                        hidden), via the PRE_DAMAGE_MULT_KEY basket stat.
@@ -63,12 +71,25 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 		"pre": 0.0, "post": 0.0, "damage": 0,
 		"is_crit": false, "crit_chance": 0.0, "crit_mult": 1.0,
 		"element": "physical",
+		"dodged": false, "dodge_chance": 0.0,
 	}
 	if attacker == null or ability == null:
 		return result
 
 	var element := ability.element_key()
 	result["element"] = element
+
+	# --- 0. DODGE ------------------------------------------------------------
+	# Accuracy is resolved BEFORE any damage is computed: a dodged hit deals no
+	# damage and — because the caller short-circuits on result["dodged"] — applies
+	# no rider debuff, no spirit steal, no Shatter and no on-hit effect. The chance
+	# comes off the alacrity gap, scaled by the ability's accuracy tier (a damaging
+	# spell is half as dodgeable; a non-damaging ability is never dodged at all).
+	var dodge_chance := CombatDodge.chance(attacker, defender, ability)
+	result["dodge_chance"] = dodge_chance
+	if CombatDodge.rolls_dodge(dodge_chance):
+		result["dodged"] = true
+		return result
 
 	# --- 1. PRE-MITIGATION ---------------------------------------------------
 	var base_dmg := ability.compute_damage(attacker.effective_stats(), points, scaling_bonus)
@@ -105,7 +126,7 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 	result["post"] = post
 
 	# --- 3. CRIT -------------------------------------------------------------
-	var chance := CombatCrit.chance(attacker, defender, ability)
+	var chance := CombatCrit.chance(attacker, defender, ability, extra_pierce)
 	result["crit_chance"] = chance
 	var final_dmg := post
 	if CombatCrit.rolls_crit(chance, crit_floor):

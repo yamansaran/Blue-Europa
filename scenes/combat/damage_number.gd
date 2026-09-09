@@ -59,6 +59,19 @@ const HORIZONTAL_DEVIATION := 30.0   # max px a number is nudged left/right on s
 const OUTLINE_MIN := 5
 const HEAL_COLOR := Color(0.30, 0.85, 0.38)   # green for healing "+N"
 
+# --- status words (no amount to size from; see spawn_text) ------------------
+const STATUS_FONT_SIZE := 34
+## An attack evaded via the alacrity gap (CombatDodge) — cool pale blue.
+const DODGE_COLOR := Color(0.62, 0.80, 0.95)
+## A debuff shrugged off via magnificence (CombatResist) — pale gold.
+const RESIST_COLOR := Color(0.95, 0.84, 0.45)
+## A debuff amplified by the caster's surplus Disdain — violet, so it reads as the
+## OPPOSITE of a resist rather than a variation on it.
+const EMPOWER_COLOR := Color(0.76, 0.55, 0.98)
+## Empowerment carries a value ("x1.55 +1T"), so it needs a smaller face than a
+## one-word status to stay inside the box.
+const EMPOWER_FONT_SIZE := 27
+
 
 ## Build a damage number, add it to `parent`, and start its animation.
 static func spawn(parent: Node, point: Vector2, amount: int, element: String = "physical", is_crit: bool = false, is_heal: bool = false) -> DamageNumber:
@@ -71,6 +84,17 @@ static func spawn(parent: Node, point: Vector2, amount: int, element: String = "
 ## Convenience: a green "+N" healing popup.
 static func spawn_heal(parent: Node, point: Vector2, amount: int) -> DamageNumber:
 	return spawn(parent, point, amount, "physical", false, true)
+
+## A STATUS popup: arbitrary text in a given colour, floating on the same tween as a
+## damage number. Used for outcomes that have no number to show — "DODGE" when an
+## attack is evaded (CombatDodge) and "RESIST" when a debuff is shrugged off
+## (CombatResist). Font size is fixed (there is no amount to scale from).
+static func spawn_text(parent: Node, point: Vector2, label: String, color: Color, font_size: int = STATUS_FONT_SIZE) -> DamageNumber:
+	var dn := DamageNumber.new()
+	dn._configure_text(label, color, font_size)
+	parent.add_child(dn)
+	dn._begin(point)
+	return dn
 
 
 func _configure(amount: int, element: String, is_crit: bool, is_heal: bool = false) -> void:
@@ -110,6 +134,30 @@ func _configure(amount: int, element: String, is_crit: bool, is_heal: bool = fal
 	# (blood, true/black) get a LIGHT outline instead of the usual dark one. The
 	# outline thickens a little for bigger numbers.
 	var outline := Color(1, 1, 1) if _luminance(col) < 0.22 else Color(0, 0, 0)
+	add_theme_color_override("font_outline_color", outline)
+	add_theme_constant_override("outline_size", maxi(OUTLINE_MIN, int(round(font_size / 6.0))))
+
+
+## Configure this popup as a fixed-size STATUS word rather than a number. Shares the
+## outline / centring / z-order rules with _configure so a "DODGE" reads exactly like
+## a damage number, minus the amount-driven sizing and the element colouring.
+func _configure_text(label: String, color: Color, font_size: int) -> void:
+	text = label
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	z_index = 100
+	horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	add_theme_font_size_override("font_size", font_size)
+	add_theme_font_override("font", FONT_REGULAR)
+
+	var box_w := maxf(160.0, float(font_size) * 7.0)
+	var box_h := float(font_size) * 1.7
+	custom_minimum_size = Vector2(box_w, box_h)
+	size = Vector2(box_w, box_h)
+
+	add_theme_color_override("font_color", color)
+	var outline := Color(1, 1, 1) if _luminance(color) < 0.22 else Color(0, 0, 0)
 	add_theme_color_override("font_outline_color", outline)
 	add_theme_constant_override("outline_size", maxi(OUTLINE_MIN, int(round(font_size / 6.0))))
 

@@ -37,6 +37,7 @@ func _ready() -> void:
 		ch.changed.connect(_refresh_pool)
 	if ch and not ch.changed.is_connected(_refresh_attributes):
 		ch.changed.connect(_refresh_attributes)
+	_build_debug_uid_readout()
 	if default_skill_tree_scene != null:
 		load_skill_tree(default_skill_tree_scene)
 	_build_overview_readout()
@@ -345,6 +346,103 @@ func _refresh_pool() -> void:
 		entry.setup(str(id), display)
 
 
+# ---------------------------------------------------- DEBUG: node-UID readout
+## A debug-only pair inside the SkillTreePanel (gated by GameManager.debug_enabled):
+## a small "UID" toggle button parked in the panel's top-LEFT corner, and a readout
+## box in the panel's top-RIGHT that names whichever skill node the mouse is over —
+## its node_id (the id used by `parents`) plus the ability id it grants. It reads
+## the tree's `debug_node_hovered` signal (see skill_tree.gd), so it works for any
+## tree loaded into the panel. Deliberately unstyled/floating — it's a dev tool.
+var _dbg_uid_button: Button = null
+var _dbg_uid_box: PanelContainer = null
+var _dbg_uid_label: Label = null
+## Last thing the mouse reported, kept so toggling the box on mid-hover shows it.
+var _dbg_last_node_id: String = ""
+var _dbg_last_ability_id: String = ""
+
+
+## True while the game's debug features are switched on.
+func _debug_on() -> bool:
+	return typeof(GameManager) != TYPE_NIL and GameManager.has_method("is_debug") \
+		and GameManager.is_debug()
+
+
+func _build_debug_uid_readout() -> void:
+	if not _debug_on():
+		return
+	var panel: Control = get_node_or_null("SkillTreePanel")
+	if panel == null:
+		return
+
+	# --- the toggle button (top-left of the skill tree panel) ---
+	_dbg_uid_button = Button.new()
+	_dbg_uid_button.text = "UID"
+	_dbg_uid_button.tooltip_text = "DEBUG: read out the node_id of the hovered skill node"
+	_dbg_uid_button.toggle_mode = true
+	_dbg_uid_button.focus_mode = Control.FOCUS_NONE
+	_dbg_uid_button.add_theme_font_size_override("font_size", 10)
+	_dbg_uid_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_dbg_uid_button.position = Vector2(6, 6)
+	_dbg_uid_button.size = Vector2(40, 20)
+	_dbg_uid_button.toggled.connect(_on_debug_uid_toggled)
+	panel.add_child(_dbg_uid_button)
+
+	# --- the readout box (top-right of the same panel) ---
+	_dbg_uid_box = PanelContainer.new()
+	_dbg_uid_box.visible = false
+	_dbg_uid_box.mouse_filter = Control.MOUSE_FILTER_IGNORE   # never eat node hovers
+	_dbg_uid_box.anchor_left = 1.0
+	_dbg_uid_box.anchor_right = 1.0
+	_dbg_uid_box.anchor_top = 0.0
+	_dbg_uid_box.anchor_bottom = 0.0
+	_dbg_uid_box.offset_left = -230.0
+	_dbg_uid_box.offset_right = -6.0
+	_dbg_uid_box.offset_top = 6.0
+	_dbg_uid_box.offset_bottom = 52.0
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.05, 0.07, 0.88)
+	sb.set_corner_radius_all(4)
+	sb.set_border_width_all(1)
+	sb.border_color = Color(0.9, 0.35, 0.35, 0.9)
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	_dbg_uid_box.add_theme_stylebox_override("panel", sb)
+
+	_dbg_uid_label = Label.new()
+	_dbg_uid_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dbg_uid_label.add_theme_font_size_override("font_size", 11)
+	_dbg_uid_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.55))
+	_dbg_uid_box.add_child(_dbg_uid_label)
+	panel.add_child(_dbg_uid_box)
+	_refresh_debug_uid()
+
+
+func _on_debug_uid_toggled(on: bool) -> void:
+	if _dbg_uid_box:
+		_dbg_uid_box.visible = on
+	_refresh_debug_uid()
+
+
+## Called by the loaded tree on every node enter (ids) / exit (empty strings).
+func _on_debug_node_hovered(node_id: String, ability_id: String) -> void:
+	_dbg_last_node_id = node_id
+	_dbg_last_ability_id = ability_id
+	_refresh_debug_uid()
+
+
+func _refresh_debug_uid() -> void:
+	if _dbg_uid_label == null:
+		return
+	if _dbg_last_node_id == "":
+		_dbg_uid_label.text = "node_id: —\nability: —"
+	else:
+		_dbg_uid_label.text = "node_id: %s\nability: %s" % [
+			_dbg_last_node_id,
+			_dbg_last_ability_id if _dbg_last_ability_id != "" else "—"]
+
+
 # ---------------------------------------------------- skill-tree shell API
 func load_skill_tree(tree_scene: PackedScene) -> void:
 	if tree_scene == null:
@@ -352,6 +450,12 @@ func load_skill_tree(tree_scene: PackedScene) -> void:
 	_clear_skill_tree()
 	var tree: Node = tree_scene.instantiate()
 	_skill_tree_container.add_child(tree)
+	# DEBUG: let the UID readout follow this tree's hovers (no-op when the debug
+	# flag is off — nothing was built to listen with).
+	# (connected by NAME so this script doesn't statically depend on the tree type)
+	if _dbg_uid_label != null and tree.has_signal("debug_node_hovered") \
+	and not tree.is_connected("debug_node_hovered", _on_debug_node_hovered):
+		tree.connect("debug_node_hovered", _on_debug_node_hovered)
 	if tree is Control:
 		var c: Control = tree
 		c.anchor_left = 0.0

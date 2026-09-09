@@ -21,10 +21,34 @@ class_name CharacterRegistry
 ## Instantiate a fresh character by id. Returns null for an unknown id.
 static func create(id: String) -> CharacterBase:
 	match id:
+		# --- the shared ice set (every campaign not yet written) ---------------
 		"ice_spirit":
 			return IceSpirit.new()
 		"large_ice_spirit":
 			return LargeIceSpirit.new()
+
+		# --- ZONE 1 · THE ARCTIC ----------------------------------------------
+		# Eight modules for seven fights. A creature earns a module by having its own
+		# JOB; a VARIANT is a fight spec — which is why the two Shambling Corpses in
+		# fight 2 are ONE module plus a {"level":2, "stats":{…}} override rather than
+		# two files. See c1.gd.
+		"shambling_corpse":
+			return ShamblingCorpse.new()
+		"shambling_guard":
+			return ShamblingGuard.new()
+		"frozen_corpse":
+			return FrozenCorpse.new()
+		"unknown_entity":
+			return UnknownEntity.new()
+		"old_ice":
+			return OldIce.new()
+		"inuit_hunter":
+			return InuitHunter.new()
+		"strapped_passenger":
+			return StrappedPassenger.new()
+		"the_scavenger":
+			return TheScavenger.new()
+
 		"player":
 			return PlayerCharacter.new()
 		_:
@@ -38,7 +62,7 @@ static func has(id: String) -> bool:
 ##   - If the spec names a "character" module, start from that module (its own
 ##     identity / stats / permanent buffs) and then layer any per-fight overrides
 ##     on top (name, level, stats{}, max_hp, color, size_scale, ai, current_hp,
-##     permanent_buffs) via CharacterBase.apply_spec_overrides.
+##     permanent_buffs, abilities[], ability_ranks{}) via CharacterBase.apply_spec_overrides.
 ##   - Otherwise fall back to the plain-dictionary path (CharacterBase.from_spec),
 ##     so old-style inline specs (e.g. the training dummy) keep working unchanged.
 static func build(spec: Dictionary) -> CharacterBase:

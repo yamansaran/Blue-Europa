@@ -25,11 +25,20 @@ class_name Buff
 ## element tag, stackable + max_stacks + current stacks, weight, magnitude,
 ## resistible, transient, and a list of ON-STRUCK reactions.
 ##
-## STACKING. A stackable buff is stored as ONE entry with a `stacks` count. The
-## PER-STACK values live in entry["per_stack"]; the live top-level fields
-## ("mods", "mult", "dot", "spirit_per_turn", "resist_mult", ...) are the per-stack
-## values times `stacks`, recomputed by recompute_scaled(). That way the stat reads
-## (which see the top-level "mods"/"mult") automatically reflect the stack count.
+## STACKING — INDEPENDENT INSTANCES. Stacking is the DEFAULT (`stackable` is true
+## unless an entry opts out), and each application is appended by CombatBuffs.apply as
+## its OWN separate entry rather than merged into one with a bumped count. Every
+## instance freezes the numbers it was built with — the caster's Instinct snapshot, the
+## Disdain potency multiplier, the rolled duration — and ticks and expires on its own
+## clock. NOTHING later reaches back into an instance that has already landed, so a
+## second, stronger cast lands as a second, stronger instance and leaves the first
+## alone. Once applied, a debuff is fully disconnected from its caster; only the
+## BEARER's own layer (vulnerability, resistance, damage_taken_mult) still modulates
+## it, because those are read live off the bearer at tick time.
+##
+## The per-entry `stacks` count and the per_stack -> live mirroring (recompute_scaled)
+## remain for an entry AUTHORED with stacks > 1, but re-application no longer uses
+## them; `max_stacks` is now a cap on the NUMBER OF INSTANCES.
 ##
 ## NOTE — TWO different "mult"s: entry["mult"] here is the BASE-STAT multiplier
 ## layer (scales vigor, defenses, ... and shows in readouts). The separate
@@ -41,6 +50,12 @@ class_name Buff
 
 const KIND_BUFF := "buff"
 const KIND_DEBUFF := "debuff"
+
+## Instance cap applied to a stacking entry that names no `max_stacks` of its own.
+## Effectively unlimited by design — a cap is a deliberate authoring decision, never
+## something the engine imposes behind your back. 216 rather than 0 (0 = truly
+## unlimited) only so a runaway loop has a ceiling.
+const DEFAULT_MAX_STACKS := 216
 
 ## A fresh per-stack payload with every field at its neutral default.
 static func _default_per_stack() -> Dictionary:
@@ -127,26 +142,83 @@ static func make(config: Dictionary) -> Dictionary:
 	if typeof(raw_overflow) == TYPE_DICTIONARY:
 		overflow_shield = (raw_overflow as Dictionary).duplicate(true)
 
-	var stackable := bool(config.get("stackable", false))
+	# STACKING IS THE DEFAULT, AND EACH STACK IS AN INDEPENDENT INSTANCE.
+	# `stackable` defaults TRUE; an effect that must stay single-instance opts out with
+	# `stackable: false`. Re-applying a stacking effect does NOT merge into one entry —
+	# CombatBuffs.apply appends a SEPARATE entry with its own frozen numbers and its own
+	# duration. That is what makes an applied debuff independent of the caster: a later,
+	# stronger cast never reaches back and empowers an earlier one, and each instance
+	# expires on its own schedule.
+	# `max_stacks` is therefore a cap on the NUMBER OF INSTANCES, defaulting to the
+	# effectively-unlimited DEFAULT_MAX_STACKS. Capping is an authoring decision — set
+	# it only when an effect genuinely needs one.
+	var stackable := bool(config.get("stackable", true))
+	# Kind is read first because `resistible` now DEFAULTS from it (see below).
+	var kind := str(config.get("kind", KIND_BUFF))
 	var entry := {
 		"id": str(config.get("id", "buff")),
 		"source": str(config.get("source", "Buff")),
 		"desc": str(config.get("desc", "")),
-		"kind": str(config.get("kind", KIND_BUFF)),
+		# Optional token template re-rendered from the entry's LIVE numbers every time
+		# the text is displayed (see describe). Set this on anything whose description
+		# quotes a value, so an instance empowered by Disdain shows what it ACTUALLY
+		# does rather than the base figure it was authored with. Blank = use `desc`.
+		"desc_template": str(config.get("desc_template", "")),
+		"kind": kind,
 		"visible": bool(config.get("visible", true)),
 		"duration": int(config.get("duration", -1)),   # -1 = permanent
 		"element": str(config.get("element", "")),
 		"stackable": stackable,
-		"max_stacks": int(config.get("max_stacks", 1)),
+		"max_stacks": int(config.get("max_stacks", DEFAULT_MAX_STACKS)),
 		"stacks": maxi(1, int(config.get("stacks", 1))),
 		"weight": float(config.get("weight", 1.0)),
 		# HIDDEN severity gauge — how "big" this stack of buff/debuff is. Reserved
 		# for future targeting + character UI; default 1.0, tune per buff.
 		"magnitude": float(config.get("magnitude", 1.0)),
-		"resistible": bool(config.get("resistible", false)),
+		# MAGNIFICENCE / DISDAIN — the resist roll (CombatResist). This now DEFAULTS
+		# to "every debuff can be resisted, no buff can": a debuff rolls the target's
+		# magnificence against the caster's disdain before it lands. Set it to false
+		# explicitly on a debuff that must ALWAYS land — Shatter's `stunned` (already
+		# paid for by consuming an ice debuff) and the `hoarfrost` combo marker.
+		"resistible": bool(config.get("resistible", kind == KIND_DEBUFF)),
+		# Flat percentage points added to the target's resist chance for THIS entry
+		# (negative = harder to shrug off). The per-debuff "slippery / sticky" knob.
+		"resist_bias": float(config.get("resist_bias", 0.0)),
+		# --- DISDAIN SCALING (CombatResist.apply_scaling) ------------------------
+		# How much surplus Disdain amplifies this debuff. O is the 0..1 overpower
+		# gauge = squash(0.012 * (caster.disdain - target.magnificence)).
+		#   potency_scale  : the entry's whole numeric per_stack payload is multiplied
+		#                    by (1 + potency_scale * O). 0 = never amplified (a stun
+		#                    has no magnitude to grow). 1.0 = up to +100% at extreme
+		#                    overpower, ~+55% at a 100-point Disdain lead.
+		#   duration_scale : expected EXTRA turns = duration_scale * O, rolled once.
+		#                    Tune this DOWN for control (an extra stun turn is worth
+		#                    far more than an extra tick of a damage-over-time).
+		#   max_extra_duration : hard cap on the rolled bonus, in turns.
+		"potency_scale": float(config.get("potency_scale", 0.0)),
+		"duration_scale": float(config.get("duration_scale", 0.0)),
+		"max_extra_duration": int(config.get("max_extra_duration", 2)),
+		# The potency multiplier actually baked into per_stack when this entry was
+		# applied (1.0 = unscaled). CombatBuffs.apply reads it so a re-applied
+		# STACKING debuff cast at a HIGHER overpower rescales the existing entry up
+		# instead of being locked to the first cast's numbers.
+		"potency_applied": 1.0,
+		# Extra turns this entry's duration actually gained from the caster's Disdain
+		# (CombatResist.roll_extra_duration). Display-only — the bonus is already baked
+		# into `duration`; this is what lets the BuffBar say WHY the number is high.
+		"duration_bonus": 0,
 		"transient": bool(config.get("transient", false)),
 		"silence": bool(config.get("silence", false)),
 		"stun": bool(config.get("stun", false)),
+		# --- CHARGES: a lifetime measured in ATTACKS rather than in turns --------
+		# "for the next N attacks". 0 (the default) = UNLIMITED, so every existing
+		# entry is unchanged. When positive, CombatBuffs.spend_attack_charges
+		# decrements it each time the BEARER lands an attack and removes the entry
+		# the moment it reaches 0. `duration` still runs in parallel and is the
+		# OUTER bound — whichever runs out first ends the buff. NOT stack-scaled:
+		# stacking a charged buff refreshes its charges rather than multiplying them
+		# (see CombatBuffs.apply), because "three more attacks" is the intent.
+		"charges": maxi(0, int(config.get("charges", 0))),
 		# Per-stack ice-damage amplifier (Hoarfrost). While present, the NEXT sourced
 		# ice hit on the bearer is multiplied by (1 + ice_amp_per_stack * stacks) and
 		# then this entry is consumed. Plain metadata (not stack-scaled here — the ×stacks
@@ -208,6 +280,115 @@ static func recompute_scaled(entry: Dictionary) -> void:
 		scaled_rme[k] = float(base_rme[k]) * s
 	entry["resist_mult_by_element"] = scaled_rme
 
+## Every numeric per_stack key that represents a MAGNITUDE, and is therefore scaled
+## by the caster's Disdain overpower. Deliberately excludes `dot_mult` (itself a
+## multiplier, not a magnitude) and `dot_element` (a string).
+const POTENCY_SCALAR_KEYS := [
+	"dot", "dot_pct_per_turn", "spirit_per_turn",
+	"heal_per_turn", "heal_pct_per_turn", "resist_mult",
+]
+## Per_stack keys holding a {stat_key: value} map whose VALUES are magnitudes.
+const POTENCY_MAP_KEYS := ["mods", "mult", "resist_mult_by_element"]
+
+## Multiply this entry's whole numeric payload by `mult`, IN PLACE, then refresh the
+## live mirrors. This is how DISDAIN amplifies a debuff (CombatResist.apply_scaling):
+## every magnitude the entry carries — flat stat mods, multiplier mods, damage- and
+## heal-over-time, spirit drain, multiplicative resist, and the top-level hoarfrost
+## ice amp — grows by the same factor, so ANY debuff in the catalogue scales with
+## zero per-buff code. Negative mods (Hypothermia's alacrity cut) get MORE negative,
+## which is correct: a bigger cut.
+## A `mult` of 1.0 is a no-op; values below 0 are ignored.
+static func scale_potency(entry: Dictionary, mult: float) -> void:
+	if entry.is_empty() or mult < 0.0 or is_equal_approx(mult, 1.0):
+		return
+	var per_stack: Dictionary = entry.get("per_stack", _default_per_stack())
+
+	for k in POTENCY_SCALAR_KEYS:
+		if per_stack.has(k):
+			per_stack[k] = float(per_stack[k]) * mult
+
+	for k in POTENCY_MAP_KEYS:
+		if not per_stack.has(k) or typeof(per_stack[k]) != TYPE_DICTIONARY:
+			continue
+		var m: Dictionary = per_stack[k]
+		for stat_key in m:
+			m[stat_key] = float(m[stat_key]) * mult
+
+	# Hoarfrost's ice amplification is top-level metadata, not part of per_stack, so
+	# it has to be scaled explicitly — otherwise a high-Disdain Hoarfrost would be
+	# the one debuff that ignored the system.
+	if entry.has("ice_amp_per_stack"):
+		entry["ice_amp_per_stack"] = float(entry["ice_amp_per_stack"]) * mult
+
+	entry["per_stack"] = per_stack
+	recompute_scaled(entry)
+
+# ---------------------------------------------------------------------------
+# LIVE DESCRIPTION
+# ---------------------------------------------------------------------------
+## An entry's description with its ACTUAL current numbers substituted in.
+##
+## WHY THIS EXISTS. `desc` is baked by BuffLibrary at build time from the base values,
+## so the moment a cast is empowered by the caster's Disdain (potency multiplier and/or
+## extra turns) the stored text is a lie — it promises 40 damage while the entry ticks
+## for 62. An entry that sets `desc_template` gets re-rendered from its LIVE fields
+## every time the text is shown, so the card always states what this instance will
+## really do. An entry with no template falls back to the static `desc`, so nothing
+## that predates this is affected.
+##
+## TOKENS (all read off the live, stack-scaled and potency-scaled fields):
+##   {dot}        flat damage-over-time per turn, incl. dot_mult   e.g. "62"
+##   {dot_pct}    dot_pct_per_turn as whole percent                e.g. "5"
+##   {heal}       heal_per_turn                                    e.g. "30"
+##   {heal_pct}   heal_pct_per_turn as whole percent
+##   {spirit}     spirit_per_turn, signed                          e.g. "-20"
+##   {spiritabs}  spirit_per_turn, magnitude only                  e.g. "20"
+##   {duration}   turns remaining as an integer ("inf" if permanent)
+##   {turns}      turns remaining, pluralised                      e.g. "3 turns"
+##   {mod:<stat>}     that flat mod, signed        e.g. {mod:ice_defense}  -> "-15"
+##   {modabs:<stat>}  that flat mod, magnitude     e.g.                    -> "15"
+##   {modpct:<stat>}     a flat mod that IS a fraction, as whole percent — for the
+##   {modpctabs:<stat>}  keys stored in `mods` around 0 (healing_received_mult,
+##                       damage_taken_mult, ...): -0.5 -> "-50" / "50"
+##   {mult:<stat>}    that multiplier as whole percent, signed  e.g. "-30"
+##   {multabs:<stat>} same, magnitude only
+static func describe(entry: Dictionary) -> String:
+	var tmpl := str(entry.get("desc_template", ""))
+	if tmpl == "":
+		return str(entry.get("desc", ""))
+
+	var dur := int(entry.get("duration", -1))
+	var spirit := float(entry.get("spirit_per_turn", 0.0))
+	var out := tmpl
+	out = out.replace("{dot}", str(dot_damage(entry)))
+	out = out.replace("{dot_pct}", str(int(round(float(entry.get("dot_pct_per_turn", 0.0)) * 100.0))))
+	out = out.replace("{heal}", str(heal_amount(entry)))
+	out = out.replace("{heal_pct}", str(int(round(float(entry.get("heal_pct_per_turn", 0.0)) * 100.0))))
+	out = out.replace("{spirit}", "%d" % int(round(spirit)))
+	out = out.replace("{spiritabs}", "%d" % int(round(absf(spirit))))
+	out = out.replace("{duration}", "inf" if dur < 0 else str(dur))
+	out = out.replace("{turns}", "permanent" if dur < 0 else "%d turn%s" % [dur, "" if dur == 1 else "s"])
+
+	# {mod:<stat>} / {modabs:<stat>} / {mult:<stat>} / {multabs:<stat>}
+	var re := RegEx.new()
+	# Longest alternatives first so "modpctabs" is not eaten by "mod".
+	if re.compile("\\{(modpctabs|modpct|modabs|mod|multabs|mult):([A-Za-z0-9_]+)\\}") != OK:
+		return out
+	# Replace back-to-front so earlier match offsets stay valid.
+	var matches := re.search_all(out)
+	for i in range(matches.size() - 1, -1, -1):
+		var m: RegExMatch = matches[i]
+		var kind := m.get_string(1)
+		var stat := m.get_string(2)
+		var src: Dictionary = entry.get("mult" if kind.begins_with("mult") else "mods", {})
+		var v := float(src.get(stat, 0.0))
+		if kind.begins_with("mult") or kind.begins_with("modpct"):
+			v *= 100.0
+		if kind.ends_with("abs"):
+			v = absf(v)
+		out = out.substr(0, m.get_start()) + ("%d" % int(round(v))) + out.substr(m.get_end())
+	return out
+
 # ---------------------------------------------------------------------------
 # Small accessors (tolerant of missing keys, so hand-authored entries are safe).
 # ---------------------------------------------------------------------------
@@ -228,6 +409,24 @@ static func remaining(entry: Dictionary) -> int:
 
 static func stacks(entry: Dictionary) -> int:
 	return maxi(1, int(entry.get("stacks", 1)))
+
+## Attack-charges left on this entry. 0 = UNLIMITED (the default), which is why
+## every caller has to test `has_charges` rather than `charges > 0`.
+static func charges(entry: Dictionary) -> int:
+	return maxi(0, int(entry.get("charges", 0)))
+
+## True when this entry's lifetime is measured in attacks as well as in turns.
+static func has_charges(entry: Dictionary) -> bool:
+	return charges(entry) > 0
+
+## Spend ONE attack charge. Returns true when that was the last one, i.e. the
+## caller should now REMOVE the entry. A charge-less entry is never spent and
+## always returns false.
+static func spend_charge(entry: Dictionary) -> bool:
+	if not has_charges(entry):
+		return false
+	entry["charges"] = charges(entry) - 1
+	return int(entry["charges"]) <= 0
 
 ## The hidden severity gauge for this entry (default 1.0). Reserved for future
 ## targeting + character UI.

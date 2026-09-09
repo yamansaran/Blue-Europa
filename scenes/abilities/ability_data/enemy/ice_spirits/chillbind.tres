@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bfoe003"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"chillbind"
+display_name = "Chillbind"
+description = "Frost creeps into the joints. The target's Alacrity is cut for 3 turns."
+max_points = 2
+max_equipped = 1
+action_cost = 1.0
+kind = 2
+target = 0
+element = 2
+cost_type = 1
+cost_amount = 20
+cooldown = 3
+cost_amount_ranks = Array[int]([20, 25])
+cooldown_ranks = Array[int]([3, 4])
+description_ranks = Array[String](["Frost creeps into the joints. The target's Alacrity is cut for 3 turns.", "Frost seizes the joints. The target's Alacrity is cut hard for 3 turns."])
+requires = Array[StringName]([])
+required_level = 1
+applies_buff = &"hypothermia"

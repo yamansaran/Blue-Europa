@@ -21,6 +21,13 @@ extends Control
 ## build it.
 ## ----------------------------------------------------------------------------
 
+## DEBUG hook. Emitted every time the mouse enters/leaves a SkillNode in this tree:
+## the node's `node_id` on enter, "" on exit. The abilities screen listens for this
+## to drive its debug UID readout (see abilities.gd). Emitted unconditionally and
+## before any ability/null checks, so a node with no ability still reports its id;
+## nothing listens unless the debug flag is on.
+signal debug_node_hovered(node_id: String, ability_id: String)
+
 const LINE_COLOR := Color(0.78, 0.74, 0.55, 0.9)
 const LINE_DIM := Color(0.40, 0.38, 0.32, 0.6)   ## parent not yet unlocked
 const LINE_WIDTH := 3.0
@@ -124,6 +131,10 @@ func _skill_nodes() -> Array[SkillNode]:
 # ------------------------------------------------ info (shared AbilityTooltip)
 # Same 3-panel card as the wheel and ability pool. Anchored to the hovered node.
 func show_info(node: SkillNode) -> void:
+	if node != null:
+		# DEBUG readout hook — fires before the ability/tooltip checks below.
+		debug_node_hovered.emit(node.node_id,
+			String(node.ability.id) if node.ability else "")
 	if _tooltip == null or node == null:
 		return
 	if node.ability == null:
@@ -184,6 +195,7 @@ func invested_dependents(node: SkillNode) -> Array:
 
 
 func hide_info() -> void:
+	debug_node_hovered.emit("", "")
 	if _tooltip:
 		_tooltip.hide_tip()
 

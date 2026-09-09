@@ -45,14 +45,31 @@ static func attribute_points_for_level(level: int) -> int:
 
 ## CUTOFFS[level] = total cumulative XP needed to BE that level.
 ## Index 0 is a dummy; levels run 1..MAX_LEVEL.
+##
+## THE CURVE (retuned). Roughly geometric: the cost of the NEXT level rises about
+## 11-13% per level, from 100 XP for level 2 to 23,200 for level 50, totalling
+## 216,000 across the whole game. The per-level step is smooth enough that no
+## single level feels like a wall, and the early game moves quickly — levels 2-10
+## together cost 1,480, less than one level 30 step.
+##
+## The right-hand comment on each row is the XP required to leave that level (the
+## first difference), which is the number the player actually experiences as "one
+## level's worth of bar". Keep the two in sync when retuning: CUTOFFS is the source
+## of truth and every helper below derives from it, so editing a cutoff silently
+## changes the two spans either side of it.
 const CUTOFFS := [
 	0,                                                    # [0] unused
-	0, 100, 400, 950, 1800, 3000, 4600, 6650, 9150,       # levels 1..9
-	12175, 15725, 19850, 24550, 29875, 35850, 42500, 49850, 57925, 66750,   # 10..19
-	76350, 86750, 97950, 110000, 122900, 136675, 151350, 166950, 183500, 201000, # 20..29
-	219475, 238950, 259450, 280975, 303550, 327200, 351925, 377775, 404725, 432825, # 30..39
-	462075, 492500, 524100, 556900, 590925, 626200, 662725, 700500, 739550, 779900, # 40..49
-	821575,                                               # level 50 (max)
+	# level:      1     2     3     4     5     6     7      8      9
+	0, 100, 210, 335, 475, 635, 810, 1010, 1230,          # steps 100 110 125 140 160 175 200 220 250
+	# level:     10    11    12    13    14    15    16    17    18    19
+	1480, 1760, 2070, 2420, 2810, 3250, 3740, 4290, 4905, 5595,   # steps 280 310 350 390 440 490 550 615 690 770
+	# level:     20    21    22    23     24     25     26     27     28     29
+	6365, 7230, 8200, 9300, 10500, 11850, 13400, 15100, 17000, 19150,   # steps 865 970 1100 1200 1350 1550 1700 1900 2150 2400
+	# level:      30     31     32     33     34     35     36     37     38     39
+	21550, 24250, 27250, 30650, 34450, 38700, 43450, 48750, 54700, 61400,   # steps 2700 3000 3400 3800 4250 4750 5300 5950 6700 7500
+	# level:      40     41     42     43     44      45      46      47      48      49
+	68900, 77300, 86700, 97200, 109000, 122200, 137000, 153600, 172100, 192800,  # steps 8400 9400 10500 11800 13200 14800 16600 18500 20700 23200
+	216000,                                               # level 50 (max)
 ]
 
 

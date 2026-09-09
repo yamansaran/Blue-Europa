@@ -25,4 +25,11 @@ func _init() -> void:
 	# a permanent Frost Mantle that reflects a little ice damage when struck.
 	if not permanent_buffs.has("frost_mantle"):
 		permanent_buffs.append("frost_mantle")
+	# A BIGGER KIT, and the same AI routine. It trades the ice spirit's cheap
+	# half-action jab for Glacial Crush — expensive, on a cooldown, and by far its
+	# best hit — and casts its inherited debuff and shield a rank higher. That is
+	# the whole difficulty dial: `ability_ranks` scales cost, power, duration and
+	# cooldown with no second .tres and no new module (CHARACTER_PRIMER §3b).
+	abilities = ["glacial_crush", "frost_bolt", "chillbind", "rime_guard"]
+	ability_ranks = {"frost_bolt": 2, "chillbind": 2, "rime_guard": 2}
 	init_vitals()

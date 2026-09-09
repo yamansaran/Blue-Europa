@@ -20,8 +20,14 @@ func _ready() -> void:
 	options_btn.pressed.connect(func(): load_content(GameManager.SCENE_OPTIONS))
 	achievements_btn.pressed.connect(func(): load_content(GameManager.SCENE_ACHIEVEMENTS))
 	save_btn.pressed.connect(_on_save_pressed)
-	_add_studio_button()
-	world_map_btn.pressed.connect(_on_world_map_pressed)
+	# --- debug-only toolbar bits (GameManager.debug_enabled) ---
+	# The Creation Studio button and the World Map (campaign-jump) button are debug
+	# features: with the flag off they are never built / never shown.
+	if _debug_on():
+		_add_studio_button()
+		world_map_btn.pressed.connect(_on_world_map_pressed)
+	else:
+		world_map_btn.visible = false
 	# Boot into a requested content panel (e.g. the victory screen) if one was
 	# staged; otherwise into the CURRENT campaign's overworld (via GameManager,
 	# which also resolves any pending linear campaign advance).
@@ -71,15 +77,32 @@ func refresh_progress() -> void:
 		progress_label.text = "%s   %d/%d%s" % [
 			nm, CampaignDB.fight_index, CampaignDB.fights_total(), suffix]
 
-## DEBUG (temporary): the Save button wipes the save and starts a fresh level-1
-## character rather than persisting the current one. Character.reset_to_defaults()
-## resets every field to its new-game value and overwrites user://character.save.
+## True while the game's debug features are switched on (GameManager.debug_enabled).
+func _debug_on() -> bool:
+	return typeof(GameManager) != TYPE_NIL and GameManager.has_method("is_debug") \
+		and GameManager.is_debug()
+
+
+## The Save button has TWO behaviours, picked by the debug flag:
+##   debug ON  — DEBUG (temporary): wipe the save and start a fresh level-1
+##               character. Character.reset_to_defaults() resets every field to its
+##               new-game value and overwrites user://character.save.
+##   debug OFF — the normal thing: persist the current character (save_game()).
 func _on_save_pressed() -> void:
-	if typeof(Character) != TYPE_NIL and Character.has_method("reset_to_defaults"):
-		Character.reset_to_defaults()
-	if save_dialog:
-		save_dialog.dialog_text = "DEBUG: save cleared — reset to a fresh Level 1."
-		save_dialog.popup_centered()
+	if typeof(Character) == TYPE_NIL:
+		return
+	if _debug_on():
+		if Character.has_method("reset_to_defaults"):
+			Character.reset_to_defaults()
+		if save_dialog:
+			save_dialog.dialog_text = "DEBUG: save cleared — reset to a fresh Level 1."
+			save_dialog.popup_centered()
+	else:
+		if Character.has_method("save_game"):
+			Character.save_game()
+		if save_dialog:
+			save_dialog.dialog_text = "Game saved."
+			save_dialog.popup_centered()
 
 func _on_world_map_pressed() -> void:
 	GameManager.go_to_campaign_map()

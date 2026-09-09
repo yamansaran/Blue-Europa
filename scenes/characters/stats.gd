@@ -78,11 +78,16 @@ const CRIT_DAMAGE_BASE_DEFAULT := 3.0
 const MITIGATION_STIFFNESS_DEFAULT := 0.025
 
 # --- spirit regen tuning ----------------------------------------------------
-## Spirit every character restores at the START of each of its turns, by default.
-## It is a real base stat ("spirit_regen"), so it is per-character OVERRIDABLE via
-## a spec (stats:{"spirit_regen": ...}) and BUFFABLE like anything else. Combat
-## adds this to the per-turn spirit change from any spirit-regen/-drain buffs.
-const SPIRIT_REGEN_DEFAULT := 15.0
+## Spirit every character restores at the START of each of ITS OWN turns, by
+## default. It is a real base stat ("spirit_regen"), so it is per-character
+## OVERRIDABLE via a spec (stats:{"spirit_regen": ...}) and BUFFABLE like anything
+## else. Combat adds this to the per-turn spirit change from any
+## spirit-regen/-drain buffs.
+## rev30: LOWERED 15 -> 5 as part of the general rebalancing of how scarce spirit
+## should be. NB the turn this ticks on is now the BEARER'S OWN turn on the
+## timeline, so a high-alacrity character regenerates more often in real time —
+## alacrity is quietly a spirit stat, which is part of why the base came down.
+const SPIRIT_REGEN_DEFAULT := 5.0
 
 # --- action points tuning ---------------------------------------------------
 ## The per-turn action-point BUDGET every character starts each of its turns with.
@@ -92,6 +97,21 @@ const SPIRIT_REGEN_DEFAULT := 15.0
 ## each ability's action_cost from it; when it hits 0 the turn ends. It is NOT a
 ## major, so it never shows in the attribute screen or the debug stat panel.
 const ACTION_POINTS_DEFAULT := 1.0
+
+# --- turn rate tuning -------------------------------------------------------
+## How often this character gets a TURN on the combat timeline, as a multiplier.
+## It DIVIDES the character's turn interval (CombatTimeline.interval), so 1.0 is
+## normal, 2.0 acts twice as often, 0.5 half as often. A real (hidden) base stat
+## ("turn_rate") so it is per-character OVERRIDABLE via a spec
+## (stats:{"turn_rate": 2.0}) and BUFFABLE like anything else — a buff carrying
+## mods:{"turn_rate": +0.5} is a haste effect. It is NOT a major, so it never
+## shows on the attribute screen.
+##
+## NB there are TWO ways to give a unit more actions and they are deliberately
+## different: `turn_rate` gives it more TURNS; `action_points` gives it more
+## ACTIONS INSIDE one turn. A two-attack boss is action_points 2.0; a boss that
+## simply moves twice as often is turn_rate 2.0. Both default to 1.0.
+const TURN_RATE_DEFAULT := 1.0
 
 # --- vulnerability tuning ---------------------------------------------------
 ## A hidden per-character MULTIPLIER on the damage-over-time (DoT) this character
@@ -134,6 +154,7 @@ static func default_base_stats() -> Dictionary:
 	d["mitigation_stiffness"] = MITIGATION_STIFFNESS_DEFAULT
 	d["spirit_regen"] = SPIRIT_REGEN_DEFAULT
 	d["action_points"] = ACTION_POINTS_DEFAULT
+	d["turn_rate"] = TURN_RATE_DEFAULT
 	d["vulnerability"] = VULNERABILITY_DEFAULT
 	d["heal_power"] = HEAL_POWER_DEFAULT
 	d["shield_power"] = SHIELD_POWER_DEFAULT

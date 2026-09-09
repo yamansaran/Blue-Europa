@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bz1ris001"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"frenzy"
+display_name = "Frenzy"
+description = "Something remembers being hungry. Deals 200% more damage for its next 3 attacks."
+max_points = 3
+max_equipped = 1
+action_cost = 1.0
+kind = 1
+delivery = 0
+target = 2
+element = 0
+cost_type = 1
+cost_amount = 25
+cooldown = 4
+cooldown_ranks = Array[int]([4, 3, 3])
+cost_amount_ranks = Array[int]([25, 25, 20])
+applies_buff = &"frenzied"
+ai_not_before_turn = 2
