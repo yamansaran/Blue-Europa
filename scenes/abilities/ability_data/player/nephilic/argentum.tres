@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bluokvgytk5lz"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"argentum"
+display_name = "Silver Mirror"
+description = "For 2 turns, the next 1 enemy attack that hits you deal nothing."
+max_points = 4
+max_equipped = 3
+kind = 1
+target = 2
+cost_type = 1
+cost_amount = 35
+cooldown = 8
+applies_buff = &"silver_mirror"
+description_ranks = Array[String](["For 2 turns, the next 1 enemy attack that hits you deal nothing.", "For 3 turns, the next 1 enemy attack that hits you deal nothing.", "For 3 turns, the next 2 enemy attacks that hit you deal nothing.", "For 3 turns, the next 3 enemy attacks that hit you deal nothing."])
+required_level = 1

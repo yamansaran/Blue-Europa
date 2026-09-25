@@ -21,6 +21,7 @@ class_name PlayerCharacter
 
 func _init() -> void:
 	char_type = Stats.CharType.CHARACTER
+	figure = Stats.Figure.MALE           # the AI restraint signals read this (AI_PRIMER §6.8)
 	# Player-wide permanent buffs, auto-applied at the start of every combat.
 	# Empty by default — add BuffLibrary ids here to give the player innate buffs
 	# (e.g. a starter aura). Per-run buffs still come from combat as usual.

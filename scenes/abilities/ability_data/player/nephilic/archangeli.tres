@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://b071z7kdh444g"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"archangeli"
+display_name = "Break"
+description = "Deal Physical damage equal to {scaling} and stun the target for 1 turn."
+max_points = 2
+max_equipped = 2
+kind = 0
+delivery = 1
+target = 0
+element = 0
+cooldown = 4
+scaling_stat = &"vigor"
+scaling_mult = 1.0
+applies_buff = &"stunned"
+required_level = 1
+scaling_mult_ranks = Array[float]([1.0, 2.0])

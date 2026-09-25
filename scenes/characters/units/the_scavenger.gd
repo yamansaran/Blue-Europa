@@ -26,6 +26,7 @@ class_name TheScavenger
 func _init() -> void:
 	char_name = "The Scavenger"
 	char_type = Stats.CharType.ENEMY
+	unit_rank = Stats.UnitRank.BOSS      # the zone boss: gets a big bar in the combat top panel
 	organic = true
 	incorporeal = false
 	ai = "berserker"                    # angrier as it dies, not more careful

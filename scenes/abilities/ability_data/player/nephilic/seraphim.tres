@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bi5d4w2fwz2dk"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"seraphim"
+display_name = "Stigmata"
+description = "Passive. Gain 1 spirit for every 5% of your max HP lost, costs included."
+max_points = 5
+max_equipped = 1
+kind = 4
+target = 2
+description_ranks = Array[String](["Passive. Gain 1 spirit for every 5% of your max HP lost, costs included.", "Passive. Gain 1 spirit for every 4% of your max HP lost, costs included.", "Passive. Gain 1 spirit for every 3% of your max HP lost, costs included.", "Passive. Gain 1 spirit for every 2% of your max HP lost, costs included.", "Passive. Gain 1 spirit for every 1% of your max HP lost, costs included."])
+perk = &"stigmata"
+perk_ranks = Array[Dictionary]([{"pct": 5.0}, {"pct": 4.0}, {"pct": 3.0}, {"pct": 2.0}, {"pct": 1.0}])
+required_level = 1

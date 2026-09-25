@@ -53,11 +53,23 @@ var pairs: Array = []
 ## therefore not viable.
 var by_intent: Dictionary = {}
 
+## The actor's archetype id (CharacterBase.ai) — AIRules reads its preset through it.
+var ai_id: String = "standard"
+
+## Per-DECISION memo for every estimate, built buff entry and signal (AIEstimate /
+## AISignals key into it). Thrown away with the context, so it can never go stale.
+var cache: Dictionary = {}
+
+## The actor's EFFECTIVE AI stat, with its archetype preset standing in for defaults.
+func stat(key: String) -> float:
+	return AIRules.stat(actor.body if actor else null, ai_id, key)
+
 # ----------------------------------------------------------------------------
 static func build(combat_node, unit: BattleCharacter) -> AIContext:
 	var ctx := AIContext.new()
 	ctx.combat = combat_node
 	ctx.actor = unit
+	ctx.ai_id = unit.ai if unit != null else "standard"
 	if combat_node == null or unit == null or unit.body == null:
 		return ctx
 
@@ -158,19 +170,25 @@ static func priority_of(ability: Ability) -> float:
 ## for itself: for ALL_ENEMIES / ALL_ALLIES that predicate returns true for ANY
 ## unit (it is written for the player's click path, where the clicked unit is
 ## already the right side), so an ALL_ENEMIES ability would otherwise read the
-## actor's own allies as legal. Until fan-out exists (COMBAT C4.2) an area ability
-## resolves against a SINGLE unit, so the AI restricts it to the correct side and
-## treats it as single-target. When fan-out lands, this is the place that changes.
+## actor's own allies as legal.
+##
+## FAN-OUT NOW EXISTS (COMBAT C4.2): combat._affected_targets sweeps the whole side
+## at resolve time, so the list this returns for an area ability is the set that will
+## ACTUALLY be hit, not a menu to choose one from. Layer 2 still nominates a single
+## unit — an area ability simply ignores it — and Layer 3 scores the ability as the
+## SUM over this list (AIAbility.is_area).
 func targets_for(ability: Ability) -> Array:
 	if ability == null:
 		return []
 	match ability.target:
 		Ability.Target.SELF:
 			return [actor] if actor.is_alive() else []
-		Ability.Target.ALL_ENEMIES:
-			return hostiles.duplicate()
-		Ability.Target.ALL_ALLIES:
-			return allies.duplicate()
+		Ability.Target.ALL_ENEMIES, Ability.Target.ALL_ALLIES:
+			# ONE SOURCE OF TRUTH: ask combat for the exact set it will sweep at
+			# resolve time. Today that is every living unit on the right side — an
+			# AoE deliberately ignores back-row protection — but if that ever
+			# changes, it changes in one place and the AI follows for free.
+			return combat._affected_targets(actor, ability, null)
 	var out: Array = []
 	for u in allies + hostiles:
 		if combat._valid_target(actor, ability, u):
@@ -197,11 +215,46 @@ func options(intent: String = "") -> Array:
 			out.append({"ability": p["ability"], "slot": int(p["slot"]), "target": t})
 	return out
 
+## The legal targets of `ability` FOR `intent` (AI_PRIMER §7.1):
+##   OFFENSE / DEBUFF  hostiles only
+##   BUFF              friendlies — the actor itself only when ai_self_buff > 0 or it is
+##                     the last friendly standing
+##   DEFENSE           the actor itself, and only if the ability can target it
+func intent_targets(intent: String, ability: Ability) -> Array:
+	var raw := targets_for(ability)
+	var out: Array = []
+	match intent:
+		Ability.AI_OFFENSE, Ability.AI_DEBUFF:
+			for u in raw:
+				if combat._is_hostile(actor, u):
+					out.append(u)
+		Ability.AI_BUFF:
+			var self_ok := stat("ai_self_buff") > 0.0 or allies.size() <= 1
+			for u in raw:
+				if combat._is_hostile(actor, u):
+					continue
+				if u == actor and not self_ok:
+					continue
+				out.append(u)
+		Ability.AI_DEFENSE:
+			if raw.has(actor):
+				out.append(actor)
+	return out
+
+## Every distinct unit that is a legal target for at least one of `intent`'s usable abilities.
+func intent_candidates(intent: String) -> Array:
+	var out: Array = []
+	for p in by_intent.get(intent, []):
+		for u in intent_targets(intent, p["ability"]):
+			if not out.has(u):
+				out.append(u)
+	return out
+
 ## True when the actor holds at least one usable ability serving `intent` AND a
-## legal target for it. The viability gate, in one call.
+## legal target for it under that intent's rules. The viability gate, in one call.
 func is_viable(intent: String) -> bool:
 	for p in by_intent.get(intent, []):
-		if has_target_for(p["ability"]):
+		if not intent_targets(intent, p["ability"]).is_empty():
 			return true
 	return false
 
@@ -212,7 +265,7 @@ func most_magnetic_hostile() -> BattleCharacter:
 	var best: BattleCharacter = null
 	var best_m := -1.0
 	for u in hostiles:
-		var m: float = u.body.get_effective("magnetism") if u.body else 0.0
+		var m: float = AIRules.stat(u.body, u.ai, "magnetism") if u.body else 0.0
 		if m > best_m:
 			best = u
 			best_m = m

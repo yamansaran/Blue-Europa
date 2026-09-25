@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bkbwdbuwpq5md"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"helkos"
+display_name = "Catalyze"
+description = "Every poison already on the target gains 1 turn. Leaves nothing behind, so each cast extends again."
+max_points = 3
+max_equipped = 2
+kind = 2
+target = 0
+element = 6
+cost_type = 1
+cost_amount = 20
+cooldown = 5
+description_ranks = Array[String](["Every poison already on the target gains 1 turn. Leaves nothing behind, so each cast extends again.", "Every poison already on the target gains 2 turns. Leaves nothing behind, so each cast extends again.", "Every poison already on the target gains 3 turns. Leaves nothing behind, so each cast extends again."])
+extend_debuff_id = &"poison"
+extend_turns_ranks = Array[int]([1, 2, 3])
+required_level = 1

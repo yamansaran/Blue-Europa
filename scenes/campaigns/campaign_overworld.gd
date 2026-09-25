@@ -96,6 +96,7 @@ func _debug_on() -> bool:
 ## a campaign that lays its overworld out differently still gets them in the right
 ## place. Skips any panel this campaign does not have.
 func _add_debug_controls() -> void:
+	_add_cheats_button()
 	for o in _objects:
 		var r: Rect2 = o["rect"]
 		match str(o["action"]):
@@ -105,6 +106,42 @@ func _add_debug_controls() -> void:
 			"campaign":
 				_add_float_button(r, "FIGHT ▾", "Choose which campaign fight is next —\nsets this zone's progress (debug)",
 						_on_debug_fight_picker_pressed)
+
+## DEBUG: the small floating "DEBUG" button in the overworld's top-right corner that
+## opens / closes the cheats panel (level, god mode, skillful mode, money).
+var _cheats: DebugCheatsPanel = null
+
+func _add_cheats_button() -> void:
+	var b := Button.new()
+	b.text = "DEBUG"
+	b.tooltip_text = "Level / god mode / skillful mode / money (debug)"
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_filter = Control.MOUSE_FILTER_STOP
+	b.add_theme_font_size_override("font_size", 11)
+	b.add_theme_color_override("font_color", Color(1.0, 0.6, 0.6))
+	b.anchor_left = 1.0
+	b.anchor_right = 1.0
+	b.offset_left = -78
+	b.offset_right = -10
+	b.offset_top = 10
+	b.offset_bottom = 34
+	b.pressed.connect(_toggle_cheats)
+	add_child(b)
+
+func _toggle_cheats() -> void:
+	if _cheats and is_instance_valid(_cheats):
+		_cheats.queue_free()
+		_cheats = null
+		return
+	_cheats = DebugCheatsPanel.new()
+	add_child(_cheats)
+	_cheats.anchor_left = 1.0
+	_cheats.anchor_right = 1.0
+	_cheats.offset_left = -380
+	_cheats.offset_right = -10
+	_cheats.offset_top = 40
+	_cheats.grow_horizontal = Control.GROW_DIRECTION_BEGIN   # widen to the LEFT, never off-screen
+	_cheats.closed.connect(func(): _cheats = null)
 
 ## A small button pinned to the TOP-LEFT corner of a map panel, overlapping it. The
 ## panel's own ColorRect is left completely untouched — the overlap is the point, the

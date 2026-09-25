@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://b43dbzv3v65vj"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"armaros"
+display_name = "Brimming"
+description = "Passive. Abilities cast while your spirit is above 99 deal 10% more damage."
+max_points = 3
+max_equipped = 1
+kind = 4
+target = 2
+description_ranks = Array[String](["Passive. Abilities cast while your spirit is above 99 deal 10% more damage.", "Passive. Abilities cast while your spirit is above 99 deal 20% more damage.", "Passive. Abilities cast while your spirit is above 99 deal 30% more damage."])
+perk = &"brimming"
+perk_ranks = Array[Dictionary]([{"dmg": 0.1}, {"dmg": 0.2}, {"dmg": 0.3}])
+required_level = 1

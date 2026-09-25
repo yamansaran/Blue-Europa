@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://c2b07719b8a49"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"pistol_shot"
+display_name = "Pistol Shot"
+description = "A service pistol, fired without standing up. Deal Physical damage equal to {scaling}."
+max_points = 1
+max_equipped = 1
+action_cost = 1.0
+kind = 0
+delivery = 0
+target = 0
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 0
+base_power = 0.0
+scaling_stat = &"instinct"
+scaling_mult = 0.8

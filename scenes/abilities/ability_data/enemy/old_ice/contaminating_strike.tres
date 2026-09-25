@@ -22,4 +22,4 @@ base_power = 0.0
 scaling_stat = &"vigor"
 scaling_mult = 1.0
 scaling_mult_ranks = Array[float]([1.0, 1.25, 1.5])
-applies_buff = &"infected"
+applies_buff = &"poison"

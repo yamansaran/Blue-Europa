@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bdod1skdhh6nm"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"asael"
+display_name = "Grit"
+description = "Passive. Start each fight with a shield of 10% of your max HP."
+max_points = 3
+max_equipped = 1
+kind = 4
+target = 2
+description_ranks = Array[String](["Passive. Start each fight with a shield of 10% of your max HP.", "Passive. Start each fight with a shield of 20% of your max HP.", "Passive. Start each fight with a shield of 20% of your max HP, and take 25% less damage while your shields hold."])
+perk = &"grit"
+perk_ranks = Array[Dictionary]([{"shield": 0.1, "dr": 0.0}, {"shield": 0.2, "dr": 0.0}, {"shield": 0.2, "dr": 0.25}])
+required_level = 1

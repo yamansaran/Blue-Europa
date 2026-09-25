@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://buk3lli14s4nt"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"albedo"
+display_name = "Second Wind"
+description = "Heal yourself for {scaling}, up to +50% more the more health you are missing (full bonus at 30% HP)."
+max_points = 4
+max_equipped = 1
+kind = 3
+target = 2
+cooldown = 5
+scaling_stat = &"vitality"
+scaling_mult = 2.5
+description_ranks = Array[String](["Heal yourself for {scaling}, up to +50% more the more health you are missing (full bonus at 30% HP).", "Heal yourself for {scaling}, up to +100% more the more health you are missing (full bonus at 30% HP).", "Heal yourself for {scaling}, up to +150% more the more health you are missing (full bonus at 30% HP).", "Heal yourself for {scaling}, up to +200% more the more health you are missing (full bonus at 30% HP)."])
+heal_missing_hp_bonus_ranks = Array[float]([0.5, 1.0, 1.5, 2.0])
+required_level = 10

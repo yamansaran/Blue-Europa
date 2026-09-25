@@ -10,13 +10,13 @@ class_name AITurn
 ## NOT close the turn: `_begin_unit_turn` calls `_finish_turn(u)` after this
 ## returns, which is what schedules the unit's next slot on the timeline.
 ##
-## >> PHASE 0 — THE SPINE. `decide()` currently picks a UNIFORM RANDOM legal
-##    (ability, target) pair. That is deliberate and temporary: it proves the seam
-##    end to end (context -> choice -> `_use_ability`) with zero scoring, and the
-##    moment it lands every on-struck / on-hit rider in the game is exercised in
-##    BOTH directions for the first time. Expect real bugs here — they will be in
-##    the riders, not in this file. The three scoring layers (AIIntent / AITarget /
-##    AIAbility) replace `decide()` and nothing else in this file moves.
+## >> rev33 — THE THREE LAYERS ARE LIVE. `decide()` runs INTENT (AIIntent) -> TARGET
+##    (AITarget) -> ABILITY (AIAbility), each a weighted roulette over the
+##    exponential gain terms of AI_PRIMER §4-§10, with the archetype read from
+##    AIRules. The §16.5 fallback ladder wraps them: a layer that fails ZEROES that
+##    intent and re-rolls from what is left; all four exhausted -> the best usable
+##    attack on the most magnetic hostile; nothing -> pass. The Phase-0 uniform
+##    picker is gone (`erratic` reproduces it with decisiveness/focus 0).
 ##
 ## WHY THE LOOP REBUILDS ITS CONTEXT EVERY ACTION: see AIContext.
 ##
@@ -63,6 +63,8 @@ static func run(combat, u: BattleCharacter) -> void:
 	await combat.get_tree().process_frame
 
 	var log_on := is_debug()
+	if log_on and u.turns_taken <= 1:
+		AIRules.validate(u.body, u.ai, u.unit_name)
 	var actions := 0
 	var stop_reason := "budget spent"
 
@@ -99,7 +101,7 @@ static func run(combat, u: BattleCharacter) -> void:
 		if log_on:
 			_log_decision(ctx, decision, actions + 1)
 
-		combat._use_ability(u, decision["ability"], decision["target"], int(decision["slot"]))
+		await combat._perform_action(u, decision["ability"], decision["target"], int(decision["slot"]))
 		actions += 1
 
 		if combat._battle_over:
@@ -141,14 +143,99 @@ static func _why_stopped(combat, u: BattleCharacter) -> String:
 ##     ability = AIAbility.pick(ctx, intent, target)
 ## with the §16.5 ladder around it, ending at `fallback(ctx)` and then a pass.
 static func decide(ctx: AIContext) -> Dictionary:
-	var options := ctx.options()
-	if options.is_empty():
+	if ctx.options().is_empty():
 		return {}
-	var i := AIPick.uniform(options.size())
-	if i < 0:
+	# A SCRIPTED FOLLOW-UP OUTRANKS THE WHOLE PIPELINE. It is a commitment, not a
+	# preference, so it cannot be a gain term — no amount of appetite should talk a
+	# unit out of the second beat of its own pattern.
+	var fu := _follow_up(ctx)
+	if not fu.is_empty():
+		return fu
+	var layer1 := AIIntent.score_all(ctx)
+	var scores: Dictionary = layer1["scores"]
+	var notes: Array = []
+	for intent in AIIntent.INTENTS:
+		notes.append("%s %s" % [intent.substr(0, 3), str(layer1["ledger"][intent])])
+	var tries := 0
+	while tries < AIIntent.INTENTS.size():
+		tries += 1
+		var arr: Array = []
+		for intent in AIIntent.INTENTS:
+			arr.append(float(scores[intent]))
+		var ii := AIPick.weighted(arr, maxf(0.0, ctx.stat("ai_decisiveness")))
+		if ii < 0:
+			break
+		var intent: String = AIIntent.INTENTS[ii]
+		var t := AITarget.pick(ctx, intent)
+		var tgt: BattleCharacter = t["target"]
+		if tgt == null:
+			notes.append("-> %s FAILED at target (%s); re-rolling" % [intent.to_upper(), ", ".join(t["ledger"])])
+			scores[intent] = 0.0
+			continue
+		var a := AIAbility.pick(ctx, intent, tgt)
+		if a["pair"] == null:
+			notes.append("-> %s on %s FAILED at ability; re-rolling" % [intent.to_upper(), tgt.unit_name])
+			scores[intent] = 0.0
+			continue
+		var pair: Dictionary = a["pair"]
+		notes.append("-> %s" % intent.to_upper())
+		notes.append("target   " + " | ".join(t["ledger"]))
+		notes.append("ability  " + " | ".join(a["ledger"]))
+		return {"ability": pair["ability"], "slot": int(pair["slot"]), "target": tgt, "intent": intent, "notes": notes}
+	# every intent exhausted — the bottom rungs of the ladder
+	var fb := fallback(ctx)
+	if not fb.is_empty():
+		notes.append("-> FALLBACK: best attack on the most magnetic hostile")
+		fb["intent"] = "fallback"
+		fb["notes"] = notes
+	return fb
+
+## THE SCRIPTED FOLLOW-UP (Ability.ai_follow_up). If the ability this unit last
+## resolved names a follow-up, and that follow-up is usable and has a legal target,
+## take it — before the three layers get a say. "After Riot Shield, always Shield
+## Bash": a two-beat pattern the player can learn to read, and the cheapest telegraph
+## available.
+##
+## EVERY GATE STILL APPLIES. The follow-up has to be in ctx.pairs, which means it
+## already passed combat._can_use (cooldown, spirit, silence, action points), and it
+## has to have a legal target under its own intent. Fail either and this returns {}
+## and the normal decision runs — a follow-up is never allowed to make a unit stall.
+##
+## SELF-LIMITING BY CONSTRUCTION: taking the follow-up overwrites last_ability_id
+## with the follow-up's own id, so unless that ability ALSO names one, the pattern
+## stops after its second beat. Two abilities naming each other would loop forever
+## by design, which is a thing an author can want and the action cap still bounds.
+static func _follow_up(ctx: AIContext) -> Dictionary:
+	if ctx.actor == null:
 		return {}
-	var chosen: Dictionary = options[i]
-	return chosen
+	var last := str(ctx.actor.last_ability_id)
+	if last == "":
+		return {}
+	var prev: Ability = ctx.combat._get_ability(last)
+	if prev == null:
+		return {}
+	var want := String(prev.ai_follow_up)
+	if want == "":
+		return {}
+	for p in ctx.pairs:
+		var ab: Ability = p["ability"]
+		if String(ab.id) != want:
+			continue
+		var intents := AIContext.intents_of(ab)
+		var intent: String = str(intents[0]) if not intents.is_empty() else Ability.AI_OFFENSE
+		var legal := ctx.intent_targets(intent, ab)
+		if legal.is_empty():
+			return {}
+		# Still ask Layer 2 WHO — the pattern fixes the ability, not the victim.
+		var picked := AITarget.pick(ctx, intent)
+		var tgt: BattleCharacter = picked["target"]
+		if tgt == null or not legal.has(tgt):
+			tgt = legal[0]
+		return {
+			"ability": ab, "slot": int(p["slot"]), "target": tgt, "intent": intent,
+			"notes": ["-> FOLLOW-UP: %s commits to %s" % [prev.display_name, ab.display_name]],
+		}
+	return {}
 
 ## THE BOTTOM RUNG of the fallback ladder (§16.5): the best usable OFFENSE-tagged
 ## ability against the most magnetic legal hostile. Deterministic, no roulette —
@@ -162,13 +249,15 @@ static func fallback(ctx: AIContext) -> Dictionary:
 	var best_priority := -1.0
 	for p in ctx.by_intent.get(Ability.AI_OFFENSE, []):
 		var ability: Ability = p["ability"]
-		if not ctx.combat._valid_target(ctx.actor, ability, tgt):
+		if not ctx.intent_targets(Ability.AI_OFFENSE, ability).has(tgt):
 			continue
 		var pr := AIContext.priority_of(ability)
 		if pr <= 0.0:
 			continue
-		if pr > best_priority:
-			best_priority = pr
+		# best = highest priority, ties broken by expected damage
+		var score := pr * 1000.0 + AIEstimate.expected_damage(ctx, ctx.actor, tgt, ability)
+		if score > best_priority:
+			best_priority = score
 			best = {"ability": ability, "slot": int(p["slot"]), "target": tgt}
 	return best
 
@@ -192,13 +281,14 @@ static func _log_decision(ctx: AIContext, decision: Dictionary, action_no: int) 
 	var tgt: BattleCharacter = decision["target"]
 	print("[ai] %s (%s) · turn %d · action %d · ap %.2f · smart:%s" % [
 		u.unit_name, u.ai, u.turns_taken, action_no, u.ap,
-		"yes" if u.body.get_effective("ai_smart") >= 0.5 else "no"])
+		"yes" if ctx.stat("ai_smart") >= 0.5 else "no"])
 	var usable := []
 	for p in ctx.pairs:
 		usable.append("%s(%d)[%s]" % [p["id"], int(p["slot"]), ",".join(p["intents"])])
 	print("     usable  %s" % " ".join(usable))
-	print("     -> %s (slot %d) on %s   [uniform over %d option(s)]" % [
-		ability.display_name, int(decision["slot"]), tgt.unit_name, ctx.options().size()])
+	for line in decision.get("notes", []):
+		print("     %s" % str(line))
+	print("     => %s (slot %d) on %s" % [ability.display_name, int(decision["slot"]), tgt.unit_name])
 
 ## Why nothing was usable, slot by slot, straight from combat's own gate. A unit
 ## that silently does nothing is the hardest AI bug to find, and today's `"none"`

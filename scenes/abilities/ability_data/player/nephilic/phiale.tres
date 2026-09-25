@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bh5oe0tll0zar"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"phiale"
+display_name = "Excise"
+description = "Deal Physical damage equal to {scaling} and excise 1 poison on the target: its remaining ticks are dealt at once."
+max_points = 3
+max_equipped = 1
+kind = 0
+delivery = 1
+target = 0
+element = 0
+cooldown = 10
+scaling_stat = &"vigor"
+scaling_mult = 1.5
+accuracy_mod = 1000.0
+description_ranks = Array[String](["Deal Physical damage equal to {scaling} and excise 1 poison on the target: its remaining ticks are dealt at once.", "Deal Physical damage equal to {scaling} and excise 1 poison on the target: its remaining ticks are dealt at once.", "Deal Physical damage equal to {scaling} and excise every poison on the target: its remaining ticks are dealt at once."])
+excise_count_ranks = Array[int]([1, 1, 0])
+excise_debuff_id = &"poison"
+required_level = 1
+scaling_mult_ranks = Array[float]([1.5, 2.0, 2.0])

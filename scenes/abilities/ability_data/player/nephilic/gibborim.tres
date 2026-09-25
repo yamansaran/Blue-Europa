@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bz3mojjfruea1"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"gibborim"
+display_name = "Apotheosis"
+description = "Once per fight. For 3 turns, Crash costs no spirit but deals 60% of its damage."
+max_points = 1
+max_equipped = 1
+kind = 1
+target = 2
+applies_buff = &"apotheosis"
+required_level = 10
+uses_per_combat = 1

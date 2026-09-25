@@ -61,7 +61,8 @@ static func fights() -> Array:
 		# its first turn (frenzy.tres carries ai_not_before_turn = 2).
 		{"id": "%s_f1" % ID, "name": "Wreckage", "is_boss": false,
 			"enemies": [ {"character": "shambling_corpse"} ],
-			"loot_table": _loot(100, 10)},
+			# Dialogue lives in scenes/dialogue/zones/c1_dialogue.gd, keyed by this id.
+			"loot_table": _loot(23, 10)},
 
 		# --- 2 --------------------------------------------------------------
 		# RULE ONE, in practice: a variant is a SPEC, not a module. The second corpse
@@ -74,7 +75,7 @@ static func fights() -> Array:
 			{"character": "shambling_corpse", "level": 2,
 				"stats": {"vitality": 4.0, "vigor": 12.0}, "max_hp": 72.0},
 			],
-			"loot_table": _loot(23, 14)},
+			"loot_table": _loot(25, 14)},
 
 		# --- 3 --------------------------------------------------------------
 		# The lesson of the zone. Frozen Corpse: 75 physical, ZERO everything else.
@@ -84,7 +85,7 @@ static func fights() -> Array:
 			{"character": "frozen_corpse", "level": 2},
 			{"character": "unknown_entity", "level": 2},
 			],
-			"loot_table": _loot(24, 18)},
+			"loot_table": _loot(27, 18)},
 
 		# --- 4 --------------------------------------------------------------
 		# THE FIGHT THAT IS FINISHED TODAY. `erratic` is uniform random across the
@@ -116,10 +117,10 @@ static func fights() -> Array:
 			{"character": "old_ice", "level": 3},
 			],
 			"allies": [
-			{"character": "inuit_hunter", "name": "Hunter", "level": 3},
-			{"character": "inuit_hunter", "name": "Hunter", "level": 3},
+			{"character": "inuit_hunter", "name": "Hunter", "level": 3, "figure": "male"},
+			{"character": "inuit_hunter", "name": "Hunter", "level": 3, "figure": "female"},
 			],
-			"loot_table": _loot(27, 28)},
+			"loot_table": _loot(30, 28)},
 
 		# --- 6 --------------------------------------------------------------
 		# THE ONLY FIGHT IN THE ZONE YOU CAN LOSE, and that is the design. Read flat
@@ -132,12 +133,12 @@ static func fights() -> Array:
 			{"character": "shambling_guard"},
 			{"character": "shambling_guard"},
 			],
-			"loot_table": _loot(29, 34)},
+			"loot_table": _loot(33, 34)},
 
 		# --- BOSS -----------------------------------------------------------
 		{"id": "%s_boss" % ID, "name": "The Scavenger", "is_boss": true,
 			"enemies": [ {"character": "the_scavenger"} ],
-			"loot_table": _loot(240, 90)},
+			"loot_table": _loot(260, 90)},
 	]
 
 # ============================================================================
@@ -157,8 +158,8 @@ static func fights() -> Array:
 ## (Victory.gd grants rewards regardless of is_campaign, so a training win does bank
 ## its XP — only the campaign counter is gated.)
 ##
-## ALL THREE PAY 12 — they are TIER 1 of the curve's two zone-1 training tiers. The
-## 17-XP tier 2 is not built yet: it wants three more entries at `"min_cleared": N`
+## ALL THREE PAY 13 — they are TIER 1 of the curve's two zone-1 training tiers. The
+## 20-XP tier 2 is not built yet: it wants three more entries at `"min_cleared": N`
 ## with `"max_cleared": N - 1` added to these three.
 ##
 ## THE PRACTICE DUMMY IS NOT IN HERE. It is reachable from the small DUMMY button
@@ -174,7 +175,7 @@ static func training_fights() -> Array:
 			{"character": "old_ice", "level": 3},
 			{"character": "old_ice", "level": 3},
 			],
-			"loot_table": _loot(12, 0)},
+			"loot_table": _loot(13, 0)},
 
 		# 40% — the straightforward one.
 		{"id": "%s_train_corpses" % ID, "name": "Two Shambling Corpses",
@@ -183,7 +184,7 @@ static func training_fights() -> Array:
 			{"character": "shambling_corpse", "level": 2},
 			{"character": "shambling_corpse", "level": 2},
 			],
-			"loot_table": _loot(12, 0)},
+			"loot_table": _loot(13, 0)},
 
 		# 40% — a fast thing you cannot predict standing behind a slow thing you
 		# cannot ignore. The most useful of the three to practise against.
@@ -193,7 +194,7 @@ static func training_fights() -> Array:
 			{"character": "unknown_entity", "level": 1, "max_hp": 62.0},
 			{"character": "shambling_guard", "level": 2},
 			],
-			"loot_table": _loot(12, 0)},
+			"loot_table": _loot(13, 0)},
 	]
 
 # ============================================================================
@@ -201,22 +202,28 @@ static func training_fights() -> Array:
 # ============================================================================
 ## Money and XP for one fight. Both are FLAT (min == max) rather than a range,
 ## because zone one's XP figures come straight off the XP-curve document and a roll
-## would blur them. Zone 1's band is levels 1-5 = 475 XP, one "unit" (one level) =
-## 118.75, and the zone spends it like this:
-##     ladder   21 / 23 / 24 / 26 / 27 / 29        ->  150   (0.18-0.24 units each)
-##     boss     240                                        (2.00 units — zone 1 has
+## would blur them. RETUNED for the widened curve (LevelTable total 2,160,000): the
+## anchor did not move, so zone 1 barely moved either — its band went 475 -> 525.
+## One "unit" (one level) = 131.25, and the zone spends it like this:
+##     ladder   23 / 25 / 27 / 28 / 30 / 33        ->  166   (0.18-0.25 units each)
+##     boss     260                                        (2.00 units — zone 1 has
 ##                                                           no miniboss, so the boss
 ##                                                           carries both roles)
-##     training 12 x 3                             ->   36
+##     training 13 x 3                             ->   39
 ##                                                     ----
-##                                                      426, level 5 at 475
-## The ladder alone is 390, so a player who never trains reaches the boss at level 4
-## (cutoff 335) and clears the zone just short of 5 — training is what closes the gap,
+##                                                      465, level 5 at 525
+## The ladder plus the boss is 426, so a player who never trains reaches the boss at
+## level 3 and clears the zone at 4 (cutoff 360) — training is what closes the gap,
 ## which is the whole point of the pool being repeatable. Adding the curve's unbuilt
-## 17-XP tier 2 (3 x 17 = 51) lands the zone on 477, i.e. exactly the 475 band.
+## 20-XP tier 2 (3 x 20 = 60) lands the zone on 525, i.e. exactly the band.
 ##
-## They are roughly a TWENTIETH of CampaignFights.normal_loot(), which pays 500-800 XP
-## a fight — one fight of the shared table would carry a new player past level 5.
+## NOTE — f1 previously paid 100, against the 21 its own comment block documented. It
+## is 23 here (the curve value for the first rung). If the 100 was deliberate — a
+## first-fight bump to get the player onto the bar immediately — put it back; nothing
+## else in this table depends on it, the zone just overshoots its band by ~77.
+##
+## They are a small fraction of CampaignFights.normal_loot(), which is priced for
+## ZONE 2 — one fight of the shared table would carry a new player most of a level.
 ##
 ## No item drops: `loot_table.items` is authored but inert (drops are not granted to
 ## the bag yet), and the shipped placeholder ids do not exist in ItemDB. Money is a

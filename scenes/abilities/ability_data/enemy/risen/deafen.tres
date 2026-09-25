@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Ability" format=3 uid="uid://c2b8700432fe1"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"deafen"
+display_name = "Deafen"
+description = "The ringing does not stop when the screaming does. Deal Physical damage equal to {scaling}, through armour."
+max_points = 1
+max_equipped = 1
+action_cost = 1.0
+kind = 0
+delivery = 0
+target = 0
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 3
+base_power = 0.0
+scaling_stat = &"instinct"
+scaling_mult = 0.5
+pierce_flat = 15.0
+applies_buff = &"tinnitus"

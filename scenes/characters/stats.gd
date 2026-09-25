@@ -13,6 +13,14 @@ class_name Stats
 # --- categories -------------------------------------------------------------
 enum CharType { CHARACTER, ALLY, ENEMY }
 enum Race { HUMAN }
+## How much a unit MATTERS to the fight's presentation. NORMAL units get only their
+## overhead bars; MINIBOSS / BOSS also get a big bar in the combat top panel.
+enum UnitRank { NORMAL, MINIBOSS, BOSS }
+## Identity the AI's restraint signals read (AI_PRIMER §6.8 — is_female / is_child).
+## DEFAULT NONE, and that default is load-bearing: most of the bestiary is spirits,
+## constructs and beasts, and both signals read 0 for NONE so the terms vanish.
+## Identity, not a stat — no buff can change it.
+enum Figure { NONE, MALE, FEMALE, CHILD }
 ## Damage / defence elements. Order matters: the 8 real elements first, then the
 ## hidden TRUE element (ignores all pierce/defence/amp). element_key() maps these
 ## to the string prefixes used in the stat dictionary.
@@ -142,6 +150,43 @@ const HEAL_POWER_DEFAULT := 0.0
 const SHIELD_POWER_DEFAULT := 0.0
 
 # ----------------------------------------------------------------------------
+# --- unit AI personality (AI_PRIMER §5) --------------------------------------
+## Every tunable AI number is a real HIDDEN non-major base stat: a module sets it
+## (base_stats["ai_bloodlust"] = 40.0), a fight spec overrides it
+## (stats:{"ai_panic": 20.0}), a buff moves it (a taunt is mods:{magnetism: +300}, a
+## daze mods:{ai_smart: -1.0}). Not majors, so they appear on no screen, and no
+## SAVE_VERSION bump — from_dict overlays saves onto these defaults.
+##
+## THE FOOTGUN (AI_PRIMER §4.4): the ai_intent_* weights are ADDITIVE (neutral 0) but
+## every OTHER key here is a GAIN, neutral at 1.0. A gain left at 0.0 clamps to
+## AIGain.MIN_GAIN and becomes a 50x REPULSION. AIRules.validate() warns about it.
+const AI_DEFAULTS := {
+	# intent weights (additive)
+	"ai_intent_offense": 0.50, "ai_intent_defense": 0.15, "ai_intent_buff": 0.10, "ai_intent_debuff": 0.15,
+	# selection shape (exponents)
+	"ai_decisiveness": 1.5, "ai_focus": 1.5,
+	# the smart gate (>= 0.5 reads Magnificence / dodge / element matchups)
+	"ai_smart": 0.0,
+	# intent gains
+	"ai_finisher": 15.0, "ai_shield_aversion": 0.60, "ai_bloodrage": 1.0, "ai_offer_drive": 6.0,
+	"ai_tidiness": 0.25, "ai_altruism": 4.0, "ai_panic": 4.0, "ai_defense_sat": 0.20,
+	"ai_resist_awareness": 1.0,
+	# target gains
+	"ai_bloodlust": 1.0, "ai_opportunism": 8.0, "ai_gluttony": 1.0, "ai_caution": 1.0,
+	"ai_spite": 1.0, "ai_spirit_hunger": 1.0, "ai_combo_drive": 1.0, "ai_element_savvy": 1.0,
+	"ai_sapper": 1.0, "ai_prudence": 1.5, "ai_mercy": 12.0, "ai_triage": 4.0,
+	"ai_vigilance": 1.0, "ai_favoritism": 1.0, "ai_self_buff": 0.25,
+	# auxiliary (texture) gains
+	"ai_efficiency": 1.0, "ai_grudge": 1.0, "ai_pressure": 1.0, "ai_spare_female": 1.0,
+	"ai_spare_child": 1.0, "ai_thirst": 4.0, "ai_retinue_drive": 1.0,
+	# a COUNT, not a gain: the retinue size a summoner wants (0 = does not summon)
+	"ai_retinue": 0.0,
+	# COUNTS, not gains: which past fights `reputation` reads from
+	# Character.damage_history (0 = the newest). span 0 = no memory at all, and the
+	# signal falls back to this fight's damage (tier 2) exactly as before.
+	"ai_memory_from": 0.0, "ai_memory_span": 0.0,
+}
+
 ## A fresh copy of the full base-stat dictionary (majors + hp_base + every
 ## element's pierce/defence/amp). Always returns a NEW dict so callers can mutate
 ## it freely without touching the shared defaults.
@@ -158,6 +203,8 @@ static func default_base_stats() -> Dictionary:
 	d["vulnerability"] = VULNERABILITY_DEFAULT
 	d["heal_power"] = HEAL_POWER_DEFAULT
 	d["shield_power"] = SHIELD_POWER_DEFAULT
+	for k in AI_DEFAULTS:
+		d[k] = float(AI_DEFAULTS[k])
 	for e in REAL_ELEMENTS:
 		d[e + "_pierce"] = PIERCE_DEFAULT
 		d[e + "_defense"] = DEFENSE_DEFAULT

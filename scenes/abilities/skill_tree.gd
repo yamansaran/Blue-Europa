@@ -31,10 +31,19 @@ signal debug_node_hovered(node_id: String, ability_id: String)
 const LINE_COLOR := Color(0.78, 0.74, 0.55, 0.9)
 const LINE_DIM := Color(0.40, 0.38, 0.32, 0.6)   ## parent not yet unlocked
 const LINE_WIDTH := 3.0
+const GUIDE_COLOR := Color(0.40, 0.38, 0.32, 0.6)
+const GUIDE_WIDTH := 2.0
 
 ## Global radius multiplier for every SkillNode in this tree. Each node reads
 ## this from its parent tree, so one value here rescales the whole tree.
 @export var node_scale: float = 1.0: set = _set_node_scale
+
+## ROSE CROSS PASS (rev32). Optional guide circles drawn UNDER the lines, centred on
+## guide_center (tree-local pixels, same space as a node's center_position). The
+## Psychological's petal discs read as loops through these instead of chord lines.
+## Empty = none (every existing tree).
+@export var guide_rings: PackedFloat32Array = PackedFloat32Array(): set = _set_guide_rings
+@export var guide_center: Vector2 = Vector2.ZERO: set = _set_guide_center
 
 # The old .tscn InfoBox (if present) is retired in favour of the shared
 # AbilityTooltip; we just hide it. get_node_or_null keeps trees without one safe.
@@ -48,6 +57,15 @@ func _set_node_scale(value: float) -> void:
 	for node in _skill_nodes():
 		node._apply_size()
 		node.queue_redraw()
+	queue_redraw()
+
+
+func _set_guide_rings(value: PackedFloat32Array) -> void:
+	guide_rings = value
+	queue_redraw()
+
+func _set_guide_center(value: Vector2) -> void:
+	guide_center = value
 	queue_redraw()
 
 
@@ -91,6 +109,10 @@ func _draw() -> void:
 	# is already unlocked, dim when it's still locked. Otherwise fall back to the
 	# legacy `links` (visual-only) so older trees still draw. Drawn here (in the
 	# parent) so the child nodes cover the line ends.
+	for r in guide_rings:
+		if r > 0.0:
+			draw_arc(guide_center, r, 0.0, TAU, 96, GUIDE_COLOR, GUIDE_WIDTH, true)
+
 	var nodes := _skill_nodes()
 	var use_parents := false
 	for n in nodes:
@@ -104,14 +126,30 @@ func _draw() -> void:
 			if n.node_id != "":
 				by_id[n.node_id] = n
 		var ch := get_node_or_null("/root/Character")
+		# De-duplicated: a pair listed both ways (the Angel Tree's torso cells name
+		# each other as parents) draws ONE line, bright if either direction is lit.
+		var edges := {}   ## "a|b" (sorted ids) -> [SkillNode, SkillNode, lit]
 		for n in nodes:
+			if n.hide_parent_lines:
+				continue   ## gate-only parents (Rose Cross discs)
 			for pid in n.parents:
 				var parent = by_id.get(str(pid), null)
-				if parent is SkillNode:
-					var col := LINE_COLOR
-					if ch and ch.has_method("node_unlocked") and not ch.node_unlocked(str(pid)):
-						col = LINE_DIM
-					draw_line(n.center(), (parent as SkillNode).center(), col, LINE_WIDTH, true)
+				if not (parent is SkillNode):
+					continue
+				var a := n.node_id
+				var b := str(pid)
+				var key: String = (a + "|" + b) if a < b else (b + "|" + a)
+				var lit: bool = true
+				if ch and ch.has_method("node_unlocked"):
+					lit = bool(ch.node_unlocked(b))
+				if edges.has(key):
+					edges[key][2] = edges[key][2] or lit
+				else:
+					edges[key] = [n, parent, lit]
+		for key in edges:
+			var e: Array = edges[key]
+			draw_line((e[0] as SkillNode).center(), (e[1] as SkillNode).center(),
+				LINE_COLOR if e[2] else LINE_DIM, LINE_WIDTH, true)
 	else:
 		for node in nodes:
 			for link_path in node.links:
@@ -171,7 +209,70 @@ func flash_unmet_dependencies(node: SkillNode) -> void:
 				unlocked = ch.node_unlocked(str(pid))
 			if not unlocked:
 				(p as SkillNode).flash_red()
+	# A BARRED node also flashes the held rung partner(s) that exclude it.
+	for xid in node.excludes:
+		var x = by_id.get(str(xid), null)
+		if x is SkillNode and ch and ch.has_method("node_unlocked") and ch.node_unlocked(str(xid)):
+			(x as SkillNode).flash_red()
 
+## THE REFUND GUARD (rev31). The held nodes that refunding `node`'s LAST point would
+## cut off. Floods from the roots through held nodes whose gate (all-of or any-of
+## parents) is met by nodes already reached; whatever is held but unreached is
+## stranded. Only NEWLY stranded nodes block, so an old inconsistent save can't
+## freeze every refund. On an all-of tree (Blue Blood) this blocks exactly when a
+## held child lists `node` as a parent — the old rule — and it also lets a torso
+## cell go while another held path still feeds its children.
+func refund_blockers(node: SkillNode) -> Array:
+	var result: Array = []
+	if node == null or node.node_id == "":
+		return result
+	var before := _unreached_held("")
+	var after := _unreached_held(node.node_id)
+	for n in _skill_nodes():
+		if after.has(n.node_id) and not before.has(n.node_id):
+			result.append(n)
+	return result
+
+## node_id -> true for every node holding points that can't be reached from a root
+## when `without` (a node_id, or "") is treated as unheld.
+func _unreached_held(without: String) -> Dictionary:
+	var ch := get_node_or_null("/root/Character")
+	var held: Array[SkillNode] = []
+	for n in _skill_nodes():
+		if n.node_id == "" or n.node_id == without:
+			continue
+		if ch and ch.has_method("get_points") and int(ch.get_points(n.node_id)) > 0:
+			held.append(n)
+	var reached := {}
+	var grew := true
+	while grew:
+		grew = false
+		for n in held:
+			if reached.has(n.node_id):
+				continue
+			if _gate_met(n, reached):
+				reached[n.node_id] = true
+				grew = true
+	var unreached := {}
+	for n in held:
+		if not reached.has(n.node_id):
+			unreached[n.node_id] = true
+	return unreached
+
+func _gate_met(n: SkillNode, reached: Dictionary) -> bool:
+	if n.parents.is_empty():
+		return true
+	if n.parents_any:
+		for p in n.parents:
+			if reached.has(str(p)):
+				return true
+		return false
+	for p in n.parents:
+		if not reached.has(str(p)):
+			return false
+	return true
+
+## (Superseded by refund_blockers for the refund gate; kept for any other caller.)
 ## Every node in this tree that lists `node` as a parent AND still has points
 ## invested — i.e. the children that would be stranded if `node` were refunded down
 ## to zero. SkillNode._try_refund uses this to gate a node's LAST point; only the

@@ -7,14 +7,80 @@ extends Control
 signal hovered(unit: BattleCharacter)
 signal unhovered(unit: BattleCharacter)
 signal clicked(unit: BattleCharacter)
+## This unit just lost ACTUAL HEALTH — not shield, and not a zero-damage hit.
+## combat.gd listens and runs the break sweeps: effects that cannot survive their
+## bearer being hurt, and effects elsewhere anchored to this unit as their caster
+## (Protected, when the officer shielding its bearer is struck). A signal rather
+## than a direct call because only combat knows the other units.
+signal health_damaged(unit: BattleCharacter)
+## NEPHILIC HOOKS (2026-09-24). hp_lost: ACTUAL health went down, by any cause
+## (a hit, a DoT tick, an HP cost) — Stigmata, Pharmaceutical. hp_paid: the unit paid
+## an HP COST (Mortification). struck: a SOURCED hit reached this unit, whether a
+## shield ate it or not (Rebuke counts enemy ATTACK hits).
+signal hp_lost(unit: BattleCharacter, amount: int, element: String)
+signal hp_paid(unit: BattleCharacter, amount: int)
+signal struck(unit: BattleCharacter, source, from_attack: bool)
 
 var body: CharacterBase = null
+## Per-fight bookkeeping for the Nephilic hooks: uses-per-combat counters, Crash
+## counters, Rebuke stacks, once-per-fight flags (Reprieve, Caput Mortuum).
+var fight_flags: Dictionary = {}
+## DEATH GUARD: set by combat. Called with (self, overkill_hp_before) when a hit would
+## drop this unit to 0 HP; returns the HP to survive at (0 = the unit dies).
+var death_guard: Callable = Callable()
+## DOWNED (Reprieve — FUTURE_PLANS §9, COMBAT C4 #11). A death guard returning DOWNED
+## leaves the unit at 0 HP but NOT dead: is_alive() is false, so nothing can target,
+## heal or AoE it and it takes no turn-start tick — but the turn loop still schedules
+## it (combat._next_actor), defeat does not fire (combat._check_defeat), and at the
+## start of its next turn combat stands it up (stand_up).
+const DOWNED := -1
+var downed: bool = false
 var team: int = 0
 var ai: String = "none"
 var unit_name: String = "Unit"
+## The BIG bar in the top panel. NULL for most units: since the overhead rework only
+## IMPORTANT units (player, companions, minibosses, bosses) get one — combat decides.
 var health_bar: BattleHealthBar = null
-## The visible buff/debuff strip beside this unit's health bar (set by combat).
+## The visible buff/debuff strip beside the top-panel bar (null with health_bar).
 var buff_bar: BuffBar = null
+## The compact bars + buff icons floating above THIS model. Every unit has one.
+var overhead: UnitOverhead = null
+## The CharacterRegistry id this unit was built from ("" for an inline spec / the
+## player). Combat dialogue triggers name units by it.
+var spec_id: String = ""
+
+## The id this unit's damage is filed under in Character.damage_history: "player"
+## for the player (whose spec_id is "player"), a companion's CharacterRegistry id,
+## else its display name.
+func history_key() -> String:
+	return spec_id if spec_id != "" else unit_name
+
+## --- ANTI-FRUSTRATION (CombatDodge) -------------------------------------------
+## Consecutive attacks from the PLAYER'S SIDE this unit has dodged since it was last
+## hit. Each one shaves a little off its next dodge chance; any landed hit resets it.
+var dodge_streak: int = 0
+
+## TOTAL damage this unit has dealt this fight: its attacks' main hits, the second
+## element, %-max-HP terms, Shatter's bonus, on-hit damage riders and on-struck
+## reflects (thorns). DoT is NOT counted — an instance is disconnected from its caster
+## by design, so a tick has nobody to credit. The AI's `reputation` signal reads it as
+## tier 2 (AI_PRIMER §6.8), and at fight end combat files it for the player and every
+## COMPANION into Character.damage_history, which is tier 1.
+var damage_dealt: float = 0.0
+
+## The id of the last ability this unit actually RESOLVED, written by
+## combat._use_ability. The AI's entire memory between decisions: AITurn reads it to
+## honour that ability's `ai_follow_up`, which is how a scripted two-beat pattern
+## ("Riot Shield, then Shield Bash") exists at all in a system that otherwise
+## re-decides from scratch every action. Combat-local, never saved.
+var last_ability_id: String = ""
+
+## --- damage-number bursts ----------------------------------------------------
+## Numbers spawned within this many ms of the previous one join the same BURST and
+## fan out in different directions (DamageNumber.set_spread).
+const BURST_WINDOW_MS := 160
+var _burst: Array = []
+var _burst_last_ms: int = -100000
 ## Visual size multiplier for the model (e.g. bosses are drawn bigger). The
 ## combat engine reads an enemy spec's "size_scale" and applies it in layout.
 var size_scale: float = 1.0
@@ -54,6 +120,13 @@ var ap_spent: float = 0.0
 ## acts, not on a global round boundary.
 var cooldowns: Dictionary = {}
 
+## COOLDOWN HOLDS (GODTHAAB §1.16): SLOT INDEX -> the hold key stamped on every entry
+## that slot's cast applied (Ability.cooldown_while_applied). A held slot's cooldown
+## is FROZEN — tick_cooldowns skips it — until combat's _sweep_cooldown_holds finds
+## no living unit still carrying an entry with that key and calls
+## release_cooldown_hold. Combat-local, like `cooldowns`; never saved.
+var cooldown_holds: Dictionary = {}
+
 # ---- timeline state (rev30) -------------------------------------------------
 ## The combat CLOCK VALUE at which this unit next acts. combat.gd advances its
 ## clock to the smallest next_turn_at among the living and gives that unit a
@@ -92,7 +165,13 @@ func _ready() -> void:
 		_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		add_child(_rect)
 
-	# Name + level, floating just ABOVE the model. Hidden until hovered.
+	# Compact bars + buff icons floating over the model (every unit).
+	overhead = UnitOverhead.new()
+	add_child(overhead)
+	overhead.setup(self)
+	resized.connect(_on_resized)
+
+	# Name + level, floating ABOVE the overhead bars. Hidden until hovered.
 	var lvl := body.level if body != null else 1
 	_label = Label.new()
 	_label.text = "%s  Lv %d" % [unit_name, lvl]
@@ -105,8 +184,8 @@ func _ready() -> void:
 	_label.anchor_bottom = 0.0
 	_label.offset_left = -24.0
 	_label.offset_right = 24.0
-	_label.offset_top = -28.0
-	_label.offset_bottom = -4.0
+	_label.offset_top = -28.0 - overhead.stack_height()
+	_label.offset_bottom = -4.0 - overhead.stack_height()
 	# white text with a black outline so it reads over any model colour
 	_label.add_theme_color_override("font_color", Color(1, 1, 1))
 	_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
@@ -119,8 +198,17 @@ func _ready() -> void:
 	mouse_exited.connect(_on_mouse_exited)
 
 
+func _on_resized() -> void:
+	if overhead:
+		overhead.relayout()
+		if _label:
+			_label.offset_top = -28.0 - overhead.stack_height()
+			_label.offset_bottom = -4.0 - overhead.stack_height()
+
 func _on_mouse_entered() -> void:
 	if _label:
+		var lvl := body.level if body != null else 1
+		_label.text = "%s  Lv %d   %d/%d" % [unit_name, lvl, get_hp(), get_max_hp()]
 		_label.visible = true
 	hovered.emit(self)
 
@@ -155,6 +243,15 @@ func get_spirit() -> int:
 
 func is_alive() -> bool:
 	return get_hp() > 0
+
+## Stand a DOWNED unit back up at `hp` (Reprieve). No-op on a unit that isn't downed.
+func stand_up(hp: int) -> void:
+	if body == null or not downed:
+		return
+	downed = false
+	body.current_hp = clampi(hp, 1, body.max_hp())
+	modulate = Color(1, 1, 1, 1)
+	refresh_bar()
 
 # ---- per-turn action state --------------------------------------------
 ## Refill this unit's action-point budget to its EFFECTIVE action_points stat, so a
@@ -202,9 +299,40 @@ func start_cooldown(slot: int, turns: int) -> void:
 		return
 	cooldowns[slot] = turns
 
-## Tick every cooling slot down one turn, dropping the ones that finished.
+## SET a slot's cooldown outright — raise it, lower it, or clear it with 0. Unlike
+## start_cooldown this can SHORTEN a cooldown, which is what an event that changes a
+## cooldown needs. Leaves any hold on the slot alone.
+func set_cooldown(slot: int, turns: int) -> void:
+	if slot < 0:
+		return
+	if turns <= 0:
+		cooldowns.erase(slot)
+	else:
+		cooldowns[slot] = turns
+
+## Freeze `slot`'s cooldown until nothing carrying `key` survives (§1.16).
+func hold_cooldown(slot: int, key: String) -> void:
+	if slot < 0 or key == "":
+		return
+	cooldown_holds[slot] = key
+
+func is_cooldown_held(slot: int) -> bool:
+	return cooldown_holds.has(slot)
+
+## The event: whatever held `slot` is gone. The cooldown restarts at `turns` (the
+## ability's full cooldown) and ticks normally from the unit's next turn.
+func release_cooldown_hold(slot: int, turns: int) -> void:
+	if not cooldown_holds.has(slot):
+		return
+	cooldown_holds.erase(slot)
+	set_cooldown(slot, turns)
+
+## Tick every cooling slot down one turn, dropping the ones that finished. A HELD
+## slot (cooldown_holds) does not tick at all.
 func tick_cooldowns() -> void:
 	for slot in cooldowns.keys():
+		if cooldown_holds.has(slot):
+			continue
 		var v := int(cooldowns[slot]) - 1
 		if v <= 0:
 			cooldowns.erase(slot)
@@ -216,6 +344,8 @@ func refresh_bar() -> void:
 		health_bar.set_hp(get_hp(), get_max_hp())
 		health_bar.set_spirit(get_spirit(), get_max_spirit())
 		health_bar.set_shield(get_shield())
+	if overhead:
+		overhead.set_values(get_hp(), get_max_hp(), get_spirit(), get_max_spirit(), get_shield())
 
 ## Total absorbing shield across every source (the number on the grey shield bar).
 func get_shield() -> int:
@@ -245,6 +375,8 @@ func gain_shield(config: Dictionary) -> void:
 func refresh_buffs() -> void:
 	if buff_bar:
 		buff_bar.refresh()
+	if overhead:
+		overhead.refresh_buffs()
 
 # ---- mutations --------------------------------------------------------
 ## Apply damage and float a damage number over this unit. `element` tints the
@@ -265,6 +397,14 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 	# damage opt out so it neither eats nor is boosted by other Hoarfrost stacks.
 	if amp_ice and element == "ice" and source != null:
 		amount = CombatBuffs.apply_incoming_ice_amp(body, amount)
+	# SILVER MIRROR: an enemy ATTACK that reaches a bearer with a struck-charge is
+	# turned aside whole — no shield drain, no health loss, no on-struck reaction.
+	if amount > 0 and from_attack and source != null and CombatBuffs.consume_struck_charge(body):
+		float_status("DEFLECTED", Color(0.85, 0.88, 0.95))
+		refresh_buffs()
+		return
+	if source != null:
+		struck.emit(self, source, from_attack)
 	# SHIELD absorption: damage is dealt to the shield FIRST (newest instance first),
 	# and there is NO overflow to health — if the unit has ANY shield when the hit
 	# lands, health takes ZERO this hit, whatever the leftover. Drain the shields,
@@ -276,12 +416,34 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 	# is no answer to — the only clean way to threaten a shielded unit.
 	if amount > 0 and element != "true" and CombatShields.has_shield(body):
 		var absorbed := CombatShields.absorb(body, amount)
+		# SHIELD BROKEN: the pool was standing when this hit landed and is gone now.
+		# Tested HERE rather than inside CombatShields because absorb() is a pure
+		# drain — the "was there, isn't now" edge only exists at a call site that saw
+		# both sides of it. Anything riding on the shield ends with it.
+		if not CombatShields.has_shield(body):
+			if not CombatBuffs.break_on_shield_break(body).is_empty():
+				refresh_buffs()
 		refresh_bar()
 		_spawn_number(absorbed, "shield", false, false)
 		if source != null:
 			CombatBuffs.fire_on_struck(self, source, amount, element, from_attack)
 		return
+	var hp_before := body.current_hp
 	body.current_hp = clampi(body.current_hp - amount, 0, body.max_hp())
+	# DEATH GUARD (Reprieve, Caput Mortuum): a lethal hit may be survived.
+	if hp_before > 0 and body.current_hp <= 0 and death_guard.is_valid():
+		var survive := int(death_guard.call(self))
+		if survive > 0:
+			body.current_hp = clampi(survive, 1, body.max_hp())
+		elif survive == DOWNED:
+			downed = true
+	if body.current_hp < hp_before:
+		hp_lost.emit(self, hp_before - body.current_hp, element)
+	# ACTUAL HEALTH LOST. Announced only on this path — a hit the shield ate returned
+	# above — and only for a hit that did something, so a 0-damage resolve (Snap with
+	# nothing to snap) never breaks a Covering.
+	if amount > 0:
+		health_damaged.emit(self)
 	refresh_bar()
 	_spawn_number(amount, element, is_crit, false)
 	if _rect:
@@ -290,7 +452,8 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 		var t := create_tween()
 		t.tween_property(_rect, "color", base, 0.25)
 	if not is_alive():
-		modulate = Color(0.45, 0.45, 0.45, 0.7)
+		# Downed reads lighter than dead: still greyed, but clearly not gone.
+		modulate = Color(0.65, 0.65, 0.75, 0.85) if downed else Color(0.45, 0.45, 0.45, 0.7)
 	# "When struck do X" — fire this unit's on-struck reactions against the source
 	# of the hit (thorns reflect, etc.). Only for sourced hits, never DoT/reflect.
 	if source != null:
@@ -324,8 +487,33 @@ func _spawn_number(amount: int, element: String, is_crit: bool, is_heal: bool) -
 	var host := get_parent()
 	if host == null:
 		return
-	var point := position + Vector2(size.x * 0.5, size.y * 0.30)   # our upper-centre
-	DamageNumber.spawn(host, point, amount, element, is_crit, is_heal)
+	_join_burst(DamageNumber.spawn(host, _number_origin(), amount, element, is_crit, is_heal))
+
+## Where floating numbers and status words start: the TOP-CENTRE of the model.
+func _number_origin() -> Vector2:
+	return position + Vector2(size.x * 0.5, 0.0)
+
+## Add a freshly spawned number to the current burst (or start a new one) and re-fan
+## every live member so each instance gets its own direction.
+func _join_burst(dn: DamageNumber) -> void:
+	if dn == null:
+		return
+	var now := Time.get_ticks_msec()
+	if now - _burst_last_ms > BURST_WINDOW_MS:
+		_burst.clear()
+	_burst_last_ms = now
+	var live: Array = []
+	for n in _burst:
+		if is_instance_valid(n):
+			live.append(n)
+	live.append(dn)
+	_burst = live
+	var count := _burst.size()
+	if count < 2:
+		return
+	for i in count:
+		var dir := lerpf(-1.0, 1.0, float(i) / float(count - 1))
+		(_burst[i] as DamageNumber).set_spread(dir, count)
 
 ## Float a STATUS word over this unit — "DODGE" when it evades an attack, "RESIST"
 ## when it shrugs off a debuff. Same host/positioning rules as a damage number, so
@@ -334,8 +522,7 @@ func float_status(label: String, color: Color, font_size: int = DamageNumber.STA
 	var host := get_parent()
 	if host == null:
 		return
-	var point := position + Vector2(size.x * 0.5, size.y * 0.30)
-	DamageNumber.spawn_text(host, point, label, color, font_size)
+	_join_burst(DamageNumber.spawn_text(host, _number_origin(), label, color, font_size))
 
 ## Convenience wrappers so combat.gd never has to know the palette.
 func float_dodge() -> void:
@@ -343,6 +530,19 @@ func float_dodge() -> void:
 
 func float_resist() -> void:
 	float_status("RESIST", DamageNumber.RESIST_COLOR)
+
+## This unit is shielded by its own front row and cannot be targeted from the other
+## side (BattleGrid.is_covered). Floated when a click is REFUSED, so the rule teaches
+## itself the first time the player tries.
+func float_covered() -> void:
+	float_status("COVERED", DamageNumber.COVERED_COLOR)
+
+## This unit rolled its way out of an escapable debuff (Netted) at the start of its
+## turn. Without a float the player would never learn that rolling out is a thing
+## that happens — the net would just silently vanish. Two words, so it uses the
+## smaller face the empowerment float already needs for the same reason.
+func float_escaped() -> void:
+	float_status("BROKE FREE", DamageNumber.ESCAPE_COLOR, DamageNumber.EMPOWER_FONT_SIZE)
 
 ## A debuff landed AMPLIFIED by the caster's surplus Disdain. Reports what was
 ## actually gained: the potency multiplier when it grew, and "+NT" when the duration
@@ -357,6 +557,23 @@ func float_empowered(potency: float, extra_turns: int) -> void:
 	if parts.is_empty():
 		return
 	float_status(" ".join(parts), DamageNumber.EMPOWER_COLOR, DamageNumber.EMPOWER_FONT_SIZE)
+
+## PAY AN HP COST (Nephilic, 2026-09-24). Straight off health: no mitigation, no
+## shield, no on-struck reaction, and it can NEVER kill — the unit keeps at least 1 HP
+## whatever is asked (combat also refuses a lethal cost up front). Emits hp_lost and
+## hp_paid. Returns the HP actually paid.
+func pay_hp(amount: int) -> int:
+	if body == null or amount <= 0 or not is_alive():
+		return 0
+	var paid := mini(amount, body.current_hp - 1)
+	if paid <= 0:
+		return 0
+	body.current_hp -= paid
+	refresh_bar()
+	_spawn_number(paid, "blood", false, false)
+	hp_lost.emit(self, paid, "cost")
+	hp_paid.emit(self, paid)
+	return paid
 
 ## Spend spirit (the resource formerly called focus). Returns false if short.
 func spend_spirit(amount: int) -> bool:

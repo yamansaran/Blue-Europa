@@ -66,7 +66,9 @@ const DAMAGE_TAKEN_MULT_KEY := "damage_taken_mult"
 ## `extra_pierce` is added to the attacker's pierce for THIS hit's element only (used by
 ## Cryonecrosis, which gains ice pierce per ice debuff on the target); 0.0 for everything
 ## else. It is ignored for the TRUE element (which bypasses mitigation).
-static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1, crit_floor: int = -1, scaling_bonus: Dictionary = {}, extra_pierce: float = 0.0) -> Dictionary:
+## `extra_crit` (Nephilic, 2026-09-24): flat crit-chance points added for THIS hit only
+## (Hew's per-On-Fire bonus, Heavy Hand's Crash crit).
+static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1, crit_floor: int = -1, scaling_bonus: Dictionary = {}, extra_pierce: float = 0.0, extra_crit: float = 0.0) -> Dictionary:
 	var result := {
 		"pre": 0.0, "post": 0.0, "damage": 0,
 		"is_crit": false, "crit_chance": 0.0, "crit_mult": 1.0,
@@ -76,8 +78,7 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 	if attacker == null or ability == null:
 		return result
 
-	var element := ability.element_key()
-	result["element"] = element
+	result["element"] = ability.element_key()
 
 	# --- 0. DODGE ------------------------------------------------------------
 	# Accuracy is resolved BEFORE any damage is computed: a dodged hit deals no
@@ -91,11 +92,60 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 		result["dodged"] = true
 		return result
 
+	# --- 1, 2, 2b. pre-mitigation, mitigation, damage_taken (no RNG) ----------
+	var core := _resolve_core(attacker, defender, ability, points, scaling_bonus, extra_pierce)
+	result["pre"] = core["pre"]
+	var post: float = core["post"]
+	result["post"] = post
+
+	# --- 3. CRIT -------------------------------------------------------------
+	var chance := clampf(CombatCrit.chance(attacker, defender, ability, extra_pierce) + extra_crit, 0.0, 100.0)
+	result["crit_chance"] = chance
+	var final_dmg := post
+	if CombatCrit.rolls_crit(chance, crit_floor):
+		var cmult := CombatCrit.damage_multiplier(attacker, ability)
+		final_dmg = post * cmult
+		result["is_crit"] = true
+		result["crit_mult"] = cmult
+
+	result["damage"] = int(round(maxf(0.0, final_dmg)))
+	return result
+
+## A NON-ROLLING resolve() for the unit AI's dry runs (AI_PRIMER §11.1). Same
+## stages 1 / 2 / 2b through the SAME code (_resolve_core), plus the dodge and crit
+## CHANCES computed but never rolled, folded into one `expected` figure:
+##     expected = post * (1 - dodge%) * (1 + crit% * (crit_mult - 1))
+## No RNG and no mutation — thinking about a hit can never consume hoarfrost or
+## change a roll the player's next attack sees.
+static func preview(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int = 1, scaling_bonus: Dictionary = {}, extra_pierce: float = 0.0) -> Dictionary:
+	var out := {"pre": 0.0, "post": 0.0, "expected": 0.0, "dodge_chance": 0.0,
+		"crit_chance": 0.0, "crit_mult": 1.0, "element": "physical"}
+	if attacker == null or ability == null:
+		return out
+	out["element"] = ability.element_key()
+	var core := _resolve_core(attacker, defender, ability, points, scaling_bonus, extra_pierce)
+	out["pre"] = core["pre"]
+	out["post"] = core["post"]
+	var dodge := CombatDodge.chance(attacker, defender, ability)
+	var crit := CombatCrit.chance(attacker, defender, ability, extra_pierce)
+	var cmult := CombatCrit.damage_multiplier(attacker, ability)
+	out["dodge_chance"] = dodge
+	out["crit_chance"] = crit
+	out["crit_mult"] = cmult
+	out["expected"] = float(core["post"]) * (1.0 - clampf(dodge, 0.0, 100.0) / 100.0) \
+		* (1.0 + (clampf(crit, 0.0, 100.0) / 100.0) * (cmult - 1.0))
+	return out
+
+## Stages 1, 2 and 2b of the pipeline and NOTHING ELSE — no dodge roll, no crit roll,
+## no side effects. resolve() and preview() both run through this, so the AI's idea
+## of a hit and the real hit can never drift apart. (Extracted verbatim from the
+## pre-rev33 resolve(); a player's damage numbers are unchanged by the extract.)
+static func _resolve_core(attacker: CharacterBase, defender: CharacterBase, ability: Ability, points: int, scaling_bonus: Dictionary, extra_pierce: float) -> Dictionary:
+	var element := ability.element_key()
 	# --- 1. PRE-MITIGATION ---------------------------------------------------
 	var base_dmg := ability.compute_damage(attacker.effective_stats(), points, scaling_bonus)
 	var pre_mult := 1.0 + _pre_mitigation_bonus(attacker)
 	var pre := maxf(0.0, base_dmg * pre_mult)
-	result["pre"] = pre
 
 	# --- 2. MITIGATION -------------------------------------------------------
 	var post := pre
@@ -106,7 +156,7 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 			# Multiplicative resist layer from the defender's buffs/debuffs (Bet, ...).
 			resistance = maxf(0.0, resistance * (1.0 + CombatBuffs.resist_mult_bonus(defender, element)))
 		var pierce := attacker.get_effective(Stats.pierce_key(element)) + maxf(0.0, extra_pierce)
-		var amp := attacker.get_effective(Stats.amp_key(element))
+		var amp := attacker.get_effective(Stats.amp_key(element)) + ability_amp(attacker, ability)
 		# Mitigation stiffness (m) is the DEFENDER's own curve stat; fall back if a
 		# body predates the stat (0 / missing).
 		var stiffness := CombatMitigation.STIFFNESS_FALLBACK
@@ -123,34 +173,23 @@ static func resolve(attacker: CharacterBase, defender: CharacterBase, ability: A
 	# reduces — a Guard granting 80% reduction stores -0.80), clamped to >= 0.
 	if defender != null:
 		post = maxf(0.0, post * maxf(0.0, 1.0 + _damage_taken_bonus(defender)))
-	result["post"] = post
+	return {"pre": pre, "post": post}
 
-	# --- 3. CRIT -------------------------------------------------------------
-	var chance := CombatCrit.chance(attacker, defender, ability, extra_pierce)
-	result["crit_chance"] = chance
-	var final_dmg := post
-	if CombatCrit.rolls_crit(chance, crit_floor):
-		var cmult := CombatCrit.damage_multiplier(attacker, ability)
-		final_dmg = post * cmult
-		result["is_crit"] = true
-		result["crit_mult"] = cmult
+## PER-ABILITY AMP (FUTURE_PLANS §9 — Hone's Crash rate). An amp bonus that applies to
+## ONE ability's damage whatever its element, ADDED to the attacker's <elem>_amp in
+## mitigation's (A+1). Stored on the attacker's body meta "ability_amp" =
+## {ability_id: float} (engine units, 0.01 = 1 amp); combat writes it at fight start.
+## resolve() / preview() read it themselves; resolve_flat() callers pass it as
+## `extra_amp` for the ability's own extra terms (second element, %max HP, riders).
+static func ability_amp(attacker: CharacterBase, ability: Ability) -> float:
+	if attacker == null or ability == null or not attacker.has_meta("ability_amp"):
+		return 0.0
+	var m = attacker.get_meta("ability_amp")
+	if typeof(m) != TYPE_DICTIONARY:
+		return 0.0
+	return float(m.get(String(ability.id), 0.0))
 
-	result["damage"] = int(round(maxf(0.0, final_dmg)))
-	return result
-
-## Resolve a FLAT damage amount — one that does NOT come from an ability's power
-## formula (Shatter's %-of-max-HP bonus hit, and anything else that hands us a number
-## directly) — through the same pipeline as a normal hit, minus the crit stage:
-##   1. PRE-MITIGATION : amount * (1 + the attacker's damage_dealt_mult basket)
-##                       (pass apply_pre_mult = false to skip this stage)
-##   2. MITIGATION     : the defender's element defense * (1 + resist_mult) vs the
-##                       attacker's pierce (+ extra_pierce) and amp, on the defender's
-##                       mitigation_stiffness curve. Skipped for the TRUE element.
-##   2b. the defender's damage_taken_mult (element-independent, so it scales TRUE too).
-## A null attacker means no pre-multiplier, no pierce and no amp (environmental damage);
-## a null defender means no mitigation. Returns the final integer damage.
-## NOTE: DoT and reflect damage deliberately do NOT route through here — they stay raw.
-static func resolve_flat(attacker: CharacterBase, defender: CharacterBase, amount: float, element: String = "physical", extra_pierce: float = 0.0, apply_pre_mult: bool = true) -> int:
+static func resolve_flat(attacker: CharacterBase, defender: CharacterBase, amount: float, element: String = "physical", extra_pierce: float = 0.0, apply_pre_mult: bool = true, extra_amp: float = 0.0) -> int:
 	var pre := maxf(0.0, amount)
 	if attacker != null and apply_pre_mult:
 		pre = maxf(0.0, pre * (1.0 + _pre_mitigation_bonus(attacker)))
@@ -161,11 +200,16 @@ static func resolve_flat(attacker: CharacterBase, defender: CharacterBase, amoun
 		if defender != null:
 			resistance = defender.get_effective(Stats.defense_key(element))
 			resistance = maxf(0.0, resistance * (1.0 + CombatBuffs.resist_mult_bonus(defender, element)))
-		var pierce := 0.0
-		var amp := 0.0
+		# `extra_pierce` is an EXPLICIT term the caller supplies, so it applies whether
+		# or not there is an attacker — a damage-over-time has no attacker behind it
+		# and still has to be able to cut through armour (Tinnitus). The attacker's
+		# OWN pierce and amp are what require one. Identical for every existing
+		# caller, all of which pass a real attacker and get the same sum as before.
+		var pierce := maxf(0.0, extra_pierce)
+		var amp := extra_amp
 		if attacker != null:
-			pierce = attacker.get_effective(Stats.pierce_key(element)) + maxf(0.0, extra_pierce)
-			amp = attacker.get_effective(Stats.amp_key(element))
+			pierce += attacker.get_effective(Stats.pierce_key(element))
+			amp += attacker.get_effective(Stats.amp_key(element))
 		var stiffness := CombatMitigation.STIFFNESS_FALLBACK
 		if defender != null:
 			var s := defender.get_effective("mitigation_stiffness")

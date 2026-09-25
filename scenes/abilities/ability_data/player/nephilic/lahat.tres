@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bmiwwgtovrd0e"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"lahat"
+display_name = "The Turning Sword"
+description = "Passive. Crash is enflamed: it adds 100% of Vigor as Fire and sets the target On Fire for 5 turns."
+max_points = 3
+max_equipped = 1
+kind = 4
+target = 2
+description_ranks = Array[String](["Passive. Crash is enflamed: it adds 100% of Vigor as Fire and sets the target On Fire for 5 turns.", "Passive. Crash is enflamed: it adds 150% of Vigor as Fire and sets the target On Fire for 5 turns.", "Passive. Crash is enflamed: it adds 200% of Vigor as Fire and sets the target On Fire for 5 turns."])
+perk = &"turning_sword"
+perk_ranks = Array[Dictionary]([{"mult": 1.0}, {"mult": 1.5}, {"mult": 2.0}])
+required_level = 1

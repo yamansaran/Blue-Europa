@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bumu6dw1eu7qp"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"rameel"
+display_name = "Rebuke"
+description = "Passive. Each enemy attack that hits you adds a stack (max 5). Crash spends them all for +8% damage each."
+max_points = 3
+max_equipped = 1
+kind = 4
+target = 2
+description_ranks = Array[String](["Passive. Each enemy attack that hits you adds a stack (max 5). Crash spends them all for +8% damage each.", "Passive. Each enemy attack that hits you adds a stack (max 5). Crash spends them all for +12% damage each.", "Passive. Each enemy attack that hits you adds a stack (max 5). Crash spends them all for +16% damage each."])
+perk = &"rebuke"
+perk_ranks = Array[Dictionary]([{"per": 0.08, "max": 5}, {"per": 0.12, "max": 5}, {"per": 0.16, "max": 5}])
+required_level = 1

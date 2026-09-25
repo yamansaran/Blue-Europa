@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bjg1rz6mujwit"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"tamiel"
+display_name = "Hone"
+description = "Passive. +1 amp to every element per 2 levels (+25 at level 50). Crash instead gets +1 amp per level."
+max_points = 1
+max_equipped = 2
+kind = 4
+target = 2
+perk = &"hone"
+perk_ranks = Array[Dictionary]([{"rate": 0.005, "crash_rate": 0.01}])
+required_level = 1

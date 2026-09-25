@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bz06lmkeqvmxo"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"dominationes"
+display_name = "Tithe"
+description = "Lose 10% of your max HP. An ally gains 50 spirit, deals 20% more damage for 3 turns, and is shielded for 15% of your max HP."
+max_points = 3
+max_equipped = 1
+kind = 1
+target = 5
+cooldown = 6
+applies_buff = &"tithe"
+description_ranks = Array[String](["Lose 10% of your max HP. An ally gains 50 spirit, deals 20% more damage for 3 turns, and is shielded for 15% of your max HP.", "Lose 15% of your max HP. An ally gains 55 spirit, deals 25% more damage for 3 turns, and is shielded for 20% of your max HP.", "Lose 20% of your max HP. An ally gains 60 spirit, deals 30% more damage for 3 turns, and is shielded for 25% of your max HP."])
+hp_cost_pct_max_ranks = Array[float]([0.1, 0.15, 0.2])
+required_level = 1
+shield_pct_caster_max_hp_ranks = Array[float]([0.15, 0.2, 0.25])
+spirit_grant_ranks = Array[int]([50, 55, 60])

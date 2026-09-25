@@ -30,6 +30,7 @@ extends Control
 const DEFAULT_SIZE := Vector2(430.0, 236.0)
 const MIN_SIZE     := Vector2(240.0, 96.0)
 const MARGIN       := 14.0     # gap from the viewport edge at its starting position
+const BOTTOM_PANEL_FRAC := 0.15  # combat's bottom panel (dialogue) — the log starts above it
 const HEADER_H     := 22.0
 const PAD          := 8.0
 const GRIP         := 14.0     # size of the bottom-right resize grip
@@ -203,7 +204,9 @@ func _draw_grip() -> void:
 ## default window size. Drag it anywhere if a fight proves otherwise.
 func _place_bottom_left() -> void:
 	var vp := get_viewport_rect().size
-	position = Vector2(MARGIN, vp.y - size.y - MARGIN)
+	# rev33: start ABOVE combat's bottom panel (the bottom 15%), which now carries the
+	# dialogue boxes — a log parked over them would hide the story.
+	position = Vector2(MARGIN, vp.y * (1.0 - BOTTOM_PANEL_FRAC) - size.y - MARGIN)
 
 # ----------------------------------------------------------------------------
 # Writing

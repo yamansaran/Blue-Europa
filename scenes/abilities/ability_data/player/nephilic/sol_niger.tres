@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bkdiyf3pt1oyj"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"sol_niger"
+display_name = "First Sun"
+description = "Once per fight. Lose 30% of your current HP. Every ally but you fills their spirit bar and deals 30% more damage for 3 turns."
+max_points = 5
+max_equipped = 1
+kind = 1
+target = 6
+applies_buff = &"first_sun"
+description_ranks = Array[String](["Once per fight. Lose 30% of your current HP. Every ally but you fills their spirit bar and deals 30% more damage for 3 turns.", "Once per fight. Lose 30% of your current HP. Every ally but you fills their spirit bar and deals 35% more damage for 3 turns.", "Once per fight. Lose 30% of your current HP. Every ally but you fills their spirit bar and deals 40% more damage for 3 turns.", "Once per fight. Lose 30% of your current HP. Every ally but you fills their spirit bar and deals 45% more damage for 3 turns.", "Once per fight. Lose 30% of your current HP. Every ally but you fills their spirit bar and deals 50% more damage for 3 turns."])
+hp_cost_pct_current = 0.3
+required_level = 1
+spirit_grant = 999
+uses_per_combat = 1

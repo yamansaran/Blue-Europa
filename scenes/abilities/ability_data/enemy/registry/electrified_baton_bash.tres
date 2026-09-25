@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://c2b66a6822d25"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"electrified_baton_bash"
+display_name = "Electrified Baton Bash"
+description = "The baton draws off a belt cell. Deal Physical damage equal to {scaling}, plus Lightning."
+max_points = 1
+max_equipped = 1
+action_cost = 1.0
+kind = 0
+delivery = 1
+target = 0
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 2
+base_power = 0.0
+scaling_stat = &"vigor"
+scaling_mult = 0.85
+bonus_damage_element = &"lightning"
+bonus_scaling_stat = &"instinct"
+bonus_scaling_mult = 0.5
+applies_buff = &"neuromuscular"
+apply_chance = 0.25

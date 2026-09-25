@@ -38,8 +38,7 @@ func _ready() -> void:
 	if ch and not ch.changed.is_connected(_refresh_attributes):
 		ch.changed.connect(_refresh_attributes)
 	_build_debug_uid_readout()
-	if default_skill_tree_scene != null:
-		load_skill_tree(default_skill_tree_scene)
+	_load_class_tree()
 	_build_overview_readout()
 	_build_combat_action_ui()
 	_build_attributes_readout()
@@ -444,6 +443,23 @@ func _refresh_debug_uid() -> void:
 
 
 # ---------------------------------------------------- skill-tree shell API
+## Load the tree of the player's class (ClassRegistry.tree_scene). A class whose
+## tree isn't built yet keeps the placeholder label; a missing / unknown class falls
+## back to the exported default (Blue Blood) so an F6 test still shows a tree.
+func _load_class_tree() -> void:
+	var ch := _character()
+	var cid: String = str(ch.class_id) if ch and "class_id" in ch else ""
+	var path: String = str(ClassRegistry.info(cid).get("tree_scene", "")) if ClassRegistry.has(cid) else ""
+	if path != "" and ResourceLoader.exists(path):
+		load_skill_tree_path(path)
+	elif ClassRegistry.has(cid) and cid != "blue_blood":
+		push_warning("Abilities: class '%s' has no skill tree yet (tree_scene '%s')." % [cid, path])
+		if _skill_tree_placeholder != null:
+			_skill_tree_placeholder.text = "%s — skill tree not built yet." % ClassRegistry.display_name(cid)
+			_skill_tree_placeholder.visible = true
+	elif default_skill_tree_scene != null:
+		load_skill_tree(default_skill_tree_scene)
+
 func load_skill_tree(tree_scene: PackedScene) -> void:
 	if tree_scene == null:
 		return

@@ -6,4 +6,6 @@ func _ready() -> void:
 	# from the ROOT scene's _ready() can trip Godot's "parent is busy adding/
 	# removing children" error, because the boot scene isn't fully in the tree
 	# yet. call_deferred() lets _ready() finish first, then the swap runs safely.
-	GameManager.go_to_shell.call_deferred()
+	# rev33: boot into the intro screen -> main menu (save slots) rather than straight
+	# into the shell. The shell is reached by loading or starting a save.
+	GameManager.go_to_intro.call_deferred()

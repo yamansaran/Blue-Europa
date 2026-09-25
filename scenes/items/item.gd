@@ -154,12 +154,17 @@ func stat_lines() -> Array:
 		var amt := float(stats[key])
 		if amt == 0.0:
 			continue
+		# AMP UNITS (FUTURE_PLANS §8): the .tres stores amp as a fraction (0.25);
+		# the player reads it in amp points (+25), so show it x100.
+		if str(key).ends_with("_amp"):
+			amt *= 100.0
 		out.append("%s  %s" % [str(key).capitalize(), _fmt_amount(amt)])
 	return out
 
 func _fmt_amount(amt: float) -> String:
 	var sign_txt := "+" if amt >= 0.0 else "-"
 	var mag := absf(amt)
+	mag = snappedf(mag, 0.01)   # drop float noise from the amp x100 (0.07 * 100)
 	if mag == floorf(mag):
 		return "%s%d" % [sign_txt, int(mag)]
 	return "%s%s" % [sign_txt, str(mag)]

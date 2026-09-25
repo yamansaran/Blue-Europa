@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://c2b391b6629d9"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"net"
+display_name = "Net"
+description = "Weighted at the edges, thrown low. You will not be going anywhere until you tear it."
+max_points = 1
+max_equipped = 1
+action_cost = 1.0
+kind = 2
+delivery = 0
+target = 0
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 5
+base_power = 0.0
+scaling_mult = 0.0
+applies_buff = &"netted"
+ai_priority = 3.0

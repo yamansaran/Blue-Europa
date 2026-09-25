@@ -51,6 +51,18 @@ const RADII := {
 ## tree draws its connecting lines from `parents` instead of the legacy `links`.
 @export var parents: Array[String] = []
 @export var required_level: int = 0
+## NEPHILIC PASS (rev31). `parents_any` = true opens the node from ANY ONE held
+## parent instead of all of them (the Angel Tree's helix joints and torso cells).
+## `excludes` = node_ids that BAR this node while any of them holds points — list
+## the other option(s) on the same rung, on EVERY node of the rung (both ways).
+## Both default off, so Blue Blood's nodes are untouched.
+@export var parents_any: bool = false
+@export var excludes: Array[String] = []
+## ROSE CROSS PASS (rev32). `hide_parent_lines` = true gates on `parents` as usual but
+## the tree draws NO line to them — the Psychological's petal discs list the whole
+## inner disc as parents (ring-complete gate) without drawing 21 / 84 spokes. Default
+## off, so every existing tree is untouched.
+@export var hide_parent_lines: bool = false
 
 ## Where the CENTER of this node sits. This is the authored placement — the
 ## node offsets its own top-left by its radius, so changing size_class keeps
@@ -69,6 +81,7 @@ const COLOR_MAXED_RING := Color(1.0, 0.86, 0.35, 1.0)   ## gold when maxed
 const COLOR_PARTIAL_RING := Color(0.55, 0.85, 0.55, 1.0)
 const COLOR_LOCKED_FILL := Color(0.11, 0.12, 0.13, 1.0) ## prerequisites not met
 const COLOR_LOCKED_RING := Color(0.45, 0.42, 0.45, 0.7)
+const COLOR_BARRED := Color(0.80, 0.30, 0.30, 0.8)     ## a rung partner is held
 
 var _hovered := false
 
@@ -167,8 +180,16 @@ func is_unlocked() -> bool:
 func can_unlock() -> bool:
 	var ch := _character()
 	if ch and ch.has_method("can_unlock_node"):
-		return ch.can_unlock_node(required_level, parents)
+		return ch.can_unlock_node(required_level, parents, parents_any, excludes)
 	return true
+
+## Barred = an excluded partner on this node's rung holds points, so this one can't
+## take a first point until that partner is refunded.
+func is_barred() -> bool:
+	if excludes.is_empty() or is_unlocked():
+		return false
+	var ch := _character()
+	return ch != null and ch.has_method("is_barred") and ch.is_barred(excludes)
 
 ## Locked = not yet unlocked AND prerequisites unmet (so it can't be bought yet).
 func is_locked() -> bool:
@@ -187,6 +208,7 @@ func _draw() -> void:
 	var r := radius
 	var c := size * 0.5
 	var locked := is_locked()
+	var barred := is_barred()
 	# --- fill: icon if the ability has one, else a circle (dimmed when locked) ---
 	if ability and ability.icon:
 		var dest := Rect2(c - Vector2(r, r), Vector2(r, r) * 2.0)
@@ -205,6 +227,11 @@ func _draw() -> void:
 		ring_col = COLOR_MAXED_RING if pts >= maxp else COLOR_PARTIAL_RING
 		ring_w = 4.0
 	draw_arc(c, r, 0.0, TAU, 48, ring_col, ring_w, true)
+
+	# --- barred: a rung partner is held — strike the node through ---
+	if barred:
+		var d := r * 0.62
+		draw_line(c + Vector2(-d, -d), c + Vector2(d, d), COLOR_BARRED, 2.5, true)
 
 	# --- hover highlight ---
 	if _hovered:
@@ -238,7 +265,7 @@ func _try_invest() -> void:
 	# Gated by the node's level requirement + parent prerequisites (enforced inside
 	# Character.invest). Investing the first point unlocks the ability (idempotent —
 	# unlock_ability ignores an already-unlocked id).
-	if ch.invest(node_id, ability.max_points, required_level, parents, String(ability.id)):
+	if ch.invest(node_id, ability.max_points, required_level, parents, String(ability.id), parents_any, excludes):
 		if ch.has_method("unlock_ability"):
 			ch.unlock_ability(String(ability.id))
 	elif is_locked():
@@ -267,13 +294,13 @@ func _try_refund() -> void:
 		return
 	if points() == 1:
 		var tree := _skill_tree()
-		if tree and tree.has_method("invested_dependents"):
-			var blockers: Array = tree.invested_dependents(self)
+		if tree and tree.has_method("refund_blockers"):
+			var blockers: Array = tree.refund_blockers(self)
 			if blockers.size() > 0:
 				for b in blockers:
 					if b is SkillNode:
 						(b as SkillNode).flash_red()
-				print("[skilltree] can't refund %s — %d dependent node(s) still have points." % [node_id, blockers.size()])
+				print("[skilltree] can't refund %s — %d held node(s) would be cut off." % [node_id, blockers.size()])
 				return
 	ch.refund(node_id)
 

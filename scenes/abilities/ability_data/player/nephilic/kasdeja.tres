@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://brxwl14wkq0ck"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"kasdeja"
+display_name = "Pharmaceutical"
+description = "Passive. Heal for 10% of all Toxic damage enemies take, whatever the source."
+max_points = 6
+max_equipped = 1
+kind = 4
+target = 2
+description_ranks = Array[String](["Passive. Heal for 10% of all Toxic damage enemies take, whatever the source.", "Passive. Heal for 12.5% of all Toxic damage enemies take, whatever the source.", "Passive. Heal for 15% of all Toxic damage enemies take, whatever the source.", "Passive. Heal for 17.5% of all Toxic damage enemies take, whatever the source.", "Passive. Heal for 20% of all Toxic damage enemies take, whatever the source.", "Passive. Heal for 25% of all Toxic damage enemies take, whatever the source."])
+perk = &"pharmaceutical"
+perk_ranks = Array[Dictionary]([{"pct": 0.1}, {"pct": 0.125}, {"pct": 0.15}, {"pct": 0.175}, {"pct": 0.2}, {"pct": 0.25}])
+required_level = 1

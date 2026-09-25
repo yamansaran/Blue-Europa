@@ -230,7 +230,9 @@ func _on_bar_unhover() -> void:
 
 
 func _fmt_value(value: float) -> String:
-	# Amp lives on a 0..1-ish scale, so show two decimals; pierce/defense are ints.
+	# AMP UNITS (FUTURE_PLANS §8): the engine holds amp as a fraction (0.25); the
+	# player reads amp points, 1 amp = 1% = 0.01, so display it x100. Bars still
+	# scale on the raw engine value. Pierce/defense are plain ints.
 	if _metric == Metric.AMP:
-		return "%.2f" % value
+		return str(int(round(value * 100.0)))
 	return str(int(round(value)))

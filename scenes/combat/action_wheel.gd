@@ -38,6 +38,9 @@ var _tooltip: AbilityTooltip
 # --- USE-mode gameplay state (set by combat via set_use_state) --------------
 var _caster_body: CharacterBase = null
 var _cooldowns: Dictionary = {}
+## Optional extra gate from combat: (ability: Ability) -> bool, true = spent. Greys a
+## once-per-combat ability after use (the wheel never saw uses_per_combat before).
+var _spent_check: Callable = Callable()
 
 
 func _ready() -> void:
@@ -67,9 +70,10 @@ func set_mode_edit() -> void:
 ## Combat hands over the caster's body + the (shared-by-reference) cooldown map
 ## (SLOT INDEX -> turns left) so the wheel can grey out unusable slots. Safe to
 ## call with null.
-func set_use_state(caster_body: CharacterBase, cooldowns: Dictionary) -> void:
+func set_use_state(caster_body: CharacterBase, cooldowns: Dictionary, spent_check: Callable = Callable()) -> void:
 	_caster_body = caster_body
 	_cooldowns = cooldowns
+	_spent_check = spent_check
 	queue_redraw()
 
 ## Combat: pop the wheel up centred on a point in the PARENT's coordinates.
@@ -186,6 +190,8 @@ func _slot_disabled(i: int) -> bool:
 			return true
 		if ab.spirit_cost() > 0 and CombatBuffs.is_silenced(_caster_body):
 			return true
+	if _spent_check.is_valid() and bool(_spent_check.call(ab)):
+		return true
 	return _cooldown_of(i) > 0
 
 # --- drawing ------------------------------------------------------------

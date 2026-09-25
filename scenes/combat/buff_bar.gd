@@ -4,42 +4,42 @@ extends HBoxContainer
 ## ============================================================================
 ## BUFF BAR  —  the visible buff/debuff strip beside a health bar (class_name)
 ## ============================================================================
-## A row of thin vertical "chips", one per VISIBLE buff/debuff on a unit. It sits
-## next to the unit's health bar in the top band — combat places it on the RIGHT
-## of the bar for the player party and on the LEFT for enemies. Chips stack side
-## by side; hovering one pops a description card; each chip shows a turns-until-
-## expiry counter at its bottom-right (an "inf" for permanent effects) and a small
-## "xN" stack badge at its top-left when stacked.
+## A row of icons, one per VISIBLE buff/debuff on a unit. TWO placements use it:
+##   - the TOP PANEL, beside an IMPORTANT unit's big health bar (right of the party's,
+##     left of an enemy boss's);
+##   - COMPACT, centred under EVERY unit's overhead bars (UnitOverhead).
+## Hovering an icon pops a description card; each icon shows a turns-until-expiry
+## counter at its bottom-right (NOTHING for a permanent effect) and an "xN" stack
+## badge at its top-left when stacked.
+##
+## HOW AN ICON LOOKS IS NOT DECIDED HERE. Shape, colour, rune, shading and counters
+## all come from the BUFF ICON ENGINE in scenes/ui/buff_icons/ (BuffIconPainter +
+## BuffIconStyle + BuffIconCatalog + RuneGlyphs), so the icons can be restyled
+## without touching this file.
 ##
 ## The hover card is now the SHARED HoverPanel (same core the ability tooltip
 ## uses), so buff descriptions get the same look, placement, and element-name
-## KEYWORD COLOURING as everything else. Chip drawing is unchanged.
-##
-## Chip colour = the effect's element colour (ElementColors) when it has an
-## element tag, otherwise green for a buff / red for a debuff.
+## KEYWORD COLOURING as everything else.
 ##
 ## class_name global — RESTART Godot once after adding this script.
 ## ----------------------------------------------------------------------------
 
-enum { SIDE_RIGHT, SIDE_LEFT }
+enum { SIDE_RIGHT, SIDE_LEFT, SIDE_CENTER }
 
-const CHIP_W := 24.0   # rev21: twice the old 12 (wider chips = twice-as-wide strip)
-const CHIP_H := 39.0   # rev21: matches BattleHealthBar.DUO_HEIGHT (HP+Spirit stack)
+## Chip geometry now comes from the BUFF ICON ENGINE's style (scenes/ui/buff_icons/):
+## BuffIconStyle.panel_icon_size for the top panel, overhead_icon_size under a unit.
+## These two constants remain only as the fallback / the top panel's row height.
+const CHIP_W := 24.0
+const CHIP_H := 39.0
 const CHIP_SEP := 3
+const COMPACT_SEP := 2
 const TIP_WIDTH := 210.0
 
+## Kept for callers that still colour things by buff kind; icons themselves are now
+## coloured by BuffIconCatalog.
 const BUFF_COLOR := Color(0.28, 0.70, 0.34)     # green
 const DEBUFF_COLOR := Color(0.78, 0.28, 0.30)   # red
-const BORDER_COLOR := Color(0, 0, 0, 0.85)
-const HOVER_BORDER := Color(1, 1, 1, 0.9)
-const COUNTER_COLOR := Color(1, 1, 1)
-const COUNTER_OUTLINE := Color(0, 0, 0)
-## A debuff amplified by its caster's surplus Disdain (CombatResist) gets a violet
-## cap along its BOTTOM edge — the mirror of the buff/debuff cap along the top, so
-## the two never compete for the same pixels. Matches DamageNumber.EMPOWER_COLOR so
-## the cast-time float and the lasting chip marker read as the same idea.
 const EMPOWER_COLOR := Color(0.76, 0.55, 0.98)
-const EMPOWER_CAP_H := 3.0
 
 # Row colours for the hover card (title reads like an ability name).
 const TITLE_BG := Color(0.80, 0.80, 0.82)
@@ -49,39 +49,111 @@ const META_TX := Color(1.0, 0.86, 0.35)         # gold meta line
 var _body: CharacterBase = null
 var _side: int = SIDE_RIGHT
 var _tooltip: HoverPanel = null
+## COMPACT = the small strip under a unit's overhead bars (smaller icons, no counters
+## on icons too small to read, and at most `max_icons` shown with a "+N" overflow).
+var compact: bool = false
+var max_icons: int = 0          # 0 = unlimited
+## GROUP BY TYPE (FUTURE_PLANS §6): one chip per buff/debuff ID however many
+## instances stand. DISPLAY ONLY — the instances stay separate in the data. Used by
+## the field strip (UnitOverhead); the top panel keeps one chip per instance.
+var group_by_id: bool = false
+var _overflow_label: Label = null
 
 
-func setup(body: CharacterBase, side: int) -> void:
+func setup(body: CharacterBase, side: int, p_compact: bool = false, p_max_icons: int = 0) -> void:
 	_body = body
 	_side = side
-	add_theme_constant_override("separation", CHIP_SEP)
-	# Enemy strip grows toward the health bar (which is on its right), so hug the
-	# right edge; the player strip hugs the left edge next to its bar.
-	alignment = BoxContainer.ALIGNMENT_END if side == SIDE_LEFT else BoxContainer.ALIGNMENT_BEGIN
+	compact = p_compact
+	max_icons = p_max_icons
+	add_theme_constant_override("separation", COMPACT_SEP if compact else CHIP_SEP)
+	match side:
+		SIDE_LEFT:
+			alignment = BoxContainer.ALIGNMENT_END
+		SIDE_CENTER:
+			alignment = BoxContainer.ALIGNMENT_CENTER
+		_:
+			alignment = BoxContainer.ALIGNMENT_BEGIN
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(0, CHIP_H)
-	# Match the health bar: sit at CHIP_H and centre vertically in the top band
-	# rather than stretching to fill it, so the strip lines up with the bars.
+	custom_minimum_size = Vector2(0, icon_size().y)
 	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	refresh()
+
+
+func icon_size() -> Vector2:
+	var st := BuffIconPainter.style()
+	return st.overhead_icon_size if compact else st.panel_icon_size
 
 
 func refresh() -> void:
 	# clear existing chips
 	for c in get_children():
 		if c is _Chip:
+			remove_child(c)
 			c.queue_free()
+	if _overflow_label and is_instance_valid(_overflow_label):
+		_overflow_label.queue_free()
+		_overflow_label = null
 	if _body == null:
 		return
 	var entries := CombatBuffs.visible_entries(_body)
-	for e in entries:
+	if group_by_id:
+		entries = group_entries(entries)
+	var shown := entries.size()
+	if max_icons > 0 and entries.size() > max_icons:
+		shown = max_icons - 1
+	for i in shown:
 		var chip := _Chip.new()
-		chip.setup(self, e)
+		chip.setup(self, entries[i])
 		add_child(chip)
+	if shown < entries.size():
+		_overflow_label = Label.new()
+		_overflow_label.text = "+%d" % (entries.size() - shown)
+		_overflow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_overflow_label.add_theme_font_size_override("font_size", 10)
+		_overflow_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+		_overflow_label.add_theme_constant_override("outline_size", 3)
+		add_child(_overflow_label)
 	# keep the tooltip (if any) drawn above chips
 	if _tooltip and is_instance_valid(_tooltip):
 		_tooltip.move_to_front()
 
+
+## Collapse instances sharing an `id` into ONE representative entry (first-seen
+## order). A group of one is the real entry, untouched (real turn count, real badge).
+## A group of N is a shallow copy of the first instance carrying `_group_count` N and
+## `_group_max_turns` (the longest remaining, -1 if any is permanent); its counter
+## reads "..." (BuffIconPainter.counter_text) and it drops the potency badge, since
+## the instances may disagree. Never written back to the body.
+static func group_entries(entries: Array) -> Array:
+	var order: Array = []
+	var groups := {}
+	for e in entries:
+		var id := str(e.get("id", ""))
+		if not groups.has(id):
+			groups[id] = []
+			order.append(id)
+		groups[id].append(e)
+	var out: Array = []
+	for id in order:
+		var g: Array = groups[id]
+		if g.size() == 1:
+			out.append(g[0])
+			continue
+		var rep: Dictionary = (g[0] as Dictionary).duplicate(false)
+		var longest := 0
+		for inst in g:
+			var d := int(inst.get("duration", -1))
+			if d < 0:
+				longest = -1
+				break
+			longest = maxi(longest, d)
+		rep["_group_count"] = g.size()
+		rep["_group_max_turns"] = longest
+		rep["potency_applied"] = 1.0
+		rep["ramp"] = 1.0
+		rep["duration_bonus"] = 0
+		out.append(rep)
+	return out
 
 # ------------------------------------------------------------------ tooltip
 func _ensure_tooltip() -> void:
@@ -117,11 +189,29 @@ func hide_tip() -> void:
 
 func _meta_line(entry: Dictionary) -> String:
 	var parts := []
+	var n := int(entry.get("_group_count", 1))
+	if n > 1:
+		# A grouped field chip: the count and the longest remaining. The per-instance
+		# detail lives in the loaded-unit top panel (FUTURE_PLANS §7).
+		parts.append("%d instances" % n)
+		var lt := int(entry.get("_group_max_turns", -1))
+		parts.append("Permanent" if lt < 0 else "longest %d turn%s" % [lt, "" if lt == 1 else "s"])
+		var el := str(entry.get("element", ""))
+		if el != "":
+			parts.append(el.capitalize())
+		parts.append("Debuff" if Buff.is_debuff(entry) else "Buff")
+		return "  ·  ".join(parts)
 	var dur := int(entry.get("duration", -1))
 	parts.append("Permanent" if dur < 0 else "%d turn%s left" % [dur, "" if dur == 1 else "s"])
 	var st := int(entry.get("stacks", 1))
 	if st > 1:
 		parts.append("x%d stacks" % st)
+	# A ramping entry states its current level in words, since the chip's badge is the
+	# only other place it shows and a number alone does not say which way it is going.
+	var rmp := Buff.ramp(entry)
+	if not is_equal_approx(rmp, 1.0):
+		var dir := "fading" if Buff.potency_per_turn(entry) < 0.0 else "building"
+		parts.append("%s — at %d%% strength" % [dir, int(round(rmp * 100.0))])
 	# What the caster's Disdain bought, spelled out: the potency multiplier baked into
 	# this entry and any extra turns its duration roll won. Absent on an ordinary
 	# debuff, so unempowered meta lines are unchanged.
@@ -138,20 +228,18 @@ func _meta_line(entry: Dictionary) -> String:
 	return "  ·  ".join(parts)
 
 
+## Turns left, or NOTHING for a permanent (infinite) effect.
 static func _counter_text(entry: Dictionary) -> String:
-	var dur := int(entry.get("duration", -1))
-	return "inf" if dur < 0 else str(dur)
+	return BuffIconPainter.counter_text(entry)
 
 
 static func chip_color(entry: Dictionary) -> Color:
-	var elem := str(entry.get("element", ""))
-	if elem != "":
-		return ElementColors.color(elem)
-	return DEBUFF_COLOR if Buff.is_debuff(entry) else BUFF_COLOR
+	return BuffIconCatalog.look(entry)["color"]
 
 
 # ============================================================================
-# One chip: a thin vertical rectangle for a single buff/debuff.
+# One chip: a single buff/debuff icon. ALL drawing is the buff icon engine's
+# (BuffIconPainter) — this class only handles size, hover and the tooltip.
 # ============================================================================
 class _Chip extends Control:
 	var _bar: BuffBar = null
@@ -161,7 +249,7 @@ class _Chip extends Control:
 	func setup(bar: BuffBar, entry: Dictionary) -> void:
 		_bar = bar
 		_entry = entry
-		custom_minimum_size = Vector2(BuffBar.CHIP_W, BuffBar.CHIP_H)
+		custom_minimum_size = bar.icon_size()
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		tooltip_text = ""   # we draw our own panel
 
@@ -182,44 +270,4 @@ class _Chip extends Control:
 			_bar.hide_tip()
 
 	func _draw() -> void:
-		var r := Rect2(Vector2.ZERO, size)
-		draw_rect(r, BuffBar.chip_color(_entry), true)
-		# a top cap in white/black to distinguish buff vs debuff at a glance
-		var cap := Color(1, 1, 1, 0.55) if Buff.is_buff(_entry) else Color(0, 0, 0, 0.55)
-		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x, 3)), cap, true)
-		# EMPOWERED: a violet cap along the BOTTOM edge when the caster's Disdain
-		# amplified this debuff's potency or rolled it extra turns. Deliberately the
-		# opposite edge from the buff/debuff cap so both are readable at once.
-		if CombatResist.is_empowered(_entry):
-			draw_rect(Rect2(Vector2(0, size.y - BuffBar.EMPOWER_CAP_H),
-				Vector2(size.x, BuffBar.EMPOWER_CAP_H)), BuffBar.EMPOWER_COLOR, true)
-		# border
-		var border := BuffBar.HOVER_BORDER if _hovered else BuffBar.BORDER_COLOR
-		draw_rect(r, border, false, 1.5)
-
-		var font := get_theme_default_font()
-		if font == null:
-			return
-		# turns-until-expiry counter, bottom-right
-		var ctext := BuffBar._counter_text(_entry)
-		var cfs := 9
-		var cw := font.get_string_size(ctext, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs)
-		# Lifted clear of the violet empowered cap when one is drawn, so the counter
-		# and the marker never overlap in the bottom-right corner.
-		var cbot := size.y - 1.5
-		if CombatResist.is_empowered(_entry):
-			cbot -= BuffBar.EMPOWER_CAP_H
-		var cpos := Vector2(size.x - cw.x - 1.0, cbot)
-		# faux outline for readability over any chip colour
-		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
-			draw_string(font, cpos + off, ctext, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs, BuffBar.COUNTER_OUTLINE)
-		draw_string(font, cpos, ctext, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs, BuffBar.COUNTER_COLOR)
-		# stack badge, top-left
-		var st := int(_entry.get("stacks", 1))
-		if st > 1:
-			var stext := "x%d" % st
-			var sfs := 8
-			var spos := Vector2(1.0, float(sfs) + 3.0)
-			for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
-				draw_string(font, spos + off, stext, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, BuffBar.COUNTER_OUTLINE)
-			draw_string(font, spos, stext, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, BuffBar.COUNTER_COLOR)
+		BuffIconPainter.draw_icon(self, Rect2(Vector2.ZERO, size), _entry, {"hovered": _hovered})

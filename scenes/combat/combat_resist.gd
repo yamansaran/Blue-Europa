@@ -60,6 +60,14 @@ const STIFFNESS := 0.03   # gentler than dodge — the gap must be LARGE to matt
 const MIN_PCT   := 5.0     # a debuff is never a certainty
 const MAX_PCT   := 70.0    # ...and never a wall, even for a dedicated build
 
+# --- TOXIC LANDS EASILY (FUTURE_PLANS §2a) ----------------------------------
+# A Toxic-element debuff counts the caster's Disdain as this much higher IN THE
+# RESIST ROLL ONLY (overpower / potency / duration keep the real Disdain). Doubled
+# when the application came from an AoE ability — callers stamp `from_aoe` on the
+# entry. Every caster, enemies included.
+const TOXIC_DISDAIN_BONUS     := 25.0
+const TOXIC_DISDAIN_BONUS_AOE := 50.0
+
 # --- overpower (disdain scaling) tuning -------------------------------------
 const OP_STIFFNESS := 0.0535   # scales (disdain - magnificence) before the squash
 
@@ -89,8 +97,52 @@ static func resist_chance(caster: CharacterBase, target: CharacterBase, entry: D
 		return 0.0
 	var d := target.get_effective("magnificence")
 	if caster != null:
-		d -= caster.get_effective("disdain")
+		d -= caster.get_effective("disdain") + toxic_disdain_bonus(entry)
 	var raw := BASE + SPREAD * _squash(STIFFNESS * d) + float(entry.get("resist_bias", 0.0))
+	return clampf(raw, MIN_PCT, MAX_PCT)
+
+## The virtual Disdain a Toxic debuff adds to its caster's side of the resist roll
+## (§2a). 0 for any other element. Resist roll only — never used by overpower().
+static func toxic_disdain_bonus(entry: Dictionary) -> float:
+	if String(entry.get("element", "")) != "toxic":
+		return 0.0
+	return TOXIC_DISDAIN_BONUS_AOE if bool(entry.get("from_aoe", false)) else TOXIC_DISDAIN_BONUS
+
+## The Disdain an escape is rolled against when the entry carries no stamp — an entry
+## applied with no caster (the debug panel, a raw CombatBuffs.apply). The stat
+## default, so an unstamped net is escaped exactly as often as one cast at parity.
+const DEFAULT_ESCAPE_VS := 10.0
+
+## THE ESCAPE ROLL — the resist curve, run from the BEARER's side, every turn.
+## An entry with an `escape_check` (Netted) is broken out of rather than waited out.
+## At the start of each of the bearer's own turns it rolls:
+##
+##   score   = Σ weight × bearer[stat]      over escape_check.stats
+##   d       = score - entry.escape_vs      (the caster's Disdain, stamped by
+##                                          CombatBuffs.try_apply when it landed)
+##   escape% = clampf(BASE + SPREAD * squash(STIFFNESS * d) + escape_check.bias,
+##                    MIN_PCT, MAX_PCT)
+##
+## SAME CURVE, SAME CONSTANTS, SAME CLAMPS as resist_chance — deliberately not a
+## second Magnificence formula. So a bearer at parity escapes 10% of its turns, never
+## less than 5%, and a dedicated build tops out at the same 70% ceiling that stops
+## resistance ever becoming a wall.
+##
+## `stats` defaults to {"magnificence": 1.0}: an escape IS a resist, re-rolled each
+## turn. Weights that sum to 1.0 keep the score on the same scale as a single stat —
+## the dev's net rolls "magnificence and strength", which is
+## {"magnificence": 0.5, "vigor": 0.5} (the vocabulary's name for strength is vigor).
+static func escape_chance(bearer: CharacterBase, entry: Dictionary) -> float:
+	var spec := Buff.escape_check(entry)
+	if bearer == null or spec.is_empty():
+		return 0.0
+	var stats = spec.get("stats", {"magnificence": 1.0})
+	var score := 0.0
+	if typeof(stats) == TYPE_DICTIONARY:
+		for k in stats:
+			score += float(stats[k]) * bearer.get_effective(str(k))
+	var d := score - float(entry.get("escape_vs", DEFAULT_ESCAPE_VS))
+	var raw := BASE + SPREAD * _squash(STIFFNESS * d) + float(spec.get("bias", 0.0))
 	return clampf(raw, MIN_PCT, MAX_PCT)
 
 ## Roll against a resist chance. Pass floor >= 0 to inject a specific 0..99 roll

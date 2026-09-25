@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://c2b4dbf97345b"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"disembowel"
+display_name = "Disembowel"
+description = "He opens whatever is biggest. Deal Physical damage equal to {scaling}, and more of it the larger the target."
+max_points = 1
+max_equipped = 1
+action_cost = 1.0
+kind = 0
+delivery = 1
+target = 0
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 4
+base_power = 0.0
+scaling_stat = &"vigor"
+scaling_mult = 0.9
+pct_max_hp_damage = 0.08
+applies_buff = &"gut_stunned"

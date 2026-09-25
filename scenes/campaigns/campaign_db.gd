@@ -17,11 +17,13 @@ extends Node
 ## player confirms every step on the post-boss popup, even when there is only
 ## one way on. (The world map screen stays a DEBUG jump.)
 ##
-## Persists to user://campaign.save (JSON). Register as an autoload named
+## Persists (JSON) to the ACTIVE SAVE SLOT's campaign.save (SaveSlots.campaign_path());
+## nothing is read or written while no slot is active. Register as an autoload named
 ## "CampaignDB" and RESTART Godot after adding it (it also references the
 ## class_name globals Campaign + CampaignModule*).
 ## ----------------------------------------------------------------------------
 
+## LEGACY single-save path — only SaveSlots reads it, to import an old save once.
 const SAVE_PATH := "user://campaign.save"
 const SAVE_VERSION := 2      # bumped when the map was rebuilt to 23 campaigns
 const START_ID := "c1"
@@ -245,7 +247,15 @@ func reset() -> void:
 # ---------------------------------------------------------------------------
 # Save / load  (JSON)
 # ---------------------------------------------------------------------------
+func _save_path() -> String:
+	if typeof(SaveSlots) != TYPE_NIL and SaveSlots.has_method("campaign_path"):
+		return SaveSlots.campaign_path()
+	return SAVE_PATH
+
 func save_game() -> void:
+	var path := _save_path()
+	if path == "":
+		return
 	var data := {
 		"version": SAVE_VERSION,
 		"current_id": current_id,
@@ -254,15 +264,16 @@ func save_game() -> void:
 		"total_fights_done": total_fights_done,
 		"path_history": path_history,
 	}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(data))
 		f.close()
 
 func load_game() -> bool:
-	if not FileAccess.file_exists(SAVE_PATH):
+	var path := _save_path()
+	if path == "" or not FileAccess.file_exists(path):
 		return false
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		return false
 	var txt := f.get_as_text()

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://c2bbd5d8f6070"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"shield_bash"
+display_name = "Shield Bash"
+description = "The whole shield driven forward — and it hits as hard as the shield is still whole."
+max_points = 1
+max_equipped = 1
+action_cost = 1.0
+kind = 0
+delivery = 1
+target = 0
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 2
+base_power = 0.0
+scaling_stat = &"vigor"
+scaling_mult = 0.6

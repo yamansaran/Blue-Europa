@@ -16,11 +16,14 @@ extends Node
 ## remain as a read-only compatibility surface for code that still wants a flat
 ## dict. Rev9: equippable items — the items basket now reflects what is EQUIPPED
 ## (equipped_items), not everything held. Items resolve through ItemDB by id.
-## Saved to user://character.save as JSON. Old (pre-rev9) saves are discarded.
+## Saved as JSON to the ACTIVE SAVE SLOT's character.save (SaveSlots.character_path()
+## — user://saves/slot_N/). With no slot active (intro / main menu) nothing is read or
+## written. Old (pre-rev9) saves are discarded.
 ## ----------------------------------------------------------------------------
 
 signal changed
 
+## LEGACY single-save path. Only SaveSlots reads it now, to import an old save once.
 const SAVE_PATH := "user://character.save"
 const SAVE_VERSION := 4          # bump discards any older save (fresh start)
 								 # 3 -> 4: the LevelTable XP curve was retuned
@@ -47,6 +50,9 @@ var body: CharacterBase = PlayerCharacter.new()
 
 # --- identity / progression -------------------------------------------------
 var char_name: String = "Sonny"
+## The CLASS this save was started as (ClassRegistry id). Chosen on the class-select
+## screen; persisted.
+var class_id: String = "blue_blood"
 var level: int = 1
 var items: Array = []            # BAG: loot/purchase dicts {id, name, (opt) mods}
 var xp: int = 0
@@ -74,6 +80,34 @@ var attribute_allocations: Dictionary = {}  # major_key(String) -> points(int)
 # --- abilities --------------------------------------------------------------
 var unlocked_abilities: Array = ["claw", "scour"]
 var equipped_abilities: Array = ["claw", "scour", "", "", "", "", "", "", "", ""]
+
+# --- DEBUG cheats (overworld debug menu — GameManager.is_debug()) ------------
+## GOD MODE: max health pinned to GOD_MODE_HP by a hidden "debug" basket entry; turning
+## it off removes the entry (and the health with it).
+const GOD_MODE_HP := 9999999999
+var debug_god_mode: bool = false
+## SKILLFUL MODE: +SKILLFUL_POINTS skill AND attribute points while on; the same amount
+## is taken back when it is switched off.
+const SKILLFUL_POINTS := 9999
+var debug_skillful: bool = false
+## Money added through the debug menu that has NOT yet been spent or deflated. Every
+## purchase spends it first (buy_item), so DEFLATE can never take the wallet below what
+## the player legitimately earned.
+var debug_cheated_money: int = 0
+
+# --- DAMAGE HISTORY (AI_PRIMER §6.8, reputation tier 1) ----------------------
+## How many past fights are kept.
+const DAMAGE_HISTORY_FIGHTS := 5
+## TOTAL damage dealt per fight over the last DAMAGE_HISTORY_FIGHTS fights, for the
+## player and every COMPANION (one-fight helpers like c1's hunters are not recorded).
+## STORED AS ONE STRING in the save, NEWEST FIGHT FIRST:
+##     "player=412,mercenary=120;player=388;player=301,mercenary=95"
+## fights separated by ';', units by ',', each unit "history_key=damage". The player
+## is "player"; a companion is its CharacterRegistry id. A unit missing from a fight
+## was not in it. Written by combat on a win or a defeat (record_fight_damage);
+## read by the AI through damage_in_window. No SAVE_VERSION bump: an older save has
+## no key and loads "".
+var damage_history: String = ""
 
 # --- read-only compatibility view -------------------------------------------
 ## Flat effective-stat dictionary (base + all baskets), plus derived max_hp and
@@ -380,6 +414,17 @@ func _rebuild_derived_basket() -> void:
 		_accumulate_derived(mods, nab, pts)
 	if not mods.is_empty():
 		body.add_entry("derived", CharacterBase.make_entry("derived", "Derived", mods))
+	_rebuild_debug_basket()
+
+## The DEBUG basket: god mode's max-health entry. Recomputed after every rebuild so it
+## always lands max health on exactly GOD_MODE_HP whatever vitality / gear do.
+func _rebuild_debug_basket() -> void:
+	body.clear_basket("debug")
+	if not debug_god_mode:
+		return
+	var without := body.max_hp()
+	body.add_entry("debug", CharacterBase.make_entry("debug_god_mode", "DEBUG: God Mode",
+		{"hp_base": float(GOD_MODE_HP - without)}))
 
 
 ## Fold one passive's stat-derived bonus (Ability.passive_scale_at) into `mods`.
@@ -443,13 +488,34 @@ func node_unlocked(node_id: String) -> bool:
 ## default requirement is level 0 — i.e. no level gate — so a node only demands a
 ## level when its scene explicitly sets one (furnishing nodes ask for 5). Called by
 ## SkillNode both to gate investing and to show a locked/available look.
-func can_unlock_node(node_required_level: int = 0, parents: Array = []) -> bool:
+##
+## NEPHILIC PASS (rev31) — two optional gate terms, both default-off so every
+## existing caller (Blue Blood) behaves exactly as before:
+##   parents_any  true = ANY one held parent opens the node (helix joints, torso
+##                cells); false = ALL parents must be held (the original rule).
+##   excludes     node_ids that BAR this node while any of them holds points (the
+##                helix rungs: one partner on a two-way rung, two on a three-way).
+func can_unlock_node(node_required_level: int = 0, parents: Array = [], parents_any: bool = false, excludes: Array = []) -> bool:
 	if level < node_required_level:
+		return false
+	if is_barred(excludes):
+		return false
+	if parents_any and not parents.is_empty():
+		for p in parents:
+			if node_unlocked(str(p)):
+				return true
 		return false
 	for p in parents:
 		if not node_unlocked(str(p)):
 			return false
 	return true
+
+## True while any node in `excludes` holds points (the mutual-exclusion gate).
+func is_barred(excludes: Array) -> bool:
+	for x in excludes:
+		if node_unlocked(str(x)):
+			return true
+	return false
 
 ## Record that `node_id` grants `ability_id` (idempotent). Called by every tree
 ## node as it enters the scene, so the node->ability map is complete once a tree is
@@ -482,7 +548,7 @@ func ability_rank(ability_id) -> int:
 ## parent prerequisites (both default-open, so old callers that pass neither behave
 ## exactly as before). `ability_id` records the node->ability mapping for the rank
 ## lookup. Returns false — investing nothing — if the gate isn't met.
-func invest(node_id: String, node_max: int, node_required_level: int = 0, parents: Array = [], ability_id: String = "") -> bool:
+func invest(node_id: String, node_max: int, node_required_level: int = 0, parents: Array = [], ability_id: String = "", parents_any: bool = false, excludes: Array = []) -> bool:
 	if node_id == "":
 		return false
 	if skill_points <= 0:
@@ -490,7 +556,7 @@ func invest(node_id: String, node_max: int, node_required_level: int = 0, parent
 	var current := get_points(node_id)
 	if current >= node_max:
 		return false
-	if not can_unlock_node(node_required_level, parents):
+	if not can_unlock_node(node_required_level, parents, parents_any, excludes):
 		return false
 	allocations[node_id] = current + 1
 	if ability_id != "":
@@ -881,6 +947,8 @@ func buy_item(item_id) -> bool:
 	if money < item.value:
 		return false
 	money -= item.value
+	# Cheated money is spent FIRST, so deflating can never dip below earned money.
+	debug_cheated_money = maxi(0, debug_cheated_money - item.value)
 	items.append(item.to_bag())
 	changed.emit()
 	save_game()
@@ -890,10 +958,20 @@ func buy_item(item_id) -> bool:
 # ============================================================================
 # Persistence  (rev9 format; older saves are discarded on load)
 # ============================================================================
+## Where this save lives: the ACTIVE slot's file, or "" when no slot is active.
+func _save_path() -> String:
+	if typeof(SaveSlots) != TYPE_NIL and SaveSlots.has_method("character_path"):
+		return SaveSlots.character_path()
+	return SAVE_PATH
+
 func save_game() -> void:
+	var path := _save_path()
+	if path == "":
+		return
 	var data := {
 		"save_version": SAVE_VERSION,
 		"char_name": char_name,
+		"class_id": class_id,
 		"level": level,
 		"items": items,
 		"equipped_items": equipped_items,
@@ -906,18 +984,26 @@ func save_game() -> void:
 		"attribute_allocations": attribute_allocations,
 		"unlocked_abilities": unlocked_abilities,
 		"equipped_abilities": equipped_abilities,
+		"damage_history": damage_history,
+		"debug_god_mode": debug_god_mode,
+		"debug_skillful": debug_skillful,
+		"debug_cheated_money": debug_cheated_money,
 	}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(data))
 		f.close()
+	if typeof(SaveSlots) != TYPE_NIL and SaveSlots.has_method("touch"):
+		SaveSlots.touch()
 
 func load_game() -> void:
-	if not FileAccess.file_exists(SAVE_PATH):
+	var path := _save_path()
+	if path == "" or not FileAccess.file_exists(path):
+		_reset_fields()
 		_rebuild_body()
 		changed.emit()
 		return
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		_rebuild_body()
 		return
@@ -932,12 +1018,17 @@ func load_game() -> void:
 		return
 
 	char_name = str(parsed.get("char_name", char_name))
+	class_id = str(parsed.get("class_id", "blue_blood"))
+	debug_god_mode = bool(parsed.get("debug_god_mode", false))
+	debug_skillful = bool(parsed.get("debug_skillful", false))
+	debug_cheated_money = int(parsed.get("debug_cheated_money", 0))
 	level = int(parsed.get("level", level))
 	items = parsed.get("items", items)
 	xp = int(parsed.get("xp", xp))
 	money = int(parsed.get("money", money))
 	skill_points = int(parsed.get("skill_points", skill_points))
 	attribute_points = int(parsed.get("attribute_points", attribute_points))
+	damage_history = str(parsed.get("damage_history", ""))
 
 	var eqi = parsed.get("equipped_items", {})
 	equipped_items = {}
@@ -986,7 +1077,21 @@ func load_game() -> void:
 	_rebuild_body()
 	changed.emit()
 
+## DEBUG reset (the shell Save button with the debug flag on). KEEPS THE CLASS: a fresh
+## level-1 character of the CURRENT class_id with that class's starting kit — the same
+## path as a new game (new_game rebuilds, syncs and saves). It used to reset to
+## blue_blood with claw + scour whatever the save's class was.
 func reset_to_defaults() -> void:
+	var keep_class := class_id if class_id != "" else "blue_blood"
+	new_game(keep_class)
+	changed.emit()
+
+## Every persisted field back to its new-game value (no rebuild, no save).
+func _reset_fields() -> void:
+	class_id = "blue_blood"
+	debug_god_mode = false
+	debug_skillful = false
+	debug_cheated_money = 0
 	char_name = "Sonny"
 	level = 1
 	items = []
@@ -1000,9 +1105,77 @@ func reset_to_defaults() -> void:
 	attribute_allocations = {}
 	unlocked_abilities = ["claw", "scour"]
 	equipped_abilities = ["claw", "scour", "", "", "", "", "", "", "", ""]
+	damage_history = ""
+
+## A NEW GAME as `p_class_id` (called by SaveSlots.create_slot once the slot is active):
+## defaults, then the class's starting kit from ClassRegistry, then the first save.
+func new_game(p_class_id: String) -> void:
+	_reset_fields()
+	class_id = p_class_id
+	var kit := ClassRegistry.starting_kit(p_class_id)
+	if kit.has("unlocked_abilities"):
+		unlocked_abilities = (kit["unlocked_abilities"] as Array).duplicate()
+	if kit.has("equipped_abilities"):
+		equipped_abilities = (kit["equipped_abilities"] as Array).duplicate()
 	_rebuild_body()
-	changed.emit()
+	_post_autoload_sync()
 	save_game()
+
+
+# ============================================================================
+# Damage history
+# ============================================================================
+## File ONE finished fight: `per_unit` is {history_key: total damage}. Pushed on as
+## the newest fight; the oldest beyond DAMAGE_HISTORY_FIGHTS falls off. Saves.
+func record_fight_damage(per_unit: Dictionary) -> void:
+	var parts: Array = []
+	for key in per_unit.keys():
+		var k := _history_safe(str(key))
+		if k == "":
+			continue
+		parts.append("%s=%d" % [k, maxi(0, int(per_unit[key]))])
+	var fights: Array = [",".join(PackedStringArray(parts))]
+	if damage_history != "":
+		for f in damage_history.split(";"):
+			if fights.size() >= DAMAGE_HISTORY_FIGHTS:
+				break
+			fights.append(f)
+	damage_history = ";".join(PackedStringArray(fights))
+	save_game()
+
+## The history parsed: an Array of {history_key: damage} dictionaries, NEWEST FIRST.
+## An empty fight (nobody recorded) is kept as {} so indices stay aligned.
+func damage_history_fights() -> Array:
+	var out: Array = []
+	if damage_history == "":
+		return out
+	for f in damage_history.split(";"):
+		var d := {}
+		for pair in f.split(",", false):
+			var kv := pair.split("=")
+			if kv.size() == 2:
+				d[kv[0]] = int(kv[1])
+		out.append(d)
+	return out
+
+## Mean damage `key` dealt over the fights in the WINDOW [from, from + span) — 0 is
+## the newest fight — counting only the fights in the window it took part in.
+## Returns -1.0 when it took part in none of them (so the caller can fall back).
+## Different AI units look at different windows (ai_memory_from / ai_memory_span).
+func damage_in_window(key: String, from: int, span: int) -> float:
+	var fights := damage_history_fights()
+	var total := 0.0
+	var n := 0
+	for i in range(maxi(0, from), mini(fights.size(), maxi(0, from) + maxi(0, span))):
+		var d: Dictionary = fights[i]
+		if d.has(key):
+			total += float(d[key])
+			n += 1
+	return total / float(n) if n > 0 else -1.0
+
+## Keys are written into a delimited string, so the delimiters cannot appear in them.
+static func _history_safe(key: String) -> String:
+	return key.replace(";", "").replace(",", "").replace("=", "").strip_edges()
 
 
 # ============================================================================
@@ -1062,3 +1235,92 @@ func sell_item(index: int) -> int:
 	changed.emit()
 	save_game()
 	return value
+
+
+# ============================================================================
+# DEBUG cheats  (the overworld debug menu; every entry point checks is_debug)
+# ============================================================================
+static func _debug_allowed() -> bool:
+	return typeof(GameManager) != TYPE_NIL and GameManager.has_method("is_debug") and GameManager.is_debug()
+
+## Jump straight to `target` level. XP is set to that level's cutoff, and skill +
+## attribute points are GRANTED for every level gained or TAKEN BACK for every level
+## lost (the same LevelTable payout leveling uses). Points that are already spent are
+## refunded first if the unspent pools can't cover a loss, then the pools are clamped
+## at 0 — so the result is always a legal, consistent save.
+func debug_set_level(target: int) -> void:
+	if not _debug_allowed():
+		return
+	target = clampi(target, 1, LevelTable.MAX_LEVEL)
+	if target == level:
+		return
+	var old := level
+	var skill_delta := 0
+	var attr_delta := 0
+	if target > old:
+		for lvl in range(old + 1, target + 1):
+			skill_delta += LevelTable.SKILL_POINTS_PER_LEVEL
+			attr_delta += LevelTable.attribute_points_for_level(lvl)
+	else:
+		for lvl in range(target + 1, old + 1):
+			skill_delta -= LevelTable.SKILL_POINTS_PER_LEVEL
+			attr_delta -= LevelTable.attribute_points_for_level(lvl)
+	xp = LevelTable.cutoff_for_level(target)
+	level = target
+	body.level = level
+	_apply_point_delta(skill_delta, attr_delta)
+	_rebuild_body()
+	_post_autoload_sync()
+	save_game()
+
+func debug_set_god_mode(on: bool) -> void:
+	if not _debug_allowed() or on == debug_god_mode:
+		return
+	debug_god_mode = on
+	_rebuild_derived_basket()
+	body.init_vitals()
+	changed.emit()
+	save_game()
+
+func debug_set_skillful(on: bool) -> void:
+	if not _debug_allowed() or on == debug_skillful:
+		return
+	debug_skillful = on
+	var d := SKILLFUL_POINTS if on else -SKILLFUL_POINTS
+	_apply_point_delta(d, d)
+	_rebuild_body()
+	_post_autoload_sync()
+	save_game()
+
+func debug_add_money(amount: int) -> void:
+	if not _debug_allowed() or amount <= 0:
+		return
+	money += amount
+	debug_cheated_money += amount
+	changed.emit()
+	save_game()
+
+## Remove exactly the cheated money that has not been spent yet.
+func debug_deflate() -> void:
+	if not _debug_allowed():
+		return
+	money = maxi(0, money - debug_cheated_money)
+	debug_cheated_money = 0
+	changed.emit()
+	save_game()
+
+## Add (or remove) skill / attribute points. A removal that the unspent pool can't
+## cover refunds the invested points first (respec), then takes the rest.
+func _apply_point_delta(skill_delta: int, attr_delta: int) -> void:
+	if skill_delta < 0 and skill_points + skill_delta < 0:
+		for v in allocations.values():
+			skill_points += int(v)
+		allocations.clear()
+		_resync_unlocked_from_allocations()
+		_normalize_wheel(true)
+	skill_points = maxi(0, skill_points + skill_delta)
+	if attr_delta < 0 and attribute_points + attr_delta < 0:
+		for v in attribute_allocations.values():
+			attribute_points += int(v)
+		attribute_allocations.clear()
+	attribute_points = maxi(0, attribute_points + attr_delta)

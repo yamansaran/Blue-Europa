@@ -64,8 +64,12 @@ const NAME_CHARS   := 9
 ## block; nothing about the timeline's behaviour depends on side.
 const TEAM_ENEMY := 2
 
-## The live BattleCharacters, in DRAW order (party first, then enemies). Set by
-## setup(); never mutated here.
+## Every BattleCharacter of the fight, party first then enemies. Set by setup().
+var _all: Array = []
+## The rows actually DRAWN this frame, in draw order (_refresh_rows). DEAD-ROW RULE
+## (dev, 2026-09-25): a dead party unit (the player, allies) keeps its row, greyed; a
+## dead ENEMY's row is REMOVED — and comes back if the enemy is ever revived — unless
+## its body sets `revives` (a built-in revive mechanic), which greys it like an ally.
 var units: Array = []
 ## The DISPLAY clock, in ticks. Tweened by scroll_to(); combat.gd's own _clock is
 ## the authority and this only ever chases it.
@@ -82,21 +86,43 @@ var _party_rows: int = 0
 ## Point the widget at the fight's units and size it to fit them. Party units are
 ## listed first, enemies below, with a divider between the two blocks.
 func setup(all_units: Array) -> void:
-	units.clear()
-	_party_rows = 0
+	_all.clear()
 	for u in all_units:
 		if u is BattleCharacter and u.team != TEAM_ENEMY:
-			units.append(u)
-			_party_rows += 1
+			_all.append(u)
 	for u in all_units:
 		if u is BattleCharacter and u.team == TEAM_ENEMY:
-			units.append(u)
+			_all.append(u)
+	_refresh_rows()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	clip_contents = true
 	custom_minimum_size = desired_size()
 	size = desired_size()
 	set_process(true)
 	queue_redraw()
+
+## Rebuild the drawn rows from _all by the dead-row rule. Returns true when the row
+## count changed (the widget then resizes — it grows back when an enemy is revived).
+func _refresh_rows() -> bool:
+	var before := units.size()
+	units.clear()
+	_party_rows = 0
+	for u in _all:
+		var bc: BattleCharacter = u
+		if bc == null or not is_instance_valid(bc):
+			continue
+		if bc.team != TEAM_ENEMY:
+			units.append(bc)
+			_party_rows += 1
+		elif _row_shown(bc):
+			units.append(bc)
+	return units.size() != before
+
+## An ENEMY row is drawn while the enemy is alive, or dead but flagged `revives`.
+static func _row_shown(u: BattleCharacter) -> bool:
+	if u.is_alive():
+		return true
+	return u.body != null and bool(u.body.get("revives"))
 
 ## The pixel size this widget wants for its current unit list. combat.gd reads it
 ## to place the overlay.
@@ -139,7 +165,12 @@ func snap_to(target: float) -> void:
 
 func _process(_delta: float) -> void:
 	# Cheap (a handful of draw_rects) and it keeps the bars honest without
-	# combat.gd having to signal every stat change that moves an interval.
+	# combat.gd having to signal every stat change that moves an interval. Rows are
+	# re-derived here too, so a death or a revive needs no signal from combat.
+	if _refresh_rows():
+		var ds := desired_size()
+		custom_minimum_size = ds
+		size = ds
 	queue_redraw()
 
 # ---------------------------------------------------------------------------

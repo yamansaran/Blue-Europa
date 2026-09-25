@@ -49,6 +49,43 @@ static func create(id: String) -> CharacterBase:
 		"the_scavenger":
 			return TheScavenger.new()
 
+		# --- ZONE 2b · GODTHAAB -----------------------------------------------
+		# Sixteen modules for nine fights. Two of them SHARE A DISPLAY NAME
+		# ("Sanitation Technician") on purpose — the ids do the distinguishing and
+		# the player just sees two men in the same uniform.
+		"wharfinger":
+			return Wharfinger.new()
+		"stevedore":
+			return Stevedore.new()
+		"security_guard":
+			return SecurityGuard.new()
+		"enforcer":
+			return Enforcer.new()
+		"registrar":
+			return Registrar.new()
+		"rotting_corpse":
+			return RottingCorpse.new()
+		"screaming_corpse":
+			return ScreamingCorpse.new()
+		"burning_hulk":
+			return BurningHulk.new()
+		"burning_corpse":
+			return BurningCorpse.new()
+		"sanitation_tech_prod":
+			return SanitationTechProd.new()
+		"sanitation_tech_hook":
+			return SanitationTechHook.new()
+		"sanitation_engineer":
+			return SanitationEngineer.new()
+		"sanitation_officer_net":
+			return SanitationOfficerNet.new()
+		"sanitation_officer_shield":
+			return SanitationOfficerShield.new()
+		"harbour_guard":
+			return HarbourGuard.new()
+		"chief_of_the_detail":
+			return ChiefOfTheDetail.new()
+
 		"player":
 			return PlayerCharacter.new()
 		_:

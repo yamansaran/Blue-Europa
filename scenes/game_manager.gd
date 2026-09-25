@@ -12,6 +12,11 @@ const SCENE_ABILITIES    := "res://scenes/abilities/abilities.tscn"
 const SCENE_OPTIONS      := "res://scenes/options/options.tscn"
 const SCENE_ACHIEVEMENTS := "res://scenes/achievements/achievements.tscn"
 const SCENE_CAMPAIGN_MAP := "res://scenes/campaigns/campaign_map.tscn"
+# --- boot flow (rev33) -----------------------------------------------------
+const SCENE_INTRO        := "res://scenes/menus/intro_screen.tscn"
+const SCENE_MAIN_MENU    := "res://scenes/menus/main_menu.tscn"
+const SCENE_CLASS_SELECT := "res://scenes/menus/class_select.tscn"
+const SCENE_CUTSCENE     := "res://scenes/cutscenes/cutscene_player.tscn"
 
 # ---------------------------------------------------------------------------
 # DEBUG MASTER SWITCH
@@ -37,13 +42,46 @@ const SCENE_CAMPAIGN_MAP := "res://scenes/campaigns/campaign_map.tscn"
 ##   - overworld: the "FIGHT ▾" box floating over the EXPANSE — a picker that sets
 ##     which campaign fight is next, i.e. edits progress through the current zone
 ##     (CampaignDB.debug_set_fight_index, itself flag-gated a second time)
+##   - overworld: the small floating "DEBUG" button (top-right) that opens the CHEATS
+##     panel (DebugCheatsPanel): set level (points granted / taken back), GOD MODE
+##     (max health 9,999,999,999), SKILLFUL MODE (+9999 skill + attribute points), add
+##     money and DEFLATE it back out. The Character.debug_* functions it calls check the
+##     flag a second time.
+##   - class select: LOCKED classes are pickable ("LOCKED (debug: playable)") so an
+##     unfinished class (the Nephilic) can be started for testing.
 ##
 ## Anything debug-only added from here on should check GameManager.is_debug()
 ## before it builds itself.
+##
+## RUNTIME TOGGLE (2026-09-25): Options -> "Debug mode" calls set_debug(). The choice is
+## remembered across launches in user://settings.cfg ([debug] enabled); `true` below is
+## only the default when no settings file exists yet. Most debug features build
+## themselves when their scene opens, so a toggle reaches them the next time that scene
+## loads; the shell toolbar rebuilds its debug buttons at once (Shell.refresh_debug).
 var debug_enabled: bool = true
+const SETTINGS_PATH := "user://settings.cfg"
+signal debug_changed(on: bool)
+
+func _ready() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		debug_enabled = bool(cfg.get_value("debug", "enabled", debug_enabled))
 
 func is_debug() -> bool:
 	return debug_enabled
+
+## Switch every debug feature on or off and remember the choice.
+func set_debug(on: bool) -> void:
+	if on == debug_enabled:
+		return
+	debug_enabled = on
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)          # keep any other settings already in the file
+	cfg.set_value("debug", "enabled", on)
+	cfg.save(SETTINGS_PATH)
+	debug_changed.emit(on)
+	if active_shell != null and is_instance_valid(active_shell) and active_shell.has_method("refresh_debug"):
+		active_shell.refresh_debug()
 
 var active_shell: Node = null
 
@@ -118,6 +156,54 @@ func unlock_skill(skill_id: String) -> bool:
 # ---------------------------------------------------------------------------
 # Scene routing
 # ---------------------------------------------------------------------------
+# --- the boot flow (rev33): intro -> main menu -> (new) class select -> cutscene -> shell
+func go_to_intro() -> void:
+	active_shell = null
+	get_tree().change_scene_to_file(SCENE_INTRO)
+
+func go_to_main_menu() -> void:
+	active_shell = null
+	get_tree().change_scene_to_file(SCENE_MAIN_MENU)
+
+## The slot + name chosen on the main menu, carried to the class-select screen.
+var pending_new_game: Dictionary = {}
+
+func go_to_class_select(slot: int, save_name: String) -> void:
+	active_shell = null
+	pending_new_game = {"slot": slot, "name": save_name}
+	get_tree().change_scene_to_file(SCENE_CLASS_SELECT)
+
+## Called once the new save exists: play the class's opening cutscene (if one is
+## registered in CutsceneDB — none yet, so this goes straight on) and then zone 1.
+func begin_new_game(class_id: String) -> void:
+	pending_new_game = {}
+	play_cutscene(ClassRegistry.opening_cutscene(class_id), "shell")
+
+## THE CUTSCENE HOOK. Plays CutsceneDB[id] full-screen, then routes to `then`:
+## "shell" (the overworld), "main_menu", or a res:// scene path. An unregistered id
+## plays nothing and routes immediately.
+var pending_cutscene: Dictionary = {"id": "", "then": "shell"}
+
+func play_cutscene(id: String, then: String = "shell") -> void:
+	pending_cutscene = {"id": id, "then": then}
+	if not CutsceneDB.has(id):
+		finish_cutscene()
+		return
+	active_shell = null
+	get_tree().change_scene_to_file(SCENE_CUTSCENE)
+
+func finish_cutscene() -> void:
+	var then := str(pending_cutscene.get("then", "shell"))
+	pending_cutscene = {"id": "", "then": "shell"}
+	match then:
+		"shell", "":
+			go_to_shell()
+		"main_menu":
+			go_to_main_menu()
+		_:
+			active_shell = null
+			get_tree().change_scene_to_file(then)
+
 func go_to_shell() -> void:
 	active_shell = null
 	get_tree().change_scene_to_file(SCENE_SHELL)
@@ -237,6 +323,15 @@ func _stage_fight(fight: Dictionary, is_campaign: bool) -> void:
 	var allies = fight.get("allies", [])
 	if typeof(allies) == TYPE_ARRAY:
 		BattleState.allies = (allies as Array).duplicate(true)
+	# DIALOGUE: the zone's dialogue file first (scenes/dialogue/zones/<zone>_dialogue.gd,
+	# keyed by fight id — DialogueDB), else an inline "dialogue" key on the spec.
+	var zone_id := ""
+	if typeof(CampaignDB) != TYPE_NIL and CampaignDB.get_current() != null:
+		zone_id = str(CampaignDB.get_current().id)
+	var dlg: Array = DialogueDB.for_fight(zone_id, str(fight.get("id", "")))
+	if dlg.is_empty() and typeof(fight.get("dialogue", null)) == TYPE_ARRAY:
+		dlg = (fight["dialogue"] as Array).duplicate(true)
+	BattleState.dialogue = dlg
 	var lt = fight.get("loot_table", null)
 	if typeof(lt) == TYPE_DICTIONARY:
 		BattleState.loot_table = (lt as Dictionary).duplicate(true)

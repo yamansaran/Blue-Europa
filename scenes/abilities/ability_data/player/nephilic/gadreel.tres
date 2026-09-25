@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bc0asfcqqwddr"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"gadreel"
+display_name = "Hew"
+description = "Deal Physical damage equal to {scaling}, with +10% crit chance for every On Fire on the target."
+max_points = 2
+max_equipped = 1
+kind = 0
+delivery = 1
+target = 0
+element = 0
+cost_type = 1
+cost_amount = 25
+cooldown = 4
+scaling_stat = &"vigor"
+scaling_mult = 2.5
+bonus_per_debuff_id = &"on_fire"
+crit_chance_per_debuff = 10.0
+required_level = 1
+scaling_mult_ranks = Array[float]([2.5, 3.0])

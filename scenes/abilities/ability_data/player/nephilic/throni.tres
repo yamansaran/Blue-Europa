@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://b1mfokmmj25qf"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"throni"
+display_name = "Stand Firm"
+description = "Take 40% less damage for 3 turns. Your next Lead grants +25 spirit."
+max_points = 2
+max_equipped = 1
+kind = 1
+target = 2
+cost_type = 1
+cost_amount = 30
+cooldown = 5
+applies_buff = &"stand_firm"
+applies_buff_self = &"stand_firm_lead"
+description_ranks = Array[String](["Take 40% less damage for 3 turns. Your next Lead grants +25 spirit.", "Take 45% less damage for 3 turns. Your next Lead grants +25 spirit."])
+required_level = 1

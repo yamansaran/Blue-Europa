@@ -20,8 +20,16 @@ extends Label
 ## are set as a direct font override, so they render regardless of the project's
 ## default font.
 ##
-## Each number also gets a random LEFT/RIGHT spawn deviation so a flurry of hits
-## fans out instead of stacking on one spot.
+## NUMBERS SPAWN AT THE TOP OF THE MODEL (BattleCharacter._number_origin), not its
+## centre, and rise from there.
+##
+## SIMULTANEOUS HITS FAN OUT. When a unit takes several instances at once — Shatter's
+## physical hit and its ice bonus, an attack's second element, a reflect — the unit
+## groups them into a BURST (BattleCharacter.BURST_WINDOW_MS) and gives each number
+## its own lateral DIRECTION with set_spread(): two numbers split left/right, three
+## go left/straight/right, and so on. Each drifts sideways along its direction as it
+## rises, so the instances never sit on top of each other. A lone hit rises straight
+## up with only a tiny random jitter.
 ##
 ## HEALS reuse the same popup: pass is_heal (or use spawn_heal) to show "+N" in
 ## green (scaled the same way, never italic).
@@ -54,7 +62,15 @@ const FONT_REGULAR := preload("res://assets/fonts/Inter-VariableFont_opsz,wght.t
 const FONT_ITALIC := preload("res://assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf")
 
 # --- spawn spread -----------------------------------------------------------
-const HORIZONTAL_DEVIATION := 30.0   # max px a number is nudged left/right on spawn
+const HORIZONTAL_DEVIATION := 8.0    # max px a LONE number is jittered left/right on spawn
+## Burst fan-out: the outermost number of a 2-hit burst ends this far to the side…
+const SPREAD_HALF_SPAN := 48.0
+## …and each extra simultaneous hit widens the fan by this much.
+const SPREAD_PER_EXTRA := 26.0
+## How quickly a number slides out to its lane once its burst direction is known.
+const SPREAD_SLIDE_TIME := 0.22
+## Extra sideways drift, along the lane, over the slow rise.
+const SPREAD_DRIFT := 22.0
 
 const OUTLINE_MIN := 5
 const HEAL_COLOR := Color(0.30, 0.85, 0.38)   # green for healing "+N"
@@ -65,6 +81,12 @@ const STATUS_FONT_SIZE := 34
 const DODGE_COLOR := Color(0.62, 0.80, 0.95)
 ## A debuff shrugged off via magnificence (CombatResist) — pale gold.
 const RESIST_COLOR := Color(0.95, 0.84, 0.45)
+## A click refused because the target's front row is shielding it (BattleGrid.is_covered)
+## — desaturated steel, so it reads as "not available" rather than as an outcome.
+const COVERED_COLOR := Color(0.72, 0.74, 0.80)
+## The bearer broke out of an escapable debuff (Netted) on its own turn — mint, the
+## one status word that is pure relief for the unit it floats over.
+const ESCAPE_COLOR := Color(0.55, 0.92, 0.70)
 ## A debuff amplified by the caster's surplus Disdain — violet, so it reads as the
 ## OPPOSITE of a resist rather than a variation on it.
 const EMPOWER_COLOR := Color(0.76, 0.55, 0.98)
@@ -80,6 +102,20 @@ static func spawn(parent: Node, point: Vector2, amount: int, element: String = "
 	parent.add_child(dn)
 	dn._begin(point)
 	return dn
+
+## Where a number sits in a simultaneous burst. `direction` is -1 (far left) .. +1
+## (far right), `burst_size` how many numbers share the burst. Safe to call again as
+## more hits join: the number slides from wherever it is to its new lane.
+func set_spread(direction: float, burst_size: int) -> void:
+	if burst_size <= 1:
+		return
+	var half := SPREAD_HALF_SPAN + SPREAD_PER_EXTRA * float(maxi(0, burst_size - 2))
+	var lane_x := _base_x + direction * half
+	if _x_tween and _x_tween.is_valid():
+		_x_tween.kill()
+	_x_tween = create_tween()
+	_x_tween.tween_property(self, "position:x", lane_x, SPREAD_SLIDE_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_x_tween.tween_property(self, "position:x", lane_x + direction * SPREAD_DRIFT, RISE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 ## Convenience: a green "+N" healing popup.
 static func spawn_heal(parent: Node, point: Vector2, amount: int) -> DamageNumber:
@@ -171,11 +207,17 @@ func _font_size_for(amount: int, is_crit: bool) -> int:
 	return clampi(int(round(fs)), MIN_FONT_SIZE, MAX_FONT_SIZE)
 
 
+## Horizontal centre-line of this number's box before any burst spread.
+var _base_x := 0.0
+var _x_tween: Tween = null
+
 func _begin(point: Vector2) -> void:
-	# Random left/right spawn deviation so simultaneous hits fan out.
+	# A small jitter so repeated lone hits don't print on exactly the same pixel.
+	# Real separation of SIMULTANEOUS hits is set_spread's job.
 	var dx := randf_range(-HORIZONTAL_DEVIATION, HORIZONTAL_DEVIATION)
-	# Centre the box on the (deviated) target point.
+	# Centre the box on the (jittered) target point.
 	position = Vector2(point.x + dx - size.x * 0.5, point.y - size.y * 0.5)
+	_base_x = position.x
 	modulate.a = 0.0
 	var base_y := position.y
 

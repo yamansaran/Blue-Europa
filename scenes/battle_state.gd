@@ -12,6 +12,8 @@ var allies: Array = []
 var enemies: Array = []
 var battle_id: String = ""
 var is_campaign: bool = false
+## The fight spec's "dialogue" (CombatDialogue documents both accepted shapes).
+var dialogue: Array = []
 
 # --- loot table (rolled on victory) ------------------------------------
 var loot_table: Dictionary = {
@@ -37,6 +39,7 @@ func clear() -> void:
 	enemies = []
 	battle_id = ""
 	is_campaign = false
+	dialogue = []
 	loot_table = {"money_min": 5, "money_max": 15, "xp_min": 20, "xp_max": 40, "items": []}
 
 func clear_result() -> void:

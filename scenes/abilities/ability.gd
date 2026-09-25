@@ -12,7 +12,11 @@ extends Resource
 ## ----------------------------------------------------------------------------
 
 enum Kind { ATTACK, BUFF, DEBUFF, HEAL, PASSIVE, SHIELD }
-enum Target { ENEMY, ALLY, SELF, ALL_ENEMIES, ALL_ALLIES }
+## ALLY_OTHER / ALL_OTHER_ALLIES (Nephilic, 2026-09-24): the ally-but-NOT-the-caster
+## classes — every Nigredo ability buffs allies and never Sonny. Appended at the END so
+## the ints already written in .tres files (0..4) keep their meaning: 5 ALLY_OTHER,
+## 6 ALL_OTHER_ALLIES.
+enum Target { ENEMY, ALLY, SELF, ALL_ENEMIES, ALL_ALLIES, ALLY_OTHER, ALL_OTHER_ALLIES }
 ## DELIVERY CLASS — a HIDDEN tag (never shown in a tooltip) saying HOW the ability
 ## reaches its target: SPELL = cast at range, ATTACK = a physical strike, PASSIVE =
 ## it is never used at all. This is what "attacks-only" reactions key off: an
@@ -23,6 +27,12 @@ enum Target { ENEMY, ALLY, SELF, ALL_ENEMIES, ALL_ALLIES }
 ## PASSIVE is DERIVED, not authored — see delivery_class(): any PASSIVE-kind or
 ## always-active ability reports PASSIVE whatever the exported value.
 enum Delivery { SPELL, ATTACK, PASSIVE }
+## Where each hit of a MULTI-HIT attack lands (see hit_count below).
+##   SAME   every hit strikes the unit the attack was aimed at (Flurry, Flail)
+##   RANDOM each hit picks a fresh random LEGAL hostile (Spray) — legal meaning
+##          _valid_target, so back-row protection still applies per shot.
+## Written as an INT in a .tres, like every other enum here: 0 SAME, 1 RANDOM.
+enum HitRetarget { SAME, RANDOM }
 ## What resource an ability costs to use. Extend this list as new cost kinds are
 ## needed; cost_text() and combat's cost handling switch on it.
 enum CostType {
@@ -74,6 +84,16 @@ enum CostType {
 @export var cost_type: CostType = CostType.NONE
 @export var cost_amount: int = 0
 @export var cooldown: int = 0
+## COOLDOWN HELD BY WHAT THIS CAST APPLIED (GODTHAAB §1.16). When true, the slot's
+## cooldown is FROZEN for as long as any entry this cast put on a unit survives on a
+## living unit — it cannot tick, so the ability stays unusable. The moment the last
+## such entry is gone (it expired, it broke, it was removed, its bearer died) the
+## cooldown restarts at its full value and ticks normally from there.
+## Covering: cooldown 5 + this => "only one ally Protected at a time, and five turns
+## after the protection is lost". The hold is swept by combat (_sweep_cooldown_holds),
+## so it catches every way an entry can end without any buff needing a hook.
+## A cast whose buff never lands (resisted, failed proc) is released at once.
+@export var cooldown_while_applied: bool = false
 ## value at rank R = base_power + power_per_point * (R - 1)
 @export var base_power: float = 0.0
 @export var power_per_point: float = 0.0
@@ -351,6 +371,76 @@ enum CostType {
 @export var pierce_per_debuff: float = 0.0
 @export var pierce_per_debuff_ranks: Array[float] = []
 
+# --- FLAT PIERCE on an ability ----------------------------------------------
+## Flat pierce of the ability's OWN element, added to the attacker's pierce for this
+## one hit. The Cryonecrosis term above is CONDITIONAL on what the target already
+## carries; this one is unconditional and belongs to the ability itself — a shriek
+## that goes through armour does so whether or not you are already hexed. Combat SUMS
+## the two rather than choosing between them, so an ability may carry both.
+## 0.0 => no bonus, so every existing .tres is unaffected. Ignored for a TRUE-element
+## attack, which skips the whole mitigation stage anyway.
+@export var pierce_flat: float = 0.0
+@export var pierce_flat_ranks: Array[float] = []
+
+# --- %-OF-MAX-HP DAMAGE as an ordinary term ---------------------------------
+## An extra hit worth a FRACTION of the TARGET's max HP (0.08 = 8%), dealt after the
+## attack's own damage. This is the shatter_pct_max_hp shape above lifted out from
+## behind its consume-a-debuff gate, so an ability can simply scale off how big the
+## target is with no setup at all — which is what a titan-slayer scaler needs.
+##
+## Resolved through CombatMath.resolve_flat exactly as the second element is, so the
+## target's resistance to pct_max_hp_element, the caster's pierce and amp for it,
+## damage_dealt_mult and damage_taken_mult all apply. Dealt with NO source (it fires
+## no on-struck reaction and cannot recurse) and never a crit.
+##
+## pct_max_hp_element blank (the default) => the ability's OWN element is used.
+## 0.0 damage => no extra hit, so every existing .tres is unaffected.
+@export var pct_max_hp_damage: float = 0.0
+@export var pct_max_hp_damage_ranks: Array[float] = []
+@export var pct_max_hp_element: StringName = &""
+
+# --- APPLY CHANCE: a proc chance on this ability's buff/debuff ---------------
+## The probability (0..1) that this ability's `applies_buff` is even ATTEMPTED.
+## Rolled in combat._maybe_apply_buff BEFORE CombatResist, so 0.25 means one cast in
+## four reaches the Magnificence-vs-Disdain roll and three in four never roll at all.
+##
+## THE TWO MULTIPLY. A 25% rider aimed at a target with real Magnificence lands far
+## less often than either number reads, which is exactly why apply_chance and the
+## resist stats have to be authored in the same pass rather than separately.
+##
+## A failed roll still CONSUMES THE CAST — spirit, action point and cooldown are all
+## spent, precisely as a resisted debuff is. 1.0 (the default) = always attempted, so
+## every existing .tres is unaffected.
+##
+## NB `applies_buff_self` is deliberately NOT gated by this. "The rider on the target
+## is unreliable, the buff on me is certain" is a common and useful shape, and one
+## field cannot express two different chances.
+@export var apply_chance: float = 1.0
+@export var apply_chance_ranks: Array[float] = []
+
+# --- MULTI-HIT: one attack, several strikes ---------------------------------
+## How many separate strikes this ATTACK makes. Each strike is its OWN
+## CombatMath.resolve, so DODGE AND CRIT ROLL PER HIT — which is the entire
+## mechanical point of a multi-hit against a single hit of the same total damage:
+## the variance is different, and a shield has to absorb every strike separately.
+## 1 (the default) = an ordinary single hit, so every existing .tres is unaffected.
+@export var hit_count: int = 1
+@export var hit_count_ranks: Array[int] = []
+## Whether the ability's damage is DIVIDED across its hits or dealt PER hit.
+##   true  the authored damage is the TOTAL, split evenly (Flurry: "same total damage
+##         as the standard attack")
+##   false the authored damage is dealt by EVERY hit (Flail)
+## What gets divided is the ABILITY'S OWN damage output — its main hit, its second
+## element and its %-of-max-HP term. Everything else fires once PER HIT at full
+## value: the applies_buff rider (so Flail is 0-3 On Fire per use, and that variance
+## is the threat), spirit steal/grant, Shatter, and the ATTACKER's on-hit riders.
+## Irrelevant at hit_count 1, which is why it can safely default to true.
+@export var hit_split: bool = true
+## Where each hit lands — see HitRetarget above. Ignored for an ALL_ENEMIES /
+## ALL_ALLIES ability, which already strikes everyone: a fan-out resolves
+## "hit_count hits on EACH affected unit", never a random scatter across them.
+@export var hit_retarget: HitRetarget = HitRetarget.SAME
+
 # --- accuracy (see CombatDodge) ---------------------------------------------
 ## Flat percentage points SUBTRACTED from the target's dodge chance for this ability.
 ## The baseline accuracy tier is already decided by kind + delivery (a physical strike
@@ -368,6 +458,52 @@ enum CostType {
 ## Multiplies crit DAMAGE for this ability (base 1.0). Combined with the
 ## character's base crit-damage multiplier and any buff/debuff crit-damage bonus.
 @export var crit_damage_mult: float = 1.0
+
+# --- NEPHILIC KIT (2026-09-24) — every field below defaults to "off" -----------
+## PERK: a passive whose effect is a combat HOOK rather than a stat mod. At combat
+## start the player's equipped passives (and invested always-active nodes) that name a
+## perk are folded into one {perk_id: params} map on the body (CombatPerks); combat's
+## hooks read it. perk_ranks[r-1] is the params dict at rank r (numbers only).
+@export var perk: StringName = &""
+@export var perk_ranks: Array[Dictionary] = []
+## Per-application DURATION for applies_buff (0 = the entry's own). One unified poison /
+## On Fire entry serves every ability at its own length (FUTURE_PLANS §3).
+@export var applies_buff_duration: int = 0
+@export var applies_buff_duration_ranks: Array[int] = []
+## How many INSTANCES of applies_buff one cast lands (Pestilence 1..4). Default 1.
+@export var applies_buff_count_ranks: Array[int] = []
+## A SECOND debuff/buff dropped on the same target (Wormwood's toxic shred beside its
+## poison). Rank-suffixed like applies_buff ("<id>_<rank>" when that exists).
+@export var applies_buff_extra: StringName = &""
+## HP COSTS. A fraction of the CASTER's max HP (per rank) or current HP, paid on use.
+## An HP cost can never kill: an ability whose cost would be lethal is unusable, and
+## any payment is floored so the caster keeps at least 1 HP.
+@export var hp_cost_pct_max_ranks: Array[float] = []
+@export var hp_cost_pct_current: float = 0.0
+## HEAL riders. heal_missing_hp_bonus: heal x (1 + b * clamp((1 - HP%) / 0.7, 0, 1))
+## (Second Wind). heal_from_hp_paid: the heal is this multiple of the HP the caster just
+## paid (Bloodletting).
+@export var heal_missing_hp_bonus_ranks: Array[float] = []
+@export var heal_from_hp_paid_ranks: Array[float] = []
+## A shield on each target worth this fraction of the CASTER's max HP (Tithe).
+@export var shield_pct_caster_max_hp_ranks: Array[float] = []
+## Cleanse N debuffs from the target (oldest first). 0 = none (Ablution 1/3).
+@export var cleanse_count_ranks: Array[int] = []
+## Catalyze: every instance of this debuff id on the target gains N turns, instantly.
+## Nothing is left behind, so back-to-back casts each extend again.
+@export var extend_debuff_id: StringName = &""
+@export var extend_turns_ranks: Array[int] = []
+## Excise: remove N instances of this debuff id (0 = ALL) and deal their remaining
+## ticks now.
+@export var excise_debuff_id: StringName = &""
+@export var excise_count_ranks: Array[int] = []
+## Per-instance payoffs off a debuff id on the target (Stoker: +10% damage per On Fire;
+## Hew: +10 crit-chance points per On Fire).
+@export var bonus_per_debuff_id: StringName = &""
+@export var damage_bonus_per_debuff: float = 0.0
+@export var crit_chance_per_debuff: float = 0.0
+## Uses allowed per combat (0 = unlimited). Apotheosis and First Sun are 1.
+@export var uses_per_combat: int = 0
 
 # --- unit AI (see AI_PRIMER §9.4) -------------------------------------------
 ## The four INTENTS the AI decides between, as the strings every AI file keys by.
@@ -405,6 +541,20 @@ const AI_DEBUFF := "debuff"
 ## filtered by it, because a skill-tree ability with a turn gate isn't a thing that
 ## exists and pretending otherwise would put a rule in the UI with nothing behind it.
 @export var ai_not_before_turn: int = 0
+
+# --- A SCRIPTED FOLLOW-UP ----------------------------------------------------
+## The id of an ability this unit should take NEXT, whenever it next decides,
+## before the three AI layers get a say: "after Riot Shield, always Shield Bash".
+##
+## It is a COMMITMENT, not a preference, which is why it cannot be expressed as a
+## gain — the AI re-decides from scratch every action and has no notion of a plan.
+## It still passes the usual gates: the follow-up must be usable (_can_use, so
+## cooldown / spirit / silence / action points all apply) and must have a legal
+## target, or it is quietly dropped and the normal decision runs.
+##
+## Also the cheapest telegraph in the game: a two-beat pattern the player can learn
+## to read. Blank (the default) = no follow-up, so every existing .tres is unaffected.
+@export var ai_follow_up: StringName = &""
 
 ## The intents this ability serves when it declares none of its own, derived from
 ## kind + target. Deriving rather than authoring is what lets every existing .tres
@@ -607,6 +757,74 @@ func compute_bonus_damage(caster_stats: Dictionary, points: int = 1) -> float:
 		return 0.0
 	var stat := float(caster_stats.get(String(bonus_scaling_stat), 0.0))
 	return maxf(0.0, bonus_scaling_mult_at(points) * stat)
+
+## The FLAT pierce this ability carries at a given rank (pierce_flat_ranks override,
+## else the scalar). Combat sums it with the per-debuff term.
+func pierce_flat_at(points: int) -> float:
+	if not pierce_flat_ranks.is_empty():
+		return float(pierce_flat_ranks[_rank_index(points, pierce_flat_ranks.size())])
+	return pierce_flat
+
+## The %-of-max-HP extra hit at a given rank, as a fraction. 0.0 => none.
+func pct_max_hp_damage_at(points: int) -> float:
+	if not pct_max_hp_damage_ranks.is_empty():
+		return float(pct_max_hp_damage_ranks[_rank_index(points, pct_max_hp_damage_ranks.size())])
+	return pct_max_hp_damage
+
+## True when this ATTACK carries a %-of-max-HP hit at ANY rank. Tests the array as
+## well as the scalar, so an ability whose rank-1 value is 0 but whose rank-3 value is
+## not is never mistaken for one that has no such hit at all.
+func has_pct_max_hp_damage() -> bool:
+	if pct_max_hp_damage > 0.0:
+		return true
+	for v in pct_max_hp_damage_ranks:
+		if float(v) > 0.0:
+			return true
+	return false
+
+## The element the %-of-max-HP hit is dealt as: pct_max_hp_element when set, else the
+## ability's own element.
+func pct_max_hp_element_key() -> String:
+	var e := String(pct_max_hp_element)
+	return e if e != "" else element_key()
+
+## The chance (0..1) that this ability's applies_buff is ATTEMPTED at a given rank.
+## Clamped, so a mis-authored value (a percentage typed as 25 instead of 0.25) can
+## never make a rider impossible, and a negative one can never make it certain.
+func apply_chance_at(points: int) -> float:
+	if not apply_chance_ranks.is_empty():
+		return clampf(float(apply_chance_ranks[_rank_index(points, apply_chance_ranks.size())]), 0.0, 1.0)
+	return clampf(apply_chance, 0.0, 1.0)
+
+## Number of strikes at a given rank (hit_count_ranks override, else the scalar).
+## Floored at 1 — a zero typed into a .tres can never make an attack do nothing.
+func hit_count_at(points: int) -> int:
+	var n := hit_count
+	if not hit_count_ranks.is_empty():
+		n = int(hit_count_ranks[_rank_index(points, hit_count_ranks.size())])
+	return maxi(1, n)
+
+## True when this attack strikes more than once at the given rank.
+func is_multi_hit(points: int = 1) -> bool:
+	return hit_count_at(points) > 1
+
+## The factor applied to EACH hit's damage terms: 1/N for a split multi-hit, 1.0
+## otherwise. So hits x scale is 1.0 for a split ability (same total as one hit) and
+## N for an unsplit one — the identity combat and the AI estimator both rely on.
+func hit_damage_scale(points: int) -> float:
+	var n := hit_count_at(points)
+	return (1.0 / float(n)) if hit_split and n > 1 else 1.0
+
+## True when each hit picks a fresh random legal target. Always false for an area
+## ability (see hit_retarget).
+func retargets_each_hit() -> bool:
+	return hit_retarget == HitRetarget.RANDOM and not is_area_target()
+
+## True when this ability resolves against every unit on a side (ALL_ENEMIES /
+## ALL_ALLIES) rather than one. The single definition combat, the camera and the AI
+## all read.
+func is_area_target() -> bool:
+	return target == Target.ALL_ENEMIES or target == Target.ALL_ALLIES or target == Target.ALL_OTHER_ALLIES
 
 ## The earliest of a unit's OWN turns on which the AI may use this ability. Floors
 ## at 1 so 0 (the default) and 1 both mean "no gate", and `turns_taken >= this` is
@@ -838,3 +1056,54 @@ func shield_decay_spec() -> Dictionary:
 	if shield_decay_pct_max != 0.0:
 		d["pct_max"] = shield_decay_pct_max
 	return d
+
+# --- NEPHILIC KIT accessors (see the field block above) ------------------------
+func _rank_f(arr: Array, points: int, fallback: float = 0.0) -> float:
+	if arr.is_empty():
+		return fallback
+	return float(arr[_rank_index(points, arr.size())])
+
+func _rank_i(arr: Array, points: int, fallback: int = 0) -> int:
+	if arr.is_empty():
+		return fallback
+	return int(arr[_rank_index(points, arr.size())])
+
+func perk_at(points: int) -> Dictionary:
+	if perk_ranks.is_empty():
+		return {}
+	var d = perk_ranks[_rank_index(points, perk_ranks.size())]
+	return (d as Dictionary).duplicate(true) if typeof(d) == TYPE_DICTIONARY else {}
+
+func applies_buff_duration_at(points: int) -> int:
+	return _rank_i(applies_buff_duration_ranks, points, applies_buff_duration)
+
+func applies_buff_count_at(points: int) -> int:
+	return maxi(1, _rank_i(applies_buff_count_ranks, points, 1))
+
+func hp_cost_pct_max_at(points: int) -> float:
+	return _rank_f(hp_cost_pct_max_ranks, points)
+
+func has_hp_cost() -> bool:
+	return not hp_cost_pct_max_ranks.is_empty() or hp_cost_pct_current > 0.0
+
+func heal_missing_hp_bonus_at(points: int) -> float:
+	return _rank_f(heal_missing_hp_bonus_ranks, points)
+
+func heal_from_hp_paid_at(points: int) -> float:
+	return _rank_f(heal_from_hp_paid_ranks, points)
+
+func shield_pct_caster_max_hp_at(points: int) -> float:
+	return _rank_f(shield_pct_caster_max_hp_ranks, points)
+
+func cleanse_count_at(points: int) -> int:
+	return _rank_i(cleanse_count_ranks, points)
+
+func extend_turns_at(points: int) -> int:
+	return _rank_i(extend_turns_ranks, points)
+
+func excise_count_at(points: int) -> int:
+	return _rank_i(excise_count_ranks, points)
+
+## Targets a friendly unit other than the caster.
+func is_other_ally_target() -> bool:
+	return target == Target.ALLY_OTHER or target == Target.ALL_OTHER_ALLIES

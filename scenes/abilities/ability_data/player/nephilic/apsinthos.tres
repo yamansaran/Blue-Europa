@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bg5ubtmjeme5y"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"apsinthos"
+display_name = "Wormwood"
+description = "Poison every enemy for 4 turns and shred 15 Toxic resistance for 4 turns."
+max_points = 4
+max_equipped = 3
+kind = 2
+target = 3
+element = 6
+cost_type = 1
+cost_amount = 25
+cooldown = 4
+applies_buff = &"poison"
+applies_buff_duration = 4
+applies_buff_extra = &"wormwood"
+description_ranks = Array[String](["Poison every enemy for 4 turns and shred 15 Toxic resistance for 4 turns.", "Poison every enemy for 4 turns and shred 20 Toxic resistance for 4 turns.", "Poison every enemy for 4 turns and shred 25 Toxic resistance for 4 turns.", "Poison every enemy for 4 turns and shred 30 Toxic resistance for 4 turns."])
+required_level = 10

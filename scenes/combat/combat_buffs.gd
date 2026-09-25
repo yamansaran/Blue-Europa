@@ -122,6 +122,20 @@ static func try_apply(body: CharacterBase, entry: Dictionary, caster: CharacterB
 	if body == null or entry.is_empty():
 		return report
 
+	# DEBUFF IMMUNITY (Ablution's ward): a debuff aimed at an immune bearer never
+	# lands. Reported as a resist so every caller floats and logs it the same way.
+	if Buff.is_debuff(entry) and _any_flag(body, "debuff_immune"):
+		report["resisted"] = true
+		report["immune"] = true
+		return report
+	# POISE (Nephilic helix perk): debuffs landing on the bearer last N fewer turns,
+	# never below 1. Permanent debuffs are untouched.
+	if Buff.is_debuff(entry):
+		var poise := CombatPerks.value(body, "poise", "turns")
+		var d0 := int(entry.get("duration", -1))
+		if poise > 0.0 and d0 > 1:
+			entry["duration"] = maxi(1, d0 - int(poise))
+
 	var chance := CombatResist.resist_chance(caster, body, entry)
 	report["chance"] = chance
 	if CombatResist.rolls_resist(chance):
@@ -133,6 +147,25 @@ static func try_apply(body: CharacterBase, entry: Dictionary, caster: CharacterB
 	var scaled := CombatResist.apply_scaling(entry, op)
 	report["potency"] = scaled["potency"]
 	report["extra_turns"] = scaled["extra_turns"]
+
+	# ESCAPE STAMP. An escapable debuff (Netted) is rolled out of against the Disdain
+	# of whoever landed it — so that Disdain is frozen onto the entry NOW, while the
+	# caster is known. Nothing on an entry may hold a reference to a unit (instances
+	# are disconnected from their caster once they land), so a number is what is kept.
+	if Buff.has_escape_check(entry):
+		entry["escape_vs"] = caster.get_effective("disdain") if caster != null else CombatResist.DEFAULT_ESCAPE_VS
+
+	# CASTER STAMP for a link that breaks when the CASTER is hurt (Protected). A
+	# NUMBER, never a unit reference — an applied instance stays disconnected from
+	# its caster, so the sweep matches on the caster body's instance id instead.
+	if Buff.breaks_when_caster_damaged(entry) and caster != null:
+		entry["caster_uid"] = caster.get_instance_id()
+
+	# APPLIER STAMP for DoT credit (FUTURE_PLANS §2e): the tick reports it with each DoT
+	# and combat credits that unit's damage_dealt (history + AI reputation). A number,
+	# not a reference — kept separate from caster_uid, which the break sweep matches on.
+	if caster != null:
+		entry["applier_uid"] = caster.get_instance_id()
 
 	report["entry"] = apply(body, entry)
 	report["applied"] = true
@@ -259,13 +292,17 @@ static func count_debuffs_of_element(body: CharacterBase, element: String) -> in
 ## through BattleCharacter.take_damage() (so the number animates + death is
 ## handled) and by adjusting spirit alongside the default per-turn regen.
 static func collect_turn_start(body: CharacterBase) -> Dictionary:
-	var report := {"dots": [], "dot_total": 0, "heals": [], "heal_total": 0, "spirit_delta": 0.0, "expired": []}
+	var report := {"dots": [], "dot_total": 0, "heals": [], "heal_total": 0, "spirit_delta": 0.0, "expired": [], "escaped": []}
 	if body == null:
 		return report
 
 	# The bearer's DoT vulnerability multiplier (clamped >= 0). Applied to every
 	# DoT this turn as it is computed, before the damage is dealt.
 	var vuln := maxf(0.0, body.get_effective("vulnerability"))
+	# EPIPHANY: while the bearer carries a `freeze_buffs` entry, its OTHER buffs do
+	# not count down (debuffs still do). The freezer itself runs its own clock.
+	var frozen := _any_flag(body, "freeze_buffs")
+	report["hp_cost_pct"] = 0.0
 
 	for basket in ["buffs", "debuffs"]:
 		if not body.baskets.has(basket):
@@ -274,6 +311,16 @@ static func collect_turn_start(body: CharacterBase) -> Dictionary:
 		for e in body.baskets[basket]:
 			if typeof(e) != TYPE_DICTIONARY:
 				continue
+			# --- ESCAPE (Netted): broken out of rather than waited out ---
+			# Rolled FIRST, before this turn's effects, so an entry the bearer
+			# struggles out of does not tick again. This runs inside
+			# _process_turn_start, which _begin_unit_turn calls BEFORE its stun check —
+			# so breaking out of a stunning net means acting THIS turn.
+			# An escape is not an expiry: no expire_effect, no expire_apply.
+			if Buff.has_escape_check(e):
+				if CombatResist.rolls_resist(CombatResist.escape_chance(body, e)):
+					report["escaped"].append(e)
+					continue
 			# --- effects for this turn (full current stack) ---
 			# FLAT stack-scaled DoT (dot × dot_mult) + LIVE % of the bearer's max HP
 			# (dot_pct_per_turn) — the exact mirror of the heal side below, so a DoT can
@@ -284,9 +331,29 @@ static func collect_turn_start(body: CharacterBase) -> Dictionary:
 			if dot_pct > 0.0:
 				raw_dmg += int(round(maxf(0.0, float(body.max_hp()) * dot_pct)))
 			if raw_dmg > 0:
-				var dmg := int(round(float(raw_dmg) * vuln))   # vulnerability applied here
+				var elem := str(e.get("dot_element", "physical"))
+				# VULNERABILITY FIRST, on the raw figure. It is the DoT-specific "how
+				# much of this do I take" lever and has always meant a multiplier on
+				# the tick's own output, so it stays AHEAD of the pipeline rather than
+				# becoming a second damage_taken_mult inside it.
+				var pre := maxf(0.0, float(raw_dmg) * vuln)
+				# THEN THE REAL PIPELINE. A DoT is now mitigated exactly like any other
+				# damage of its element: the bearer's resistance, its multiplicative
+				# resist layer and its damage_taken_mult all apply, and the entry's own
+				# dot_pierce cuts through.
+				#
+				# NO ATTACKER, deliberately. A burning wound has nobody's Vigor behind
+				# it, and an applied instance is disconnected from whoever cast it — so
+				# there is no pre-multiplier, no attacker pierce and no amp. The only
+				# penetration is what the buff itself carries.
+				#
+				# "true" still skips the whole stage inside resolve_flat, and
+				# take_damage still lets it past shields, so Sclerosis in Binah is
+				# untouched and remains the uncheatable cost it was.
+				var dmg := CombatMath.resolve_flat(null, body, pre, elem, Buff.dot_pierce(e))
 				if dmg > 0:
-					report["dots"].append({"amount": dmg, "element": str(e.get("dot_element", "physical"))})
+					report["dots"].append({"amount": dmg, "element": elem,
+						"applier_uid": int(e.get("applier_uid", 0))})
 					report["dot_total"] = int(report["dot_total"]) + dmg
 			# --- heal-over-turn (Scaled Skin, Gliogenesis, ...) : restore HP this turn ---
 			# FLAT snapshot (heal_per_turn) + LIVE % of max HP (heal_pct_per_turn); collected
@@ -299,18 +366,29 @@ static func collect_turn_start(body: CharacterBase) -> Dictionary:
 				report["heals"].append({"amount": heal})
 				report["heal_total"] = int(report["heal_total"]) + heal
 			report["spirit_delta"] = float(report["spirit_delta"]) + float(e.get("spirit_per_turn", 0.0))
+			# HP COST per turn (Putrefaction): combat pays it through pay_hp, which
+			# floors at 1 HP — an HP cost can never kill.
+			report["hp_cost_pct"] = float(report["hp_cost_pct"]) + float(e.get("hp_cost_pct_per_turn", 0.0))
 
-			# --- advance duration ---
+			# --- advance duration (a permanent -1 never counts down) ---
 			var dur := int(e.get("duration", -1))
-			if dur < 0:
-				kept.append(e)          # permanent: never counts down
-				continue
-			dur -= 1
-			if dur <= 0:
-				report["expired"].append(e)   # dropped from the basket
-			else:
+			if frozen and basket == "buffs" and not bool(e.get("freeze_buffs", false)):
+				dur = -1 if dur < 0 else dur + 1   # net zero after the decrement below
+			if dur >= 0:
+				dur -= 1
+				if dur <= 0:
+					report["expired"].append(e)   # dropped from the basket
+					continue
 				e["duration"] = dur
-				kept.append(e)
+			# --- RAMP (Amphetamines decays, Crash grows) ---
+			# AFTER this turn's effects were collected, so a per-turn term ticks at the
+			# level it held during the turn just gone, and the new level governs the
+			# turn about to be played. Only a SURVIVING entry ramps — one that just
+			# expired is gone, and its expire_apply takes over from here.
+			var ppt := Buff.potency_per_turn(e)
+			if ppt != 0.0:
+				Buff.set_ramp(e, Buff.ramp(e) + ppt)
+			kept.append(e)
 		body.baskets[basket] = kept
 
 	body.clamp_vitals()
@@ -320,6 +398,39 @@ static func collect_turn_start(body: CharacterBase) -> Dictionary:
 ## the tick reported). Most buffs set no expire_effect and this is a no-op; add
 ## cases as you build expire events. `unit` is the BattleCharacter it was on.
 static func fire_expiry(unit, entry: Dictionary) -> void:
+	# EXPIRE-APPLY: "this buff becomes that debuff" (Amphetamines -> Crash), and the
+	# generic form of a pattern the Warrior's tree will want again. Runs BEFORE the
+	# expire_effect match below, which returns early for the (usual) blank id.
+	#
+	# The next entry goes on the SAME BEARER, through apply() rather than try_apply():
+	# it is a transformation of an effect the bearer already carried, so there is
+	# nothing to resist and no caster's Disdain to scale it. Applied during the
+	# bearer's turn start, so it first ticks at the START OF ITS NEXT TURN.
+	#
+	# NATURAL EXPIRY ONLY. An entry that is consumed (Shatter), removed (a cleanse),
+	# escaped (Netted) or spent (charges) does not come through here, so it does not
+	# turn into anything.
+	if unit != null and unit.body != null:
+		var applied_any := false
+		for spec in Buff.expire_apply(entry):
+			if typeof(spec) != TYPE_DICTIONARY:
+				continue
+			var bid := str(spec.get("buff", ""))
+			if bid == "":
+				continue
+			var next := BuffLibrary.build(bid, unit.body, unit.body)
+			if next.is_empty():
+				push_warning("[buffs] %s expire_apply names unknown buff '%s'." % [str(entry.get("id", "?")), bid])
+				continue
+			if spec.has("duration"):
+				next["duration"] = int(spec["duration"])
+			apply(unit.body, next)
+			applied_any = true
+		if applied_any and unit.has_method("refresh_buffs"):
+			unit.refresh_buffs()
+			if unit.has_method("refresh_bar"):
+				unit.refresh_bar()       # a max-HP / max-Spirit mod can move the ceilings
+
 	var effect := str(entry.get("expire_effect", ""))
 	if effect == "":
 		return
@@ -403,7 +514,7 @@ static func _react_reflect(reaction: Dictionary, entry: Dictionary, stacks: int,
 	var scaled := 0.0
 	var scale_stat := str(reaction.get("scale_stat", ""))
 	if scale_stat != "" and struck_unit != null and struck_unit.body != null:
-		scaled = float(reaction.get("pct", 0.0)) * maxf(0.0, struck_unit.body.get_effective(scale_stat))
+		scaled = float(reaction.get("pct", 0.0)) * scale_source(struck_unit.body, scale_stat)
 	var total := int(round(maxf(0.0, flat + pct + scaled)))
 	if total <= 0:
 		return
@@ -411,6 +522,10 @@ static func _react_reflect(reaction: Dictionary, entry: Dictionary, stacks: int,
 	if rel == "":
 		rel = "physical"
 	attacker_unit.take_damage(total, rel, false)
+	# A reflect is damage the BEARER's build dealt (thorns), so it counts toward the
+	# bearer's damage_dealt — reputation and Character.damage_history read it.
+	if struck_unit != null and "damage_dealt" in struck_unit:
+		struck_unit.damage_dealt += float(total)
 
 ## Self-damage on struck (Rime Skin): the STRUCK bearer takes `percent` of its OWN
 ## max HP as damage of the reaction element (default ice) whenever it is hit by a
@@ -440,10 +555,13 @@ static func _react_self_pct_max_hp(reaction: Dictionary, entry: Dictionary, stru
 ## one. Called by combat's ATTACK branch after the hit lands. `struck_unit` is a
 ## BattleCharacter (kept untyped like fire_on_struck). Wraith Form uses this to drop a
 ## 1-turn Rime Skin on whatever the wraith attacks.
-static func fire_on_hit(attacker_body: CharacterBase, struck_unit) -> void:
+## Returns the total ON-HIT DAMAGE dealt, so combat can credit it to the attacker's
+## damage_dealt (it only knows the attacker's body here, not its unit).
+static func fire_on_hit(attacker_body: CharacterBase, struck_unit) -> int:
 	if attacker_body == null or struck_unit == null or struck_unit.body == null:
-		return
+		return 0
 	var applied_any := false
+	var dealt := 0
 	for basket in ["buffs", "debuffs"]:
 		if not attacker_body.baskets.has(basket):
 			continue
@@ -455,6 +573,14 @@ static func fire_on_hit(attacker_body: CharacterBase, struck_unit) -> void:
 					continue
 				var bid := str(spec.get("buff", ""))
 				if bid == "":
+					continue
+				# APPLY CHANCE on the rider itself, mirroring Ability.apply_chance:
+				# rolled BEFORE the entry is built and before CombatResist, so a
+				# partial rider costs nothing on the swings it does not fire. An
+				# absent "chance" key is 1.0 (always), so every rider authored before
+				# this existed is unaffected.
+				var chance := float(spec.get("chance", 1.0))
+				if chance < 1.0 and randf() >= chance:
 					continue
 				var entry := BuffLibrary.build(bid, attacker_body, struck_unit.body)
 				if entry.is_empty():
@@ -471,9 +597,10 @@ static func fire_on_hit(attacker_body: CharacterBase, struck_unit) -> void:
 			for spec in Buff.on_hit_damage(e):
 				if typeof(spec) != TYPE_DICTIONARY:
 					continue
-				_on_hit_damage(attacker_body, struck_unit, spec, Buff.stacks(e))
+				dealt += _on_hit_damage(attacker_body, struck_unit, spec, Buff.stacks(e))
 	if applied_any and struck_unit.has_method("refresh_buffs"):
 		struck_unit.refresh_buffs()
+	return dealt
 
 
 ## SPEND ONE ATTACK CHARGE on every charged entry the attacker carries, and drop
@@ -515,27 +642,85 @@ static func spend_attack_charges(attacker_body: CharacterBase) -> bool:
 ## CombatMath.resolve_flat — so the attacker's damage_dealt_mult, pierce and amp for the
 ## rider's element, the target's resistance and damage_taken_mult all apply. Dealt with
 ## NO source, so it fires no on-struck reaction and cannot recurse. Crit is not rolled.
-static func _on_hit_damage(attacker_body: CharacterBase, struck_unit, spec: Dictionary, stacks: int) -> void:
+static func _on_hit_damage(attacker_body: CharacterBase, struck_unit, spec: Dictionary, stacks: int) -> int:
 	if struck_unit == null or struck_unit.body == null:
-		return
+		return 0
 	if struck_unit.has_method("is_alive") and not struck_unit.is_alive():
-		return
+		return 0
 	var element := str(spec.get("element", "physical"))
 	var raw := float(spec.get("amount", 0.0))
 	var scale_stat := str(spec.get("scale_stat", ""))
 	if scale_stat != "" and attacker_body != null:
-		raw += float(spec.get("pct", 0.0)) * maxf(0.0, attacker_body.get_effective(scale_stat))
+		raw += float(spec.get("pct", 0.0)) * scale_source(attacker_body, scale_stat)
 	raw *= float(maxi(1, stacks))
 	if raw <= 0.0:
-		return
+		return 0
 	var dmg := CombatMath.resolve_flat(attacker_body, struck_unit.body, raw, element)
 	if dmg > 0:
 		struck_unit.take_damage(dmg, element, false)
+	return maxi(dmg, 0)
 
+
+# ============================================================================
+# Breaking: an effect that ends because something happened to a unit
+# ============================================================================
+## Remove every entry on `body` whose `flag` is set, and hand the removed entries
+## back so the caller can float and log them. The shared body of the three sweeps
+## below. `caster_uid` non-zero also requires the entry to name that caster.
+static func _break_flagged(body: CharacterBase, flag: String, caster_uid: int = 0) -> Array:
+	var removed: Array = []
+	if body == null:
+		return removed
+	for basket in ["buffs", "debuffs"]:
+		if not body.baskets.has(basket):
+			continue
+		var kept := []
+		for e in body.baskets[basket]:
+			var hit := typeof(e) == TYPE_DICTIONARY and bool(e.get(flag, false)) \
+				and (caster_uid == 0 or int(e.get("caster_uid", 0)) == caster_uid)
+			if hit:
+				removed.append(e)
+			else:
+				kept.append(e)
+		body.baskets[basket] = kept
+	if not removed.is_empty():
+		body.clamp_vitals()
+	return removed
+
+## The bearer just lost ACTUAL HEALTH: drop anything that cannot survive that.
+## Called from BattleCharacter.take_damage on the health path ONLY — a hit fully
+## eaten by a shield returns before this, which is the whole point of Covering.
+static func break_on_health_damage(body: CharacterBase) -> Array:
+	return _break_flagged(body, "breaks_on_health_damage")
+
+## The unit whose body is `caster_uid` just lost health: drop anything ON THIS BODY
+## that was anchored to them (Protected, when its officer is hit).
+static func break_caster_linked(body: CharacterBase, caster_uid: int) -> Array:
+	return _break_flagged(body, "breaks_when_caster_damaged", caster_uid)
+
+## The bearer's absorb pool just emptied: drop anything riding on it.
+static func break_on_shield_break(body: CharacterBase) -> Array:
+	return _break_flagged(body, "expire_on_shield_break")
 
 # ============================================================================
 # Queries
 # ============================================================================
+## The pseudo-stat key a rider may scale off instead of a real stat.
+const SHIELD_SCALE_KEY := "shield"
+
+## The value a rider's `scale_stat` reads. Almost always a plain effective stat —
+## with one pseudo-stat: "shield" is the bearer's LIVE remaining absorb pool
+## (CombatShields.total), which is what lets a Shield Bash hit harder the more of its
+## shield is still standing, and fall off as that shield is chewed away.
+## Deliberately NOT a real stat: a shield is its own layer, not a number on the body,
+## and making it a stat would put it in every readout and every buff's mods.
+static func scale_source(body: CharacterBase, key: String) -> float:
+	if body == null or key == "":
+		return 0.0
+	if key == SHIELD_SCALE_KEY:
+		return float(CombatShields.total(body))
+	return maxf(0.0, body.get_effective(key))
+
 ## True if any active buff/debuff silences this body (blocks spirit-cost abilities).
 ## Every OVERFLOW-SHIELD spec `body` currently carries (see Buff.overflow_shield):
 ## { "per_spirit": int, "scale": { stat_key: fraction }, (opt) "decay": {}, plus the
@@ -673,3 +858,113 @@ static func _any_flag(body: CharacterBase, flag: String) -> bool:
 			if typeof(e) == TYPE_DICTIONARY and bool(e.get(flag, false)):
 				return true
 	return false
+
+# ============================================================================
+# THE NEPHILIC KIT (2026-09-24) — instance helpers keyed by entry id / field
+# ============================================================================
+## How many instances of debuff `id` the body carries (Stoker, Hew).
+static func count_debuffs_of_id(body: CharacterBase, id: String) -> int:
+	if body == null:
+		return 0
+	return _count_instances(body, "debuffs", id)
+
+## Catalyze: every CURRENT instance of debuff `id` gains `turns`. Nothing is left on
+## the bearer, so the next cast extends again. Returns how many instances grew.
+static func extend_debuffs_of_id(body: CharacterBase, id: String, turns: int) -> int:
+	if body == null or id == "" or turns == 0 or not body.baskets.has("debuffs"):
+		return 0
+	var n := 0
+	for e in body.baskets["debuffs"]:
+		if typeof(e) == TYPE_DICTIONARY and str(e.get("id", "")) == id and int(e.get("duration", -1)) > 0:
+			e["duration"] = int(e["duration"]) + turns
+			n += 1
+	return n
+
+## Excise: remove up to `count` instances of debuff `id` (0 = all), oldest first, and
+## hand them back so the caller can deal their remaining ticks at once.
+static func take_debuffs_of_id(body: CharacterBase, id: String, count: int) -> Array:
+	var out: Array = []
+	if body == null or id == "" or not body.baskets.has("debuffs"):
+		return out
+	var kept: Array = []
+	for e in body.baskets["debuffs"]:
+		if typeof(e) == TYPE_DICTIONARY and str(e.get("id", "")) == id and (count <= 0 or out.size() < count):
+			out.append(e)
+		else:
+			kept.append(e)
+	body.baskets["debuffs"] = kept
+	body.clamp_vitals()
+	return out
+
+## Cleanse up to `count` debuffs from the bearer, oldest first. An entry marked
+## `uncleansable` (a self-paid cost) is never removed. Returns the removed entries.
+static func cleanse(body: CharacterBase, count: int) -> Array:
+	var out: Array = []
+	if body == null or count <= 0 or not body.baskets.has("debuffs"):
+		return out
+	var kept: Array = []
+	for e in body.baskets["debuffs"]:
+		if typeof(e) == TYPE_DICTIONARY and out.size() < count and not bool(e.get("uncleansable", false)):
+			out.append(e)
+		else:
+			kept.append(e)
+	body.baskets["debuffs"] = kept
+	body.clamp_vitals()
+	return out
+
+## Silver Mirror: spend one `struck_charges` charge if the bearer has one; the entry
+## is removed when its last charge goes. True = this hit is turned aside.
+static func consume_struck_charge(body: CharacterBase) -> bool:
+	if body == null or not body.baskets.has("buffs"):
+		return false
+	var arr: Array = body.baskets["buffs"]
+	for i in arr.size():
+		var e = arr[i]
+		if typeof(e) == TYPE_DICTIONARY and int(e.get("struck_charges", 0)) > 0:
+			e["struck_charges"] = int(e["struck_charges"]) - 1
+			if int(e["struck_charges"]) <= 0:
+				arr.remove_at(i)
+			return true
+	return false
+
+## Every entry (both baskets) that carries a truthy/non-zero `field`.
+static func entries_with(body: CharacterBase, field: String) -> Array:
+	var out: Array = []
+	if body == null:
+		return out
+	for basket in ["buffs", "debuffs"]:
+		if not body.baskets.has(basket):
+			continue
+		for e in body.baskets[basket]:
+			if typeof(e) == TYPE_DICTIONARY and e.has(field) and e[field]:
+				out.append(e)
+	return out
+
+## Remove the given entry instance (by identity) from whichever basket holds it.
+static func remove_entry(body: CharacterBase, entry: Dictionary) -> bool:
+	if body == null:
+		return false
+	for basket in ["buffs", "debuffs"]:
+		if not body.baskets.has(basket):
+			continue
+		var arr: Array = body.baskets[basket]
+		for i in arr.size():
+			if is_same(arr[i], entry):
+				arr.remove_at(i)
+				body.clamp_vitals()
+				return true
+	return false
+
+## How many VISIBLE buffs the bearer has other than those flagged `except_flag`
+## (Epiphany counts the buffs it froze).
+static func count_visible_buffs(body: CharacterBase, except_flag: String = "") -> int:
+	if body == null or not body.baskets.has("buffs"):
+		return 0
+	var n := 0
+	for e in body.baskets["buffs"]:
+		if typeof(e) != TYPE_DICTIONARY or not Buff.is_visible(e):
+			continue
+		if except_flag != "" and bool(e.get(except_flag, false)):
+			continue
+		n += 1
+	return n

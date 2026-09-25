@@ -46,11 +46,25 @@ static func attribute_points_for_level(level: int) -> int:
 ## CUTOFFS[level] = total cumulative XP needed to BE that level.
 ## Index 0 is a dummy; levels run 1..MAX_LEVEL.
 ##
-## THE CURVE (retuned). Roughly geometric: the cost of the NEXT level rises about
-## 11-13% per level, from 100 XP for level 2 to 23,200 for level 50, totalling
-## 216,000 across the whole game. The per-level step is smooth enough that no
-## single level feels like a wall, and the early game moves quickly — levels 2-10
-## together cost 1,480, less than one level 30 step.
+## THE CURVE (rev34: WIDENED to 2,160,000). Geometric: the cost of the NEXT level
+## rises ~18.4% per level (k = 1.18433), from 100 XP for level 2 to 336,000 for level
+## 50, totalling 2,160,000 across the whole game — 10x the old 216,000.
+##
+## THE ANCHOR DID NOT MOVE. Level 2 still costs 100 and the opening hours are priced
+## exactly as they were; all of the extra weight is at the top. Things that follow,
+## and that anything tuned against this table has to respect:
+##   - a five-level ZONE band now costs x2.33 the one before it (was x1.76), so band 9
+##     is 1,009x band 1 (was 132x);
+##   - levels 45-50 are 1,233,000 XP = 57% of the whole curve (was 43%). That headroom
+##     is explicitly postgame and wants postgame content, not zone-9 training fights;
+##   - grinding decays much harder: farming a cleared zone's tier-3 fight costs 7.2
+##     fights for the first level of the next band and 16.8 by +5 levels, i.e. 2.3x to
+##     5.3x the 3.2 fights-per-level a player who moves on is paying.
+##
+## ROUNDING: nearest 5 under 1,000, nearest 50 under 10,000, nearest 500 under 100,000,
+## nearest 1,000 above. The rounding residual (-350) is absorbed as seven -50 nudges in
+## the 1,000-10,000 band, so every entry is a round number, the table is strictly
+## monotone, and level 50 lands on 2,160,000 exactly.
 ##
 ## The right-hand comment on each row is the XP required to leave that level (the
 ## first difference), which is the number the player actually experiences as "one
@@ -59,17 +73,22 @@ static func attribute_points_for_level(level: int) -> int:
 ## changes the two spans either side of it.
 const CUTOFFS := [
 	0,                                                    # [0] unused
-	# level:      1     2     3     4     5     6     7      8      9
-	0, 100, 210, 335, 475, 635, 810, 1010, 1230,          # steps 100 110 125 140 160 175 200 220 250
-	# level:     10    11    12    13    14    15    16    17    18    19
-	1480, 1760, 2070, 2420, 2810, 3250, 3740, 4290, 4905, 5595,   # steps 280 310 350 390 440 490 550 615 690 770
-	# level:     20    21    22    23     24     25     26     27     28     29
-	6365, 7230, 8200, 9300, 10500, 11850, 13400, 15100, 17000, 19150,   # steps 865 970 1100 1200 1350 1550 1700 1900 2150 2400
-	# level:      30     31     32     33     34     35     36     37     38     39
-	21550, 24250, 27250, 30650, 34450, 38700, 43450, 48750, 54700, 61400,   # steps 2700 3000 3400 3800 4250 4750 5300 5950 6700 7500
-	# level:      40     41     42     43     44      45      46      47      48      49
-	68900, 77300, 86700, 97200, 109000, 122200, 137000, 153600, 172100, 192800,  # steps 8400 9400 10500 11800 13200 14800 16600 18500 20700 23200
-	216000,                                               # level 50 (max)
+	# level:        1      2      3      4      5      6      7      8      9
+	0, 100, 220, 360, 525, 720, 955, 1230, 1555,
+	# steps        100    120    140    165    195    235    275    325    385
+	# level:       10     11     12     13     14     15     16     17     18     19
+	1940, 2400, 2945, 3590, 4350, 5250, 6300, 7550, 9050, 10800,
+	# steps        460    545    645    760    900   1050   1250   1500   1750   2100
+	# level:       20     21     22     23     24     25     26     27     28     29
+	12900, 15350, 18250, 21700, 25800, 30650, 36450, 43300, 51400, 61000,
+	# steps       2450   2900   3450   4100   4850   5800   6850   8100   9600  11500
+	# level:       30     31     32     33     34     35     36     37     38     39
+	72500, 86000, 102000, 121000, 143500, 170000, 201500, 239000, 283000, 335500,
+	# steps      13500  16000  19000  22500  26500  31500  37500  44000  52500  62000
+	# level:       40     41     42     43     44     45     46     47     48     49
+	397500, 471000, 558000, 661000, 783000, 927000, 1098000, 1300000, 1540000, 1824000,
+	# steps      73500  87000 103000 122000 144000 171000 202000 240000 284000 336000
+	2160000,                                              # level 50 (max)
 ]
 
 

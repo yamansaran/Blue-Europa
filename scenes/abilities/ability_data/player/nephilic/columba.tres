@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bbsiadrcmptrf"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"columba"
+display_name = "Epiphany"
+description = "For 3 turns your other buffs stop ticking down, and you deal +8% damage for each buff on you."
+max_points = 5
+max_equipped = 1
+kind = 1
+target = 2
+cooldown = 8
+applies_buff = &"epiphany"
+description_ranks = Array[String](["For 3 turns your other buffs stop ticking down, and you deal +8% damage for each buff on you.", "For 3 turns your other buffs stop ticking down, and you deal +10% damage for each buff on you.", "For 3 turns your other buffs stop ticking down, and you deal +12% damage for each buff on you.", "For 4 turns your other buffs stop ticking down, and you deal +14% damage for each buff on you.", "For 4 turns your other buffs stop ticking down, and you deal +16% damage for each buff on you."])
+required_level = 1

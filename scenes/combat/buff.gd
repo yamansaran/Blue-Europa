@@ -65,6 +65,12 @@ static func _default_per_stack() -> Dictionary:
 		"dot": 0.0,                 # damage-over-time per turn (per stack)
 		"dot_element": "physical",  # element the DoT is dealt as
 		"dot_mult": 1.0,            # flat DoT multiplier (future buffs tune this)
+		"dot_pierce": 0.0,          # pierce of `dot_element` this DoT carries into the
+									#   mitigation step. A DoT has NO ATTACKER, so this
+									#   is its only penetration — nobody's Vigor is
+									#   behind a burning wound. Read as `extra_pierce`
+									#   by CombatMath.resolve_flat. The Screaming
+									#   Corpse's Tinnitus is the user.
 		"dot_pct_per_turn": 0.0,    # DoT per turn as a FRACTION of the bearer's current
 									#   max HP (0.05 = 5%); read LIVE each turn against
 									#   max_hp() and ADDED to the flat `dot`. The exact
@@ -141,6 +147,23 @@ static func make(config: Dictionary) -> Dictionary:
 	var raw_overflow = config.get("overflow_shield", {})
 	if typeof(raw_overflow) == TYPE_DICTIONARY:
 		overflow_shield = (raw_overflow as Dictionary).duplicate(true)
+
+	# ESCAPE CHECK: { (opt) "stats": { stat_key: weight }, (opt) "bias": float }.
+	# A debuff carrying one is BROKEN OUT OF rather than waited out: at the start of
+	# each of the bearer's turns it rolls CombatResist.escape_chance and, on a
+	# success, the instance is removed. Deep-copied; {} = an ordinary debuff. Netted.
+	var escape_check := {}
+	var raw_escape = config.get("escape_check", {})
+	if typeof(raw_escape) == TYPE_DICTIONARY:
+		escape_check = (raw_escape as Dictionary).duplicate(true)
+
+	# EXPIRE-APPLY: [ { "buff": "<id>", (opt) "duration": int }, … ]. When this entry
+	# EXPIRES NATURALLY, each named buff is built and applied to the same bearer —
+	# "this buff becomes that debuff" (Amphetamines -> Crash). Deep-copied; [] = none.
+	var expire_apply: Array = []
+	var raw_expire_apply = config.get("expire_apply", [])
+	if typeof(raw_expire_apply) == TYPE_ARRAY:
+		expire_apply = (raw_expire_apply as Array).duplicate(true)
 
 	# STACKING IS THE DEFAULT, AND EACH STACK IS AN INDEPENDENT INSTANCE.
 	# `stackable` defaults TRUE; an effect that must stay single-instance opts out with
@@ -225,6 +248,40 @@ static func make(config: Dictionary) -> Dictionary:
 		# is applied by CombatBuffs.apply_incoming_ice_amp at read time). 0.0 = inert.
 		"ice_amp_per_stack": float(config.get("ice_amp_per_stack", 0.0)),
 		"expire_effect": str(config.get("expire_effect", "")),
+		"expire_apply": expire_apply,
+		"escape_check": escape_check,
+		# --- BREAK ON DAMAGE / ON SHIELD LOSS (the shield officer) -------------
+		# `breaks_on_health_damage`: lost the moment the BEARER loses ACTUAL HEALTH.
+		# Checked in BattleCharacter.take_damage AFTER the shield branch has
+		# returned, and THE PLACEMENT IS THE MECHANIC: test it before the shield
+		# check and a shielded officer loses the buff to a hit that never touched
+		# him, which inverts the design.
+		"breaks_on_health_damage": bool(config.get("breaks_on_health_damage", false)),
+		# `breaks_when_caster_damaged`: the same, anchored to whoever CAST it —
+		# Protected sits on the ALLY and breaks when the officer shielding them takes
+		# health damage, which is how "hit the shield man to free his friend" works
+		# without a two-way link. CombatBuffs.try_apply stamps `caster_uid` when this
+		# is set, and only then: an entry holds a NUMBER, never a reference to a
+		# unit, so an instance stays as disconnected from its caster as every other.
+		# A self-application (applies_buff_self, permanent_buffs, a passive's
+		# passive_buff) goes through apply() with no caster and so never breaks.
+		"breaks_when_caster_damaged": bool(config.get("breaks_when_caster_damaged", false)),
+		# `expire_on_shield_break`: lost the moment the bearer's absorb pool empties,
+		# whether a hit drained the last of it or turn-boundary decay finished it.
+		"expire_on_shield_break": bool(config.get("expire_on_shield_break", false)),
+		# --- RAMP: a magnitude that decays or grows every turn ----------------
+		# ADDED to the entry's ramp level at each of the bearer's turn starts, and
+		# the whole numeric payload is rebuilt at that level (Buff.set_ramp). Linear,
+		# relative to the strength the entry LANDED at — Disdain empowerment
+		# included — so -0.15 runs 1.00, 0.85, 0.70, ... and +0.20 runs 1.0, 1.2,
+		# 1.4. Floored at 0. Amphetamines decays; Crash grows. 0.0 = static.
+		#
+		# DELIBERATELY NOT `potency_applied`. That field records what the CASTER'S
+		# DISDAIN did, and CombatResist.is_empowered() paints the gold "empowered"
+		# marker whenever it exceeds 1.0 — so a Crash ramping upward through it would
+		# falsely claim a caster empowered it. The ramp keeps its own level.
+		"potency_per_turn": float(config.get("potency_per_turn", 0.0)),
+		"ramp": 1.0,
 		"on_struck": on_struck,
 		"on_hit_apply": on_hit_apply,
 		"on_hit_damage": on_hit_damage,
@@ -236,6 +293,7 @@ static func make(config: Dictionary) -> Dictionary:
 		"dot": 0.0,
 		"dot_element": str(per_stack["dot_element"]),
 		"dot_mult": float(per_stack["dot_mult"]),
+		"dot_pierce": float(per_stack["dot_pierce"]),
 		"dot_pct_per_turn": 0.0,
 		"spirit_per_turn": 0.0,
 		"heal_per_turn": 0.0,
@@ -243,6 +301,15 @@ static func make(config: Dictionary) -> Dictionary:
 		"resist_mult": 0.0,
 		"resist_mult_by_element": {},
 	}
+	# CUSTOM FIELDS PASS THROUGH (Nephilic kit, 2026-09-24). Any config key make()
+	# does not know is copied onto the entry as-is, so a new hook can hang its data
+	# on an entry (struck_charges, freeze_buffs, redirect_pct, hp_cost_pct_per_turn,
+	# crash_free ...) without a new line here. Readers use entry.get(key, default).
+	for k in config.keys():
+		if k == "per_stack" or entry.has(k) or per_stack.has(k):
+			continue
+		var v = config[k]
+		entry[k] = v.duplicate(true) if (v is Dictionary or v is Array) else v
 	recompute_scaled(entry)
 	return entry
 
@@ -268,6 +335,11 @@ static func recompute_scaled(entry: Dictionary) -> void:
 	entry["dot"] = float(per_stack.get("dot", 0.0)) * s
 	entry["dot_element"] = str(per_stack.get("dot_element", "physical"))
 	entry["dot_mult"] = float(per_stack.get("dot_mult", 1.0))
+	# A STRAIGHT COPY, like dot_mult beside it: NOT multiplied by `stacks` and NOT in
+	# POTENCY_SCALAR_KEYS, so neither Disdain nor a ramp moves it. Pierce sits inside
+	# the mitigation squash, where doubling it is worth far more than doubling damage
+	# — it is a penetration term, not a magnitude, and it should not inflate.
+	entry["dot_pierce"] = float(per_stack.get("dot_pierce", 0.0))
 	entry["dot_pct_per_turn"] = float(per_stack.get("dot_pct_per_turn", 0.0)) * s
 	entry["spirit_per_turn"] = float(per_stack.get("spirit_per_turn", 0.0)) * s
 	entry["heal_per_turn"] = float(per_stack.get("heal_per_turn", 0.0)) * s
@@ -469,12 +541,81 @@ static func dot_damage(entry: Dictionary) -> int:
 	var raw := float(entry.get("dot", 0.0)) * float(entry.get("dot_mult", 1.0))
 	return int(round(maxf(0.0, raw)))
 
+## Pierce of its own dot_element that this entry's DoT carries (0.0 = none). Handed
+## to CombatMath.resolve_flat as `extra_pierce` when the tick is mitigated.
+static func dot_pierce(entry: Dictionary) -> float:
+	return maxf(0.0, float(entry.get("dot_pierce", 0.0)))
+
 ## The HP this entry restores THIS turn (already stack-scaled), as an int. Mirrors
 ## dot_damage but for the heal-over-turn field. The amount is snapshotted into
 ## heal_per_turn when the buff is built (e.g. Scaled Skin bakes 30/40/50% of the
 ## target's Instinct at cast), so this is a plain readout of that stored value.
 static func heal_amount(entry: Dictionary) -> int:
 	return int(round(maxf(0.0, float(entry.get("heal_per_turn", 0.0)))))
+
+## This entry's escape spec ({} when it has none). See the escape_check comment in make().
+static func escape_check(entry: Dictionary) -> Dictionary:
+	var r = entry.get("escape_check", {})
+	return r if typeof(r) == TYPE_DICTIONARY else {}
+
+## True when this entry is broken out of rather than waited out (Netted).
+static func has_escape_check(entry: Dictionary) -> bool:
+	return not escape_check(entry).is_empty()
+
+## The list of buffs this entry turns into when it expires naturally ([] when none).
+static func expire_apply(entry: Dictionary) -> Array:
+	var r = entry.get("expire_apply", [])
+	return r if typeof(r) == TYPE_ARRAY else []
+
+## How much this entry's ramp level moves per turn (0.0 = a static entry).
+static func potency_per_turn(entry: Dictionary) -> float:
+	return float(entry.get("potency_per_turn", 0.0))
+
+## The entry's current ramp level: 1.0 = the strength it landed at.
+static func ramp(entry: Dictionary) -> float:
+	return float(entry.get("ramp", 1.0))
+
+## SET the entry's ramp level to `k` and rebuild its whole numeric payload at that
+## level. The first call SNAPSHOTS the as-landed payload into `ramp_base` (after any
+## Disdain scaling, so empowerment survives the ramp), and every call rebuilds from
+## that snapshot rather than rescaling the previous result.
+##
+## Rebuilding from a snapshot, rather than multiplying in place by new/old, is what
+## makes this safe: no rounding drift across a long fight, and NO ZERO TRAP — a ramp
+## that reaches 0 can climb back, which an in-place ratio could never do once every
+## magnitude had been multiplied to nothing.
+##
+## Scales exactly what Disdain scales (Buff.scale_potency's keys, plus the top-level
+## hoarfrost amp), then refreshes the live mirrors. `k` is floored at 0.
+static func set_ramp(entry: Dictionary, k: float) -> void:
+	if entry.is_empty():
+		return
+	k = maxf(0.0, k)
+	if not entry.has("ramp_base"):
+		entry["ramp_base"] = {
+			"per_stack": (entry.get("per_stack", _default_per_stack()) as Dictionary).duplicate(true),
+			"ice_amp_per_stack": float(entry.get("ice_amp_per_stack", 0.0)),
+		}
+	var base: Dictionary = entry["ramp_base"]
+	entry["per_stack"] = (base["per_stack"] as Dictionary).duplicate(true)
+	entry["ice_amp_per_stack"] = float(base["ice_amp_per_stack"])
+	entry["ramp"] = k
+	if is_equal_approx(k, 1.0):
+		recompute_scaled(entry)
+	else:
+		scale_potency(entry, k)     # multiplies the FRESH copy, then recomputes
+
+## True when this entry is lost as soon as its BEARER takes health damage.
+static func breaks_on_health_damage(entry: Dictionary) -> bool:
+	return bool(entry.get("breaks_on_health_damage", false))
+
+## True when this entry is lost as soon as its CASTER takes health damage.
+static func breaks_when_caster_damaged(entry: Dictionary) -> bool:
+	return bool(entry.get("breaks_when_caster_damaged", false))
+
+## True when this entry is lost as soon as the bearer's shield pool empties.
+static func expire_on_shield_break(entry: Dictionary) -> bool:
+	return bool(entry.get("expire_on_shield_break", false))
 
 ## The basket name an entry belongs in, from its kind.
 static func basket_for(entry: Dictionary) -> String:

@@ -55,6 +55,21 @@ class_name CharacterBase
 ## Which AI routine drives this character in combat ("none" = passes its turn).
 ## Set by a character module (or a spec's "ai" key); combat reads it off the body.
 @export var ai: String = "none"
+## NORMAL / MINIBOSS / BOSS (Stats.UnitRank). Minibosses and bosses get a big bar in
+## the combat top panel; everyone else only carries overhead bars. Spec key "rank"
+## ("boss" / "miniboss" / "normal" or the int).
+@export var unit_rank: int = Stats.UnitRank.NORMAL
+## A LONG-TERM ally (the Mercenary, the Scientist…) rather than a one-fight helper like
+## c1's hunters. Companions have their damage recorded in the save. Spec key "companion".
+@export var companion: bool = false
+## HAS A BUILT-IN REVIVE MECHANIC (dev rule, 2026-09-25). The turn timeline REMOVES a dead
+## enemy's row (and adds it back if it is ever revived) but only GREYS a dead ally's /
+## the player's. Set this on an ENEMY module that can come back on its own, so its row
+## greys like an ally's instead of vanishing. No effect on the player side.
+@export var revives: bool = false
+## Stats.Figure identity for the AI restraint signals. Spec key "figure"
+## ("male" / "female" / "child" / "none" or the int).
+@export var figure: int = Stats.Figure.NONE
 ## Visual size multiplier for the on-screen model (bosses are drawn bigger). Set
 ## by a character module (or a spec's "size_scale" key); read by the combat engine.
 @export var size_scale: float = 1.0
@@ -66,6 +81,22 @@ class_name CharacterBase
 ## These are still combat-only buffs — the list is just the character's recipe for
 ## which ones to grant itself. Give a permanent buff duration -1 so it never
 ## counts down.
+## --- PER-ENEMY BOUNTY (GODTHAAB §1.19) --------------------------------------
+## What killing THIS creature is worth, in money and xp. Spec keys "money" / "xp".
+##
+## WHY IT EXISTS. Loot has always been PER FIGHT (CAMPAIGN_PRIMER §4), which was
+## merely inelegant while every fight held the same creature repeated — and became
+## actually WRONG at c2b, the first zone with genuinely mixed compositions: six
+## shambling corpses and a miniboss-plus-escort cannot pay out by one rule.
+##
+## OPT-IN, AND BACKWARDS COMPATIBLE. 0 means "this creature declares nothing", and a
+## fight in which NO enemy declares a bounty falls back to its loot_table exactly as
+## before — so every zone-one fight is untouched. The moment ONE enemy declares one,
+## the fight's money and xp become the SUM over its enemies. Items are unaffected and
+## are still rolled from the fight's table either way.
+@export var bounty_money: int = 0
+@export var bounty_xp: int = 0
+
 @export var permanent_buffs: Array = []
 
 # --- ability loadout --------------------------------------------------------
@@ -188,8 +219,11 @@ func effective_stats() -> Dictionary:
 # ============================================================================
 # Derived vitals
 # ============================================================================
+## `max_hp_pct` (Nephilic Stature, 2026-09-24): a bonus-only key (no base stat) —
+## +0.10 = +10% max HP on top of hp_base + vitality.
 func max_hp() -> int:
-	return int(round(get_effective("hp_base") + get_effective("vitality") * Stats.HP_PER_VITALITY))
+	return int(round((get_effective("hp_base") + get_effective("vitality") * Stats.HP_PER_VITALITY) \
+		* (1.0 + get_bonus("max_hp_pct"))))
 
 func max_spirit() -> int:
 	return int(round(get_effective("spirit")))
@@ -272,7 +306,12 @@ func clone() -> CharacterBase:
 	cb.portrait = portrait
 	cb.color_override = color_override
 	cb.ai = ai
+	cb.unit_rank = unit_rank
+	cb.companion = companion
+	cb.figure = figure
 	cb.size_scale = size_scale
+	cb.bounty_money = bounty_money
+	cb.bounty_xp = bounty_xp
 	cb.permanent_buffs = permanent_buffs.duplicate()
 	cb.abilities = abilities.duplicate()
 	cb.ability_ranks = ability_ranks.duplicate(true)
@@ -322,6 +361,12 @@ static func apply_spec_overrides(cb: CharacterBase, spec: Dictionary) -> void:
 		cb.ai = str(spec["ai"])
 	if spec.has("size_scale"):
 		cb.size_scale = float(spec["size_scale"])
+	if spec.has("rank"):
+		cb.unit_rank = _parse_rank(spec["rank"])
+	if spec.has("companion"):
+		cb.companion = bool(spec["companion"])
+	if spec.has("figure"):
+		cb.figure = _parse_figure(spec["figure"])
 
 	var overrides = spec.get("stats", {})
 	if typeof(overrides) == TYPE_DICTIONARY:
@@ -337,6 +382,13 @@ static func apply_spec_overrides(cb: CharacterBase, spec: Dictionary) -> void:
 
 	if spec.has("color") and spec["color"] is Color:
 		cb.color_override = spec["color"]
+
+	# A fight may override what a creature is worth, the same way it overrides any
+	# other number — a tougher variant should pay more.
+	if spec.has("money"):
+		cb.bounty_money = int(spec["money"])
+	if spec.has("xp"):
+		cb.bounty_xp = int(spec["xp"])
 
 	if spec.has("permanent_buffs") and typeof(spec["permanent_buffs"]) == TYPE_ARRAY:
 		var pb := []
@@ -361,6 +413,23 @@ static func apply_spec_overrides(cb: CharacterBase, spec: Dictionary) -> void:
 	cb.init_vitals()
 	if spec.has("current_hp"):
 		cb.current_hp = clampi(int(spec["current_hp"]), 0, cb.max_hp())
+
+static func _parse_rank(v) -> int:
+	if typeof(v) == TYPE_INT:
+		return v
+	match str(v).to_lower():
+		"boss": return Stats.UnitRank.BOSS
+		"miniboss", "mini_boss", "mini": return Stats.UnitRank.MINIBOSS
+		_: return Stats.UnitRank.NORMAL
+
+static func _parse_figure(v) -> int:
+	if typeof(v) == TYPE_INT:
+		return v
+	match str(v).to_lower():
+		"male", "man": return Stats.Figure.MALE
+		"female", "woman": return Stats.Figure.FEMALE
+		"child": return Stats.Figure.CHILD
+		_: return Stats.Figure.NONE
 
 static func _parse_type(v) -> int:
 	if typeof(v) == TYPE_INT:

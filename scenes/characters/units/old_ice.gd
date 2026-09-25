@@ -32,8 +32,12 @@ func _init() -> void:
 	color_override = Color(0.62, 0.66, 0.58)
 	size_scale = 1.15
 
-	base_stats["vitality"] = 3.0        # BEFORE set_max_hp
-	set_max_hp(58)                      # => hp_base 28
+	# VITALITY 15 WITH A NEGATIVE hp_base (dev call 2026-09-25). Poison scales on the
+	# applier's Vitality (50%), and `infected` folded into poison — so Vitality is what
+	# keeps this creature's poison at its old bite (was 53% of Instinct 14 = 7.4 raw a
+	# tick; now 50% of 15 = 7.5). HP is unchanged: set_max_hp back-solves hp_base.
+	base_stats["vitality"] = 15.0       # BEFORE set_max_hp
+	set_max_hp(58)                      # => hp_base -92 (negative on purpose)
 	base_stats["vigor"] = 14.0
 	base_stats["instinct"] = 14.0
 	base_stats["alacrity"] = 8.0

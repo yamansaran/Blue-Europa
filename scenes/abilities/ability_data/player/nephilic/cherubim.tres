@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bqk6h25d5wi0i"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"cherubim"
+display_name = "Inhale"
+description = "Gain 20 spirit now, then 10 spirit at the start of each turn for 4 turns."
+max_points = 2
+max_equipped = 2
+kind = 1
+target = 2
+cooldown = 6
+applies_buff = &"inhale"
+description_ranks = Array[String](["Gain 20 spirit now, then 10 spirit at the start of each turn for 4 turns.", "Gain 25 spirit now, then 10 spirit at the start of each turn for 5 turns."])
+required_level = 1
+spirit_gain_ranks = Array[int]([20, 25])

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://b2szlxeihijdf"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"ananel"
+display_name = "Poise"
+description = "Passive. Debuffs on you last 1 fewer turn (minimum 1)."
+max_points = 2
+max_equipped = 1
+kind = 4
+target = 2
+description_ranks = Array[String](["Passive. Debuffs on you last 1 fewer turn (minimum 1).", "Passive. Debuffs on you last 2 fewer turns (minimum 1)."])
+perk = &"poise"
+perk_ranks = Array[Dictionary]([{"turns": 1}, {"turns": 2}])
+required_level = 1

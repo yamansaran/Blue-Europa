@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bbnv6bvqlb0eg"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"nimbus"
+display_name = "Nimbus"
+description = "Passive. Every third Crash strikes a second time at 50%. During Apotheosis every Crash strikes twice, and Apotheosis lasts 1 turn longer."
+max_points = 1
+max_equipped = 1
+kind = 4
+target = 2
+perk = &"nimbus"
+perk_ranks = Array[Dictionary]([{"on": 1}])
+required_level = 1

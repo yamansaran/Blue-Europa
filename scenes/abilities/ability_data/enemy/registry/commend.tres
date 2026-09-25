@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://c2b16928a1256"]
+
+[ext_resource type="Script" uid="uid://bv17ragtmdoxb" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"commend"
+display_name = "Commend"
+description = "A name written down approvingly. The man it belongs to stands straighter."
+max_points = 1
+max_equipped = 1
+action_cost = 1.0
+kind = 1
+delivery = 0
+target = 1
+element = 0
+cost_type = 0
+cost_amount = 0
+cooldown = 3
+base_power = 0.0
+scaling_mult = 0.0
+applies_buff = &"commended"

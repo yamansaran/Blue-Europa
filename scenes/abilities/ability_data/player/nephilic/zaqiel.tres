@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bcbo4ilxcriva"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"zaqiel"
+display_name = "Brawn"
+description = "Always active. Gain Vitality equal to 15% of your Vigor."
+max_points = 3
+kind = 4
+target = 2
+always_active = true
+description_ranks = Array[String](["Always active. Gain Vitality equal to 15% of your Vigor.", "Always active. Gain Vitality equal to 20% of your Vigor.", "Always active. Gain Vitality equal to 25% of your Vigor."])
+passive_scale_ranks = Array[Dictionary]([{"vitality": {"vigor": 0.15}}, {"vitality": {"vigor": 0.2}}, {"vitality": {"vigor": 0.25}}])
+required_level = 1

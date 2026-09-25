@@ -20,14 +20,12 @@ func _ready() -> void:
 	options_btn.pressed.connect(func(): load_content(GameManager.SCENE_OPTIONS))
 	achievements_btn.pressed.connect(func(): load_content(GameManager.SCENE_ACHIEVEMENTS))
 	save_btn.pressed.connect(_on_save_pressed)
+	world_map_btn.pressed.connect(_on_world_map_pressed)
 	# --- debug-only toolbar bits (GameManager.debug_enabled) ---
-	# The Creation Studio button and the World Map (campaign-jump) button are debug
-	# features: with the flag off they are never built / never shown.
-	if _debug_on():
-		_add_studio_button()
-		world_map_btn.pressed.connect(_on_world_map_pressed)
-	else:
-		world_map_btn.visible = false
+	# The "CS" Creation Studio button (over Inventory), the "RST" reset button (over
+	# Save) and the World Map (campaign-jump) button. Rebuilt live when Options
+	# toggles debug mode.
+	refresh_debug()
 	# Boot into a requested content panel (e.g. the victory screen) if one was
 	# staged; otherwise into the CURRENT campaign's overworld (via GameManager,
 	# which also resolves any pending linear campaign advance).
@@ -83,47 +81,75 @@ func _debug_on() -> bool:
 		and GameManager.is_debug()
 
 
-## The Save button has TWO behaviours, picked by the debug flag:
-##   debug ON  — DEBUG (temporary): wipe the save and start a fresh level-1
-##               character. Character.reset_to_defaults() resets every field to its
-##               new-game value and overwrites user://character.save.
-##   debug OFF — the normal thing: persist the current character (save_game()).
+## Build or remove the debug-only toolbar bits to match GameManager.is_debug(). Safe to
+## call any number of times (Options' debug toggle calls it through GameManager).
+func refresh_debug() -> void:
+	var on := _debug_on()
+	world_map_btn.visible = on
+	for n in [_studio_btn, _reset_btn]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	_studio_btn = null
+	_reset_btn = null
+	if on:
+		_studio_btn = _add_corner_button(inventory_btn, "CS", "Open Creation Studio (debug)", _open_creation_studio)
+		_reset_btn = _add_corner_button(save_btn, "RST", "Reset this save to a fresh Level 1 (debug)", _on_reset_pressed)
+
+var _studio_btn: Button = null
+var _reset_btn: Button = null
+var _reset_confirm: ConfirmationDialog = null
+
+## SAVE — always a real save now (the debug reset moved to its own "RST" button).
 func _on_save_pressed() -> void:
-	if typeof(Character) == TYPE_NIL:
+	if typeof(Character) == TYPE_NIL or not Character.has_method("save_game"):
 		return
-	if _debug_on():
-		if Character.has_method("reset_to_defaults"):
-			Character.reset_to_defaults()
-		if save_dialog:
-			save_dialog.dialog_text = "DEBUG: save cleared — reset to a fresh Level 1."
-			save_dialog.popup_centered()
-	else:
-		if Character.has_method("save_game"):
-			Character.save_game()
-		if save_dialog:
-			save_dialog.dialog_text = "Game saved."
-			save_dialog.popup_centered()
+	var has_slot := typeof(SaveSlots) == TYPE_NIL or SaveSlots.active_slot >= 0
+	Character.save_game()
+	if save_dialog:
+		save_dialog.dialog_text = "Game saved." if has_slot else "No save slot is active — nothing was written."
+		save_dialog.popup_centered()
+
+## DEBUG RESET ("RST" over Save): confirm, then Character.reset_to_defaults() — a fresh
+## level-1 character of the CURRENT class, saved over this slot.
+func _on_reset_pressed() -> void:
+	if not _debug_on():
+		return
+	if _reset_confirm == null or not is_instance_valid(_reset_confirm):
+		_reset_confirm = ConfirmationDialog.new()
+		_reset_confirm.title = "Debug Reset"
+		_reset_confirm.dialog_text = "Reset this save to a fresh Level 1 of the same class?\nThis overwrites the slot."
+		_reset_confirm.ok_button_text = "Reset"
+		_reset_confirm.confirmed.connect(_do_reset)
+		add_child(_reset_confirm)
+	_reset_confirm.popup_centered()
+
+func _do_reset() -> void:
+	if typeof(Character) != TYPE_NIL and Character.has_method("reset_to_defaults"):
+		Character.reset_to_defaults()
+	if save_dialog:
+		save_dialog.dialog_text = "DEBUG: save reset to a fresh Level 1."
+		save_dialog.popup_centered()
 
 func _on_world_map_pressed() -> void:
-	GameManager.go_to_campaign_map()
+	if _debug_on():
+		GameManager.go_to_campaign_map()
 
-## DEBUG (temporary): a small "CS" button overlaid on the top-left corner of the
-## Save button that opens the Creation Studio (the tool for authoring ability /
-## item .tres files). It's parented to the Save button, so it rides along wherever
-## the toolbar HBox positions it. The overlap is intentional and the Save button's
-## own size/position are left untouched.
-func _add_studio_button() -> void:
+## DEBUG: a small button overlaid on the top-left corner of a toolbar button ("CS" on
+## Inventory, "RST" on Save). Parented to that button so it rides along wherever the
+## toolbar HBox puts it; the host button's own size/position are untouched.
+func _add_corner_button(host: Button, label: String, tip: String, action: Callable) -> Button:
 	var b := Button.new()
-	b.text = "CS"
-	b.tooltip_text = "Open Creation Studio (debug)"
+	b.text = label
+	b.tooltip_text = tip
 	b.focus_mode = Control.FOCUS_NONE              # don't steal spacebar / keyboard focus
-	b.mouse_filter = Control.MOUSE_FILTER_STOP     # consume its own clicks so Save doesn't also fire
+	b.mouse_filter = Control.MOUSE_FILTER_STOP     # consume its own clicks so the host doesn't also fire
 	b.add_theme_font_size_override("font_size", 10)
-	b.pressed.connect(_open_creation_studio)
-	save_btn.add_child(b)
-	b.set_anchors_preset(Control.PRESET_TOP_LEFT)  # pin to the Save button's top-left corner
+	b.pressed.connect(action)
+	host.add_child(b)
+	b.set_anchors_preset(Control.PRESET_TOP_LEFT)  # pin to the host button's top-left corner
 	b.position = Vector2(2, 2)
-	b.size = Vector2(30, 18)
+	b.size = Vector2(34 if label.length() > 2 else 30, 18)
+	return b
 
 ## DEBUG: instance the Creation Studio window over the shell. It frees itself on
 ## close (see creation_studio.gd _on_close). Guarded so a second click is a no-op

@@ -32,8 +32,428 @@ static func _all_resist_mods(delta: float) -> Dictionary:
 	return mods
 
 ## Build a buff entry by id. Returns {} (empty) for an unknown / blank id.
+## THE SEVERITY PASS (AI_PRIMER §10.1 / §18 Phase 5). `magnitude` = HOW BIG an effect
+## is; `weight` = how much the AI should care beyond its size. Keyed by the ENTRY id
+## (the family — guard_1..4 all read "guard"). Applied by build() ONLY to an entry still
+## at the Buff.make default of 1.0, so an entry that authors its own magnitude inline
+## (frenzied, terrified, rejuvenating_salve, dark_blessing, gorged) keeps it.
+## Anchors: 0.5 small single-stat buff · 1.0 ordinary debuff / modest DoT · 2.0 strong
+## multi-turn package · 3.5 heavy resist / damage swing · 5.0 hard control.
+const SEVERITY := {
+	"resist_up_100":      {"magnitude": 3.5},
+	"spirit_regen_25":    {"magnitude": 1.5},
+	"resist_down_drain":  {"magnitude": 2.5},
+	"thorns":             {"magnitude": 1.2},
+	"thorns_permanent":   {"magnitude": 1.0},
+	"frost_ward":         {"magnitude": 1.0},
+	"frost_mantle":       {"magnitude": 1.0},
+	"guard":              {"magnitude": 3.5},
+	"scaled_skin":        {"magnitude": 2.0},
+	"hematopoiesis":      {"magnitude": 1.5},
+	"crystaline":         {"magnitude": 2.0},
+	"gliogenesis":        {"magnitude": 1.0},
+	"sclerosis":          {"magnitude": 1.0},
+	"stunned":            {"magnitude": 5.0},
+	"hypothermia":        {"magnitude": 1.5},
+	"frost":              {"magnitude": 1.5},
+	"arc_burn":           {"magnitude": 1.0},
+	"electromyogenesis":  {"magnitude": 1.0},
+	"energized_form":     {"magnitude": 3.0},
+	"electrostimulated":  {"magnitude": 2.0},
+	"pass_current":       {"magnitude": 0.5},
+	"lightning_shell":    {"magnitude": 1.5},
+	"high_voltage":       {"magnitude": 1.5},
+	"rime_skin":          {"magnitude": 1.5},
+	"hoarfrost":          {"magnitude": 0.6, "weight": 2.5},   # a combo ENABLER: small, but chase it
+	"silenced":           {"magnitude": 5.0},
+	"wraith_form":        {"magnitude": 3.5},
+	"frostnip":           {"magnitude": 1.0},
+	# --- c2b GODTHAAB -------------------------------------------------------
+	"punished":           {"magnitude": 1.0},
+	"bruised":            {"magnitude": 1.0},
+	"on_fire":            {"magnitude": 2.0},
+	"bleeding":           {"magnitude": 1.0},
+	"hyperacusis":        {"magnitude": 1.0},
+	"tinnitus":           {"magnitude": 1.0},
+	"stripped":           {"magnitude": 1.0},
+	"cauterized":         {"magnitude": 2.0},
+	"netted":             {"magnitude": 5.0},
+	"gut_stunned":        {"magnitude": 5.0},
+	"neuromuscular":      {"magnitude": 2.0},
+	"kneecapped":         {"magnitude": 1.0},
+	"smokescreen":        {"magnitude": 2.0},
+	"ordered":            {"magnitude": 2.0},
+	"commended":          {"magnitude": 1.0},
+	"oversight":          {"magnitude": 3.5},
+	"on_guard":           {"magnitude": 1.0},
+	"work_order":         {"magnitude": 2.0},
+	"protected":          {"magnitude": 3.5},
+	"braced":             {"magnitude": 3.5},
+	"amphetamined":       {"magnitude": 2.0},
+	"crash":              {"magnitude": 2.0},
+	# --- THE NEPHILIC (2026-09-24) ----------------------------------------
+	"poison":             {"magnitude": 1.0},
+	"stand_firm":         {"magnitude": 3.0},
+	"stand_firm_lead":    {"magnitude": 0.3},
+	"tithe":              {"magnitude": 2.0},
+	"inhale":             {"magnitude": 1.0},
+	"wormwood":           {"magnitude": 1.5},
+	"waxing_moon":        {"magnitude": 2.5},
+	"silver_mirror":      {"magnitude": 3.0},
+	"epiphany":           {"magnitude": 3.0},
+	"ablution_ward":      {"magnitude": 1.5},
+	"intercede":          {"magnitude": 3.0},
+	"putrefaction":       {"magnitude": 2.0},
+	"putrefaction_cost":  {"magnitude": 1.0},
+	"first_sun":          {"magnitude": 3.5},
+	"apotheosis":         {"magnitude": 3.0},
+	"rejuvenation":       {"magnitude": 1.0},
+	"heavy_hand":         {"magnitude": 0.5},
+	"grit_ward":          {"magnitude": 1.5},
+	"hone":               {"magnitude": 0.5},
+}
+
+## Build a buff entry by id WITHOUT applying it (the AI relies on that — keep build
+## side-effect free). Every id resolves through _build_entry, then the severity pass.
 static func build(id: String, caster: CharacterBase = null, target: CharacterBase = null) -> Dictionary:
+	var entry := _build_entry(id, caster, target)
+	if entry.is_empty():
+		return entry
+	var sev = SEVERITY.get(str(entry.get("id", "")), null)
+	if typeof(sev) == TYPE_DICTIONARY and is_equal_approx(float(entry.get("magnitude", 1.0)), 1.0):
+		entry["magnitude"] = float(sev.get("magnitude", 1.0))
+		if sev.has("weight") and is_equal_approx(float(entry.get("weight", 1.0)), 1.0):
+			entry["weight"] = float(sev["weight"])
+	return entry
+
+static func _build_entry(id: String, caster: CharacterBase = null, target: CharacterBase = null) -> Dictionary:
+	var neph := _build_nephilic(id, caster)
+	if not neph.is_empty():
+		return neph
 	match id:
+		# ====================================================================
+		# c2b · GODTHAAB
+		# ====================================================================
+		# >> EVERY MAGNITUDE IN THIS BLOCK IS A PLACEHOLDER (GODTHAAB_BUILD §2.7).
+		#    Percentages, DURATIONS and CHANCES are authored — they carry identity
+		#    and the ladder depends on them. Every stat figure, DoT value and health
+		#    number is provisional and marked `# TUNE`, and is waiting on the two
+		#    reference builds §2.7 asks for. Do not treat any `# TUNE` number as
+		#    balanced; do not quote one as if it were.
+
+		# --- THE WHARF ------------------------------------------------------
+		# PUNISHED and BRUISED are the two halves of the damage formula stated as
+		# debuffs, which is the whole reason the Stevedore that applies them is a
+		# plaguebearer and not a hexer: they are only frightening stacked on ONE
+		# victim, and a hexer spreading them would dilute the very lesson.
+		"punished":
+			return Buff.make({
+				"id": "punished", "source": "Punished",
+				"desc_template": "Punished: deals {modpctabs:damage_dealt_mult}% less damage ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": true,                    # INDEPENDENT INSTANCES, no cap
+				"element": "physical",
+				"potency_scale": 0.8, "duration_scale": 0.6,
+				"mods": {"damage_dealt_mult": -0.12},   # TUNE
+			})
+
+		"bruised":
+			return Buff.make({
+				"id": "bruised", "source": "Bruised",
+				"desc_template": "Bruised: takes {modpct:damage_taken_mult}% more damage ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": true,
+				"element": "physical",
+				"potency_scale": 0.8, "duration_scale": 0.6,
+				"mods": {"damage_taken_mult": 0.12},    # TUNE
+			})
+
+		# The Wharfinger's order: the first enemy in the game that makes ANOTHER
+		# enemy better. Not stacking — one order at a time is the point of it.
+		"work_order":
+			return Buff.make({
+				"id": "work_order", "source": "Work Order",
+				"desc_template": "Work Order: deals {modpct:damage_dealt_mult}% more damage ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 3,
+				"stackable": false,
+				"mods": {"damage_dealt_mult": 0.25},    # TUNE
+			})
+
+		# --- THE REGISTRY ---------------------------------------------------
+		# ACCURACY IS FLAT PERCENTAGE POINTS OFF THE DODGE ROLL, and the base dodge
+		# at parity is 10 (CombatDodge.BASE). So +4 is a real edge and +10 would make
+		# the bearer effectively unmissable — read that header before retuning these.
+		"on_guard":
+			return Buff.make({
+				"id": "on_guard", "source": "On Guard",
+				"desc_template": "On Guard: +{mod:accuracy_bonus} accuracy ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 3,
+				"stackable": false,
+				"mods": {"accuracy_bonus": 4.0},        # TUNE
+			})
+
+		# The tanky guard's gift: it makes somebody ELSE unkillable.
+		"oversight":
+			return Buff.make({
+				"id": "oversight", "source": "Oversight",
+				"desc_template": "Oversight: takes {modpctabs:damage_taken_mult}% less damage ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 2,
+				"stackable": false,
+				"mods": {"damage_taken_mult": -0.35},   # TUNE
+			})
+
+		# The Registrar's commendation. RENAMED from the dev's "Vigilant" (GODTHAAB
+		# §0): the shield officer's pair needed that word, so the Registrar's became
+		# Commend. Ability id `commend`, entry id `commended`.
+		"commended":
+			return Buff.make({
+				"id": "commended", "source": "Commended",
+				"desc_template": "Commended: +{mod:vigor} Vigor, +{mod:alacrity} Alacrity ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 3,
+				"stackable": false,
+				"mods": {"vigor": 6.0, "alacrity": 4.0},   # TUNE
+			})
+
+		"kneecapped":
+			return Buff.make({
+				"id": "kneecapped", "source": "Kneecapped",
+				"desc_template": "Kneecapped: {mod:alacrity} Alacrity ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": false,
+				"element": "physical",
+				"potency_scale": 0.6, "duration_scale": 0.5,
+				"mods": {"alacrity": -12.0},            # TUNE
+			})
+
+		# --- THE CONSIGNMENT ------------------------------------------------
+		"bleeding":
+			return Buff.make({
+				"id": "bleeding", "source": "Bleeding",
+				"desc_template": "Bleeding: {dot} Physical damage at the start of each turn ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": true,
+				"element": "physical",
+				"potency_scale": 1.0, "duration_scale": 1.0,
+				"dot": 9.0, "dot_element": "physical",  # TUNE
+			})
+
+		# HYPERACUSIS — the Screaming Corpse's spreading damage. Stacks.
+		"hyperacusis":
+			return Buff.make({
+				"id": "hyperacusis", "source": "Hyperacusis",
+				"desc_template": "Hyperacusis: {mod:alacrity} Alacrity, {mod:accuracy_bonus} accuracy ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": true,
+				"element": "physical",
+				"potency_scale": 0.8, "duration_scale": 0.6,
+				"mods": {"alacrity": -5.0, "accuracy_bonus": -3.0},   # TUNE
+			})
+
+		# TINNITUS — a DoT that PIERCES, which is now an ordinary thing a buff can be
+		# (§1.7). 15 physical pierce is the Screaming Corpse's whole identity: it is
+		# the zone's answer to an armour build, and the pierce is on the EFFECT rather
+		# than on the body so it only applies to what the scream leaves behind.
+		#
+		# EIGHT TURNS IS LONGER THAN MOST FIGHTS IN THE ZONE, deliberately — but buffs
+		# die with the battle, so it cannot carry over. Confirm that is still wanted
+		# before tuning the number (GODTHAAB §2.3 flags it as a decision).
+		"tinnitus":
+			return Buff.make({
+				"id": "tinnitus", "source": "Tinnitus",
+				"desc_template": "Tinnitus: {dot} piercing Physical damage at the start of each turn ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 8,
+				"stackable": true,
+				"element": "physical",
+				"potency_scale": 1.0, "duration_scale": 0.5,
+				"dot": 7.0, "dot_element": "physical",  # TUNE
+				"dot_pierce": 15.0,                     # AUTHORED — the creature's identity
+			})
+
+		# --- THE BURNING GROUND ---------------------------------------------
+		# ON FIRE is NOT a damage debuff. It is a VULNERABILITY debuff with a burn
+		# attached — the first time an enemy turns the player's own damage_taken lever
+		# against them. Tune the multiplier before the DoT.
+		"on_fire":
+			return Buff.make({
+				"id": "on_fire", "source": "On Fire",
+				"desc_template": "On Fire: takes {modpct:damage_taken_mult}% more damage and burns for {dot} ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": true,
+				"element": "fire",
+				"potency_scale": 1.0, "duration_scale": 0.8,
+				"mods": {"damage_taken_mult": 0.15},    # TUNE
+				# UNIFIED ON FIRE (FUTURE_PLANS §1, built 2026-09-24): ONE entry for every
+				# applier — the DoT is 20% of the APPLIER's Vigor, snapshotted at landing.
+				# Replaces the flat 8. Duration comes from the application
+				# (Ability.applies_buff_duration); 3 is the fallback.
+				"dot": ON_FIRE_VIGOR * (maxf(0.0, caster.get_effective("vigor")) if caster != null else 0.0),   # TUNE
+				"dot_element": "fire",
+			})
+
+		# CAUTERIZED — explicitly NOT stacking (GODTHAAB §1.1). One of the three lines
+		# the burning trio squeezes: this is the healing one.
+		"cauterized":
+			return Buff.make({
+				"id": "cauterized", "source": "Cauterized",
+				"desc_template": "Cauterized: healing received cut by {modpctabs:healing_received_mult}% ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": false,
+				"element": "fire",
+				"potency_scale": 0.6, "duration_scale": 0.8,
+				"mods": {"healing_received_mult": -0.50},   # TUNE
+			})
+
+		# SMOKESCREEN — the accuracy line of the same squeeze. Sits on the VICTIM and
+		# cuts the accuracy of what it carries (see the note on on_guard above).
+		"smokescreen":
+			return Buff.make({
+				"id": "smokescreen", "source": "Smokescreen",
+				"desc_template": "Smokescreen: {mod:accuracy_bonus} accuracy ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 2,
+				"stackable": false,
+				"element": "fire",
+				"potency_scale": 0.6, "duration_scale": 0.6,
+				"mods": {"accuracy_bonus": -5.0},       # TUNE
+			})
+
+		# --- THE CORPS AND THE GATE -----------------------------------------
+		# GUT-STUNNED — Disembowel's stun, and NOT the shared `stunned` entry.
+		#
+		# WHY ITS OWN ID. `stunned` is Shatter's payoff and is deliberately
+		# `resistible: false`: the player already paid an ice debuff to consume, and
+		# whiffing after paying that would be miserable. Disembowel wants the exact
+		# opposite — §1.9's "inherent -25 Disdain", a stun that is HARDER to land than
+		# the caster's stat block says. Putting a resist_bias on the shared entry
+		# would silently change the player's own Shatter, so the enemy gets its own.
+		#
+		# resist_bias is added straight onto the target's resist chance
+		# (CombatResist.resist_chance), so +25 means 25 percentage points more likely
+		# to be shrugged off — at parity that is a 35% resist instead of 10%.
+		# potency/duration scale stay 0: hard control is never amplified by Disdain.
+		"gut_stunned":
+			return Buff.make({
+				"id": "gut_stunned", "source": "Stunned",
+				"desc": "Stunned: cannot act.",
+				"kind": Buff.KIND_DEBUFF, "duration": 1,      # AUTHORED
+				"stackable": false,
+				"element": "physical",
+				"stun": true,
+				"resistible": true,
+				"resist_bias": 25.0,                          # AUTHORED (§1.9)
+				"potency_scale": 0.0, "duration_scale": 0.0,
+			})
+
+
+		# BRACE — the first enemy that DEFENDS. A 65% cut for ONE turn means the
+		# player's biggest hit can simply be wasted, and WHEN you attack starts to
+		# matter. The 65% and the single turn are AUTHORED; they are the mechanic.
+		"braced":
+			return Buff.make({
+				"id": "braced", "source": "Braced",
+				"desc_template": "Braced: takes {modpctabs:damage_taken_mult}% less damage ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 1,
+				"stackable": false,
+				"mods": {"damage_taken_mult": -0.65},   # AUTHORED
+			})
+
+		"neuromuscular":
+			return Buff.make({
+				"id": "neuromuscular", "source": "Neuromuscular Block",
+				"desc_template": "Neuromuscular Block: {mod:alacrity} Alacrity, {mod:vigor} Vigor ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 2,
+				"stackable": false,
+				"element": "lightning",
+				"potency_scale": 0.8, "duration_scale": 0.5,
+				"mods": {"alacrity": -10.0, "vigor": -8.0},   # TUNE
+			})
+
+		"ordered":
+			return Buff.make({
+				"id": "ordered", "source": "Ordered",
+				"desc_template": "Ordered: +{modpct:damage_dealt_mult}% damage, +{mod:accuracy_bonus} accuracy ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 3,
+				"stackable": false,
+				"mods": {"damage_dealt_mult": 0.20, "accuracy_bonus": 3.0},   # TUNE
+			})
+
+		# STRIPPED — the officer's answer to a resistance build. Stacks.
+		"stripped":
+			return Buff.make({
+				"id": "stripped", "source": "Stripped",
+				"desc_template": "Stripped: all resistances reduced ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 3,
+				"stackable": true,
+				"element": "physical",
+				"potency_scale": 0.8, "duration_scale": 0.6,
+				# TUNE — every element, so the debuff answers any defensive profile.
+				"mods": {
+					"physical_defense": -12.0, "spiritual_defense": -12.0,
+					"ice_defense": -12.0, "fire_defense": -12.0,
+					"lightning_defense": -12.0, "blood_defense": -12.0,
+					"toxic_defense": -12.0, "mental_defense": -12.0,
+				},
+			})
+
+		# NETTED — no duration; ESCAPED rather than waited out (§1.10). The escape is
+		# rolled at the start of each of the bearer's own turns, through the SAME
+		# curve as the resist roll, against the Disdain of whoever threw the net.
+		# "magnificence and strength" — the stat vocabulary's name for strength is
+		# VIGOR — weighted so the score stays on one stat's scale.
+		#
+		# It rolls BEFORE the stun check, so breaking free means acting that turn.
+		"netted":
+			return Buff.make({
+				"id": "netted", "source": "Netted",
+				"desc": "Netted: cannot act. Struggle free at the start of each of your turns.",
+				"kind": Buff.KIND_DEBUFF, "duration": -1,     # AUTHORED: indefinite
+				"stackable": false,
+				"element": "physical",
+				"stun": true,
+				"escape_check": {"stats": {"magnificence": 0.5, "vigor": 0.5}},
+				"potency_scale": 0.0, "duration_scale": 0.0,  # hard control: never amplified
+			})
+
+		# PROTECTED — the CHEAP half of §1.14, and the whole shield-officer link.
+		# It sits on the ALLY and breaks the moment the officer who cast it takes
+		# ACTUAL HEALTH damage (not shield). There is no Covering self-buff and no
+		# two-way link: "hit the shield man to free his friend", in one field.
+		"protected":
+			return Buff.make({
+				"id": "protected", "source": "Protected",
+				"desc_template": "Protected: takes {modpctabs:damage_taken_mult}% less damage while the officer stands.",
+				"kind": Buff.KIND_BUFF, "duration": -1,       # ends with the officer, not a clock
+				"stackable": false,
+				"breaks_when_caster_damaged": true,
+				"mods": {"damage_taken_mult": -0.40},   # TUNE
+			})
+
+		# --- THE HARBOUR GATE -----------------------------------------------
+		# AMPHETAMINES -> CRASH: a buff that becomes its own debuff, and the first
+		# fight the player can win by SURVIVING. The ramp is what makes it legible —
+		# the chip's badge counts down 1.00, 0.85, 0.70 ... on three guards at once,
+		# and that visible clock IS the fight.
+		"amphetamined":
+			return Buff.make({
+				"id": "amphetamined", "source": "Amphetamines",
+				"desc_template": "Amphetamines: +{mod:vigor} Vigor, +{mod:alacrity} Alacrity, fading ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 6,        # AUTHORED
+				"stackable": false,
+				"potency_per_turn": -0.15,                    # AUTHORED: 1.00 -> 0.25 over its life
+				"expire_apply": [{"buff": "crash"}],          # AUTHORED: it always ends this way
+				"mods": {"vigor": 14.0, "alacrity": 14.0},    # TUNE
+			})
+
+		"crash":
+			return Buff.make({
+				"id": "crash", "source": "Crash",
+				"desc_template": "Crash: {mod:vigor} Vigor, {mod:alacrity} Alacrity, worsening ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 6,      # AUTHORED
+				"stackable": false,
+				"resistible": false,                          # it is the bill, not an attack
+				"potency_per_turn": 0.20,                     # AUTHORED: grows worse every turn
+				"mods": {"vigor": -6.0, "alacrity": -6.0},    # TUNE
+			})
+
 		# --- Bet: +100% to ALL resists, 5 turns, stacks infinitely -----------
 		# A true MULTIPLICATIVE resist bonus (see CombatMath): resist_mult 1.0 per
 		# stack => x2 resists at one stack, x3 at two, ... max_stacks 0 = unlimited.
@@ -278,21 +698,31 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 		# Two rank-clones differing in alacrity mult (-20% / -22%) and the ice DoT,
 		# which is SNAPSHOTTED from the CASTER at cast: instinct_pct*Instinct +
 		# vigor_pct*Vigor (50%/100% Instinct + 25% Vigor). Mapped by combat.gd rank.
+		# RE-TUNED for mitigated DoT (x2.125 — see the Arc Burn note below). Only the
+		# two DAMAGE shares moved; the alacrity multiplier is a stat debuff and is
+		# untouched by mitigation.
 		"frost_1":
-			return _make_frost(-0.20, 0.5, 0.25, caster)
+			return _make_frost(-0.20, 1.06, 0.53, caster)
 		"frost_2":
-			return _make_frost(-0.22, 1.0, 0.25, caster)
+			return _make_frost(-0.22, 2.13, 0.53, caster)
 
 		# --- Arc Burn (Neurostatic): a lightning DoT, ranks 1..3 ---------------
 		# The per-turn damage is SNAPSHOTTED from the CASTER's Instinct at the moment
 		# the debuff lands (the `frost` pattern), so it does not drift if the caster's
-		# stats change mid-fight. 50 / 75 / 100% of Instinct for 3 turns.
+		# stats change mid-fight. Was 50 / 75 / 100% of Instinct for 3 turns.
+		# >> RE-TUNED FOR MITIGATED DoT (§1.7 / C.8). Damage-over-time now runs
+		#    through the real damage pipeline, so at the DEFAULT 45 elemental defense
+		#    a DoT retains 47.1% of what it used to deal. Every percentage below was
+		#    multiplied by 2.125 (= 1 / 0.4706) so a default-resistance target takes
+		#    the SAME damage it took before the change. Against a RESISTANT target it
+		#    now takes less and against a soft one more, which is the entire point of
+		#    routing it — but the baseline is deliberately unmoved.
 		"arc_burn_1":
-			return _make_arc_burn(0.50, caster)
+			return _make_arc_burn(1.06, caster)
 		"arc_burn_2":
-			return _make_arc_burn(0.75, caster)
+			return _make_arc_burn(1.59, caster)
 		"arc_burn_3":
-			return _make_arc_burn(1.00, caster)
+			return _make_arc_burn(2.13, caster)
 
 		# --- Electromyogenesis: +Alacrity equal to a % of the CASTER's Instinct -
 		# Ranks 1..4: 25/30/35/40% of Instinct, for 3/3/4/4 turns. Snapshotted at
@@ -338,11 +768,11 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 		# SHRINKS as the ability ranks up — and in exchange gains flat Alacrity, Vigor,
 		# Instinct and spirit regen for 6/8/10 turns.
 		"electrostimulated_1":
-			return _make_electrostimulated(6, 0.40, 10.0, 5.0, 5.0, caster)
+			return _make_electrostimulated(6, 0.85, 10.0, 5.0, 5.0, caster)
 		"electrostimulated_2":
-			return _make_electrostimulated(8, 0.35, 20.0, 10.0, 10.0, caster)
+			return _make_electrostimulated(8, 0.74, 20.0, 10.0, 10.0, caster)
 		"electrostimulated_3":
-			return _make_electrostimulated(10, 0.30, 30.0, 15.0, 15.0, caster)
+			return _make_electrostimulated(10, 0.64, 30.0, 15.0, 15.0, caster)
 
 		# --- Pass Current (Bread): the caster's half of the ability ------------
 		# A small, flat self buff riding on an attack (applies_buff_self). Identical
@@ -577,15 +1007,10 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 		# stats — and so the same creature met again at a higher ability rank in a
 		# later zone bites harder with no second entry.
 		"frostnip":
-			return _make_snapshot_dot("frostnip", "Frostnip", "ice", 0.50, 3, caster)
+			return _make_snapshot_dot("frostnip", "Frostnip", "ice", 1.06, 3, caster)
 
-		# --- Infected (The Old Ice): the zone's only toxic DoT ----------------
-		# 25% of the caster's Instinct per turn for 4 turns. Deliberately SMALL per
-		# instance: five Old Ice SPREADING it across the party is the threat, not any
-		# one application — which is what makes their hexer profile legible rather
-		# than just painful.
-		"infected":
-			return _make_snapshot_dot("infected", "Infected", "toxic", 0.25, 4, caster)
+		# (`infected` was folded into the unified `poison` on 2026-09-25 — its appliers,
+		# contaminating_strike / infectious_strike / toxic_breath, now apply poison.)
 
 		# --- Terrified (Unknown Entity): a mental DoT that also drains spirit --
 		# The zone's only mental damage and its only spirit pressure. 25% of the
@@ -596,7 +1021,7 @@ static func build(id: String, caster: CharacterBase = null, target: CharacterBas
 			var t_inst := 0.0
 			if caster != null:
 				t_inst = maxf(0.0, caster.get_effective("instinct"))
-			var t_dmg := 0.25 * t_inst
+			var t_dmg := 0.53 * t_inst   # RE-TUNED x2.125 for mitigated DoT (C.8)
 			return Buff.make({
 				"id": "terrified",
 				"source": "Terrified",
@@ -1034,6 +1459,183 @@ static func _make_lightning_shell(rank: int) -> Dictionary:
 		},
 	})
 
+
+# ============================================================================
+# THE NEPHILIC (2026-09-24) — the kit's buffs. Per-rank families are "<id>_<rank>";
+# combat._rank_clone_id finds them generically, so none needs a match line there.
+# Every magnitude is a `# TUNE` placeholder from NEPHILIC_PLAN unless it IS the spec.
+# ============================================================================
+const ON_FIRE_VIGOR := 0.20     # TUNE — unified On Fire: DoT = 20% applier Vigor
+const POISON_VITALITY := 0.50   # TUNE — unified poison: DoT = 50% applier VITALITY (dev call 2026-09-25)
+
+static func _neph_rank(id: String, base: String, n: int) -> int:
+	if not id.begins_with(base + "_"):
+		return 0
+	var tail := id.substr(base.length() + 1)
+	if not tail.is_valid_int():
+		return 0
+	var r := int(tail)
+	return r if r >= 1 and r <= n else 0
+
+static func _pick(arr: Array, r: int):
+	return arr[clampi(r - 1, 0, arr.size() - 1)]
+
+static func _build_nephilic(id: String, caster: CharacterBase) -> Dictionary:
+	match id:
+		# UNIFIED POISON (FUTURE_PLANS §2): one debuff for every applier, stacking as
+		# independent instances; only the duration varies with the application.
+		"poison":
+			var dmg := POISON_VITALITY * (maxf(0.0, caster.get_effective("vitality")) if caster != null else 0.0)
+			return Buff.make({
+				"id": "poison", "source": "Poison",
+				"desc_template": "Poison: {dot} toxic damage at the start of each turn ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 4,
+				"stackable": true, "max_stacks": 0,
+				"element": "toxic",
+				"potency_scale": 1.0, "duration_scale": 1.0,
+				"dot": dmg, "dot_element": "toxic",
+			})
+		"stand_firm_lead":
+			return Buff.make({
+				"id": "stand_firm_lead", "source": "Stand Firm",
+				"desc": "Your next Lead grants +25 spirit.",
+				"kind": Buff.KIND_BUFF, "duration": -1, "stackable": false,
+				"lead_spirit_bonus": 25,
+			})
+		"ablution_ward":
+			return Buff.make({
+				"id": "ablution_ward", "source": "Ablution",
+				"desc_template": "Purified: cannot be debuffed ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 1, "stackable": false,
+				"debuff_immune": true,
+			})
+		"putrefaction_cost":
+			return Buff.make({
+				"id": "putrefaction_cost", "source": "Putrefaction",
+				"desc_template": "Putrefaction: pay 3% max HP at the start of each turn ({turns} left).",
+				"kind": Buff.KIND_DEBUFF, "duration": 4, "stackable": true,
+				"resistible": false, "uncleansable": true,
+				"element": "toxic",
+				"hp_cost_pct_per_turn": 0.03,
+			})
+		"apotheosis":
+			return Buff.make({
+				"id": "apotheosis", "source": "Apotheosis",
+				"desc_template": "Apotheosis: Crash costs no spirit and deals 60% damage ({turns} left).",
+				"kind": Buff.KIND_BUFF, "duration": 3, "stackable": false,
+				"crash_free": true, "crash_damage_mult": 0.6,
+			})
+		"grit_ward":
+			return Buff.make({
+				"id": "grit_ward", "source": "Grit",
+				"desc_template": "Grit: takes {modpctabs:damage_taken_mult}% less damage while the shield holds.",
+				"kind": Buff.KIND_BUFF, "duration": -1, "stackable": false,
+				"expire_on_shield_break": true,
+				"mods": {"damage_taken_mult": -0.25},
+			})
+	var r := 0
+	r = _neph_rank(id, "stand_firm", 2)
+	if r > 0:
+		return Buff.make({
+			"id": "stand_firm", "source": "Stand Firm",
+			"desc_template": "Stand Firm: takes {modpctabs:damage_taken_mult}% less damage ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": 3, "stackable": false,
+			"mods": {"damage_taken_mult": -float(_pick([0.40, 0.45], r))},
+		})
+	r = _neph_rank(id, "tithe", 3)
+	if r > 0:
+		return Buff.make({
+			"id": "tithe", "source": "Tithe",
+			"desc_template": "Tithe: deals {modpct:damage_dealt_mult}% more damage ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": 3, "stackable": false,   # TUNE duration
+			"mods": {"damage_dealt_mult": float(_pick([0.20, 0.25, 0.30], r))},
+		})
+	r = _neph_rank(id, "inhale", 2)
+	if r > 0:
+		return Buff.make({
+			"id": "inhale", "source": "Inhale",
+			"desc_template": "Inhale: +{spirit} spirit at the start of each turn ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": int(_pick([4, 5], r)), "stackable": false,
+			"spirit_per_turn": 10.0,
+		})
+	r = _neph_rank(id, "wormwood", 4)
+	if r > 0:
+		return Buff.make({
+			"id": "wormwood", "source": "Wormwood",
+			"desc_template": "Wormwood: {mod:toxic_defense} Toxic resistance ({turns} left).",
+			"kind": Buff.KIND_DEBUFF, "duration": 4, "stackable": true,
+			"element": "toxic",
+			"potency_scale": 0.5, "duration_scale": 0.5,
+			"mods": {"toxic_defense": -float(_pick([15, 20, 25, 30], r))},
+		})
+	r = _neph_rank(id, "waxing_moon", 4)
+	if r > 0:
+		var mods := _all_resist_mods(float(_pick([8, 12, 16, 20], r)))
+		mods["damage_dealt_mult"] = float(_pick([0.15, 0.20, 0.25, 0.30], r))
+		return Buff.make({
+			"id": "waxing_moon", "source": "Waxing Moon",
+			"desc_template": "Waxing Moon: deals {modpct:damage_dealt_mult}% more damage, +{mod:physical_defense} to every resistance ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": 4, "stackable": false,
+			"mods": mods,
+		})
+	r = _neph_rank(id, "silver_mirror", 4)
+	if r > 0:
+		return Buff.make({
+			"id": "silver_mirror", "source": "Silver Mirror",
+			"desc_template": "Silver Mirror: the next enemy attacks that hit are turned aside ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": int(_pick([2, 3, 3, 3], r)), "stackable": false,
+			"struck_charges": int(_pick([1, 1, 2, 3], r)),
+		})
+	r = _neph_rank(id, "epiphany", 5)
+	if r > 0:
+		return Buff.make({
+			"id": "epiphany", "source": "Epiphany",
+			"desc_template": "Epiphany: your other buffs are frozen, and each one adds damage ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": int(_pick([3, 3, 3, 4, 4], r)), "stackable": false,
+			"freeze_buffs": true,
+			"epiphany_per_buff": float(_pick([0.08, 0.10, 0.12, 0.14, 0.16], r)),
+		})
+	r = _neph_rank(id, "intercede", 4)
+	if r > 0:
+		return Buff.make({
+			"id": "intercede", "source": "Intercede",
+			"desc_template": "Interceded: part of the damage aimed at this unit is taken by its guardian ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": 3, "stackable": false,
+			"redirect_pct": float(_pick([0.20, 0.30, 0.40, 0.50], r)),
+		})
+	r = _neph_rank(id, "putrefaction", 4)
+	if r > 0:
+		return Buff.make({
+			"id": "putrefaction", "source": "Putrefaction",
+			"desc_template": "Putrefaction: deals {modpct:damage_dealt_mult}% more damage ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": 4, "stackable": false,
+			"mods": {"damage_dealt_mult": float(_pick([0.15, 0.20, 0.25, 0.30], r))},
+		})
+	r = _neph_rank(id, "first_sun", 5)
+	if r > 0:
+		return Buff.make({
+			"id": "first_sun", "source": "First Sun",
+			"desc_template": "First Sun: deals {modpct:damage_dealt_mult}% more damage ({turns} left).",
+			"kind": Buff.KIND_BUFF, "duration": 3, "stackable": false,
+			"mods": {"damage_dealt_mult": float(_pick([0.30, 0.35, 0.40, 0.45, 0.50], r))},
+		})
+	r = _neph_rank(id, "rejuvenation", 3)
+	if r > 0:
+		return Buff.make({
+			"id": "rejuvenation", "source": "Rejuvenation",
+			"desc_template": "Rejuvenation: heal {heal_pct}% of max HP at the start of each turn.",
+			"kind": Buff.KIND_BUFF, "duration": -1, "stackable": false,
+			"heal_pct_per_turn": float(_pick([0.02, 0.03, 0.04], r)),
+		})
+	r = _neph_rank(id, "heavy_hand", 3)
+	if r > 0:
+		return Buff.make({
+			"id": "heavy_hand", "source": "Heavy Hand",
+			"desc": "Heavy Hand: more crit damage.",
+			"kind": Buff.KIND_BUFF, "duration": -1, "stackable": false, "visible": false,
+			"mods": {"crit_damage_bonus": float(_pick([0.15, 0.30, 0.45], r))},
+		})
+	return {}
 
 ## True when `id` names a buff this library knows how to build.
 static func has(id: String) -> bool:

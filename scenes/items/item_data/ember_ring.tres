@@ -14,7 +14,7 @@ rarity = 2
 equippable = true
 slot = 7
 stats = {
-"fire_amp": 25.0,
+"fire_amp": 0.25,
 "magnificence": 3.0
 }
 value = 120

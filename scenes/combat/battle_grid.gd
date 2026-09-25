@@ -136,8 +136,36 @@ func occupants() -> Array:
 				out.append(slots[col][row])
 	return out
 
-## Everyone in one column, top row first. The seam a future "back row is protected
-## while the front row holds" rule would read.
+## BACK-ROW PROTECTION. True when `u` cannot be reached by a hostile because the
+## FRONT column shields it: a unit at (BACK, r) is covered by any LIVING occupant of
+## (FRONT, r-1), (FRONT, r) or (FRONT, r+1) — the slot in front of it and the two
+## diagonal to it.
+##
+## ONLY THE BACK COLUMN IS EVER COVERED. A front-row unit is always reachable, and
+## that asymmetry is the point: standing forward is what costs something.
+##
+## DEAD UNITS DO NOT COVER. Nothing removes a body from its slot when it falls —
+## deliberately, so the formation does not re-shuffle mid-fight — which means the
+## liveness test has to happen HERE rather than in the occupancy map. It is also the
+## whole mechanic: killing the front rank is how you reach the back one.
+##
+## NB the dev's original sketch numbered the columns front-first ("column 1 protects
+## column 2"). This engine numbers them BACK = 0, FRONT = 1. Same rule, opposite
+## index — do not flip the enum to match the sketch.
+func is_covered(u) -> bool:
+	if u == null or u.grid_col != BACK:
+		return false
+	var r: int = u.grid_row
+	if r < 0:
+		return false
+	for dr in [-1, 0, 1]:
+		var blocker = at(FRONT, r + dr)
+		if blocker != null and blocker.is_alive():
+			return true
+	return false
+
+## Everyone in one column, top row first. The seam the back-row-protection rule
+## above reads.
 func column(col: int) -> Array:
 	var out: Array = []
 	if col < 0 or col >= COLS:

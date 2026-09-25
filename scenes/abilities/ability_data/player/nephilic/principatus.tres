@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bnb0e0b46juio"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"principatus"
+display_name = "Cleave"
+description = "Deal Physical damage equal to {scaling} to every enemy."
+max_points = 3
+max_equipped = 2
+kind = 0
+delivery = 1
+target = 3
+element = 0
+cost_type = 1
+cost_amount = 50
+cooldown = 2
+scaling_stat = &"vigor"
+scaling_mult = 1.0
+required_level = 1
+scaling_mult_ranks = Array[float]([1.0, 1.5, 2.0])

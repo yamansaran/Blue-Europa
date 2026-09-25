@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="Ability" load_steps=2 format=3 uid="uid://bg6cvqxs45lxp"]
+
+[ext_resource type="Script" path="res://scenes/abilities/ability.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"corvus"
+display_name = "Intercede"
+description = "For 3 turns, 20% of the damage aimed at an ally is taken by you instead."
+max_points = 4
+max_equipped = 1
+kind = 1
+target = 5
+cost_type = 1
+cost_amount = 15
+cooldown = 5
+applies_buff = &"intercede"
+description_ranks = Array[String](["For 3 turns, 20% of the damage aimed at an ally is taken by you instead.", "For 3 turns, 30% of the damage aimed at an ally is taken by you instead.", "For 3 turns, 40% of the damage aimed at an ally is taken by you instead.", "For 3 turns, 50% of the damage aimed at an ally is taken by you instead."])
+required_level = 1

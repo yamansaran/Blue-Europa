@@ -37,6 +37,23 @@ class_name CombatDodge
 ## So a damaging spell baselines at 5% and tops out at 17.5%, and a debuff-only
 ## ability always connects (its debuff can still be RESISTED — a separate axis).
 ##
+## ANTI-FRUSTRATION (rev33). The more a unit dodges the PLAYER SIDE's attacks in a
+## row, the less likely its next dodge — reset the moment it is hit:
+##
+##   streak  = consecutive dodges since this unit was last hit (combat tracks it and
+##             mirrors it onto the body as metadata STREAK_META)
+##   adv     = maxf(0, defender.alacrity - attacker.alacrity)
+##   relief  = 1 / (1 + adv / AF_ALACRITY_REF)          # 1.0 at parity, falls with adv
+##   mult    = maxf(AF_FLOOR, 1 - AF_PER_DODGE * streak * relief)
+##   dodge%  = normal dodge% * mult
+##
+## WEAK AND LOW-KEY ON PURPOSE: one dodge costs 7% of the next chance at equal
+## alacrity (10% -> 9.3%), three in a row 21%, and it can never cut more than
+## (1 - AF_FLOOR). It SCALES INVERSELY WITH THE ALACRITY GAP: a unit that is meant to
+## be evasive (+50 alacrity over the attacker) keeps a third of the relief — its
+## dodges are the design, not bad luck. Only attackers that are NOT enemies feed or
+## read it (an ENEMY body never gets the discount), so it never helps the AI.
+##
 ## class_name global — RESTART Godot once after adding this script.
 ## ----------------------------------------------------------------------------
 
@@ -46,6 +63,16 @@ const SPREAD     := 70.0   # how far the curve can travel from BASE (before clam
 const STIFFNESS := 0.021   # scales the alacrity gap before the squash; smaller = gentler
 const MIN_PCT   := 1.0     # a hit is never truly guaranteed
 const MAX_PCT   := 75.0    # ...and evasion never becomes a wall
+
+# --- anti-frustration ---------------------------------------------------------
+## Object metadata key on a DEFENDER body: its current dodge streak (int).
+const STREAK_META := &"af_dodge_streak"
+## Fraction of the dodge chance removed per consecutive dodge, at equal alacrity.
+const AF_PER_DODGE := 0.07
+## Alacrity advantage at which the relief is halved (bigger = gentler scaling).
+const AF_ALACRITY_REF := 25.0
+## The dodge chance is never cut below this fraction of itself.
+const AF_FLOOR := 0.55
 
 # --- delivery multipliers (the accuracy tiers) ------------------------------
 const MULT_ATTACK_DELIVERY := 1.0   # a physical strike: full dodge chance
@@ -93,7 +120,22 @@ static func chance(attacker: CharacterBase, defender: CharacterBase, ability: Ab
 	raw -= _buff_debuff_bonus(attacker, ACCURACY_BONUS_KEY)
 	raw -= _ability_accuracy_mod(ability)
 
-	return clampf(raw, MIN_PCT, MAX_PCT) * mult
+	return clampf(raw, MIN_PCT, MAX_PCT) * mult * anti_frustration_mult(attacker, defender)
+
+## The anti-frustration multiplier (see the header). 1.0 = no effect.
+static func anti_frustration_mult(attacker: CharacterBase, defender: CharacterBase) -> float:
+	if defender == null or not defender.has_meta(STREAK_META):
+		return 1.0
+	if attacker != null and attacker.char_type == Stats.CharType.ENEMY:
+		return 1.0
+	var streak := int(defender.get_meta(STREAK_META, 0))
+	if streak <= 0:
+		return 1.0
+	var adv := defender.get_effective("alacrity")
+	if attacker != null:
+		adv -= attacker.get_effective("alacrity")
+	var relief := 1.0 / (1.0 + maxf(0.0, adv) / AF_ALACRITY_REF)
+	return maxf(AF_FLOOR, 1.0 - AF_PER_DODGE * float(streak) * relief)
 
 ## Roll against a chance. Pass floor >= 0 to inject a specific 0..99 roll (tests);
 ## otherwise a fresh random 0..99 is drawn. Mirrors CombatCrit.rolls_crit.

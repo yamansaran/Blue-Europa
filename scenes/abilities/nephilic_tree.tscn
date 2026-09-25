@@ -1,0 +1,859 @@
+[gd_scene format=3 uid="uid://bt0ruqwu3xhpu"]
+
+[ext_resource type="Script" uid="uid://b1jqlaf1vxute" path="res://scenes/abilities/skill_tree.gd" id="1_tree"]
+[ext_resource type="Script" uid="uid://hh1m8e80p3xc" path="res://scenes/abilities/skill_node.gd" id="2_node"]
+[ext_resource type="Resource" uid="uid://boy75fay1z6z7" path="res://scenes/abilities/ability_data/player/nephilic/hermon.tres" id="3_hermon"]
+[ext_resource type="Resource" uid="uid://blmn6wwj1u0jj" path="res://scenes/abilities/ability_data/player/nephilic/arakiba.tres" id="4_arakiba"]
+[ext_resource type="Resource" uid="uid://bumu6dw1eu7qp" path="res://scenes/abilities/ability_data/player/nephilic/rameel.tres" id="5_rameel"]
+[ext_resource type="Resource" uid="uid://bxauqvu6leuf6" path="res://scenes/abilities/ability_data/player/nephilic/kokabiel.tres" id="6_kokabiel"]
+[ext_resource type="Resource" uid="uid://bjg1rz6mujwit" path="res://scenes/abilities/ability_data/player/nephilic/tamiel.tres" id="7_tamiel"]
+[ext_resource type="Resource" uid="uid://bv0jo2ghftldo" path="res://scenes/abilities/ability_data/player/nephilic/sariel.tres" id="8_sariel"]
+[ext_resource type="Resource" uid="uid://bnl2szcymdizg" path="res://scenes/abilities/ability_data/player/nephilic/danel.tres" id="9_danel"]
+[ext_resource type="Resource" uid="uid://buluqd0jzuy33" path="res://scenes/abilities/ability_data/player/nephilic/ezeqeel.tres" id="10_ezeqeel"]
+[ext_resource type="Resource" uid="uid://bwmhnq7lne5kh" path="res://scenes/abilities/ability_data/player/nephilic/baraqiel.tres" id="11_baraqiel"]
+[ext_resource type="Resource" uid="uid://brxwl14wkq0ck" path="res://scenes/abilities/ability_data/player/nephilic/kasdeja.tres" id="12_kasdeja"]
+[ext_resource type="Resource" uid="uid://bdod1skdhh6nm" path="res://scenes/abilities/ability_data/player/nephilic/asael.tres" id="13_asael"]
+[ext_resource type="Resource" uid="uid://b43dbzv3v65vj" path="res://scenes/abilities/ability_data/player/nephilic/armaros.tres" id="14_armaros"]
+[ext_resource type="Resource" uid="uid://bl4v5zzuz1glh" path="res://scenes/abilities/ability_data/player/nephilic/batarel.tres" id="15_batarel"]
+[ext_resource type="Resource" uid="uid://b2szlxeihijdf" path="res://scenes/abilities/ability_data/player/nephilic/ananel.tres" id="16_ananel"]
+[ext_resource type="Resource" uid="uid://bcbo4ilxcriva" path="res://scenes/abilities/ability_data/player/nephilic/zaqiel.tres" id="17_zaqiel"]
+[ext_resource type="Resource" uid="uid://bi2wwpcjtd44e" path="res://scenes/abilities/ability_data/player/nephilic/samsapeel.tres" id="18_samsapeel"]
+[ext_resource type="Resource" uid="uid://bl3rvx7ll56s5" path="res://scenes/abilities/ability_data/player/nephilic/semjaza.tres" id="19_semjaza"]
+[ext_resource type="Resource" uid="uid://bptliyrmccepm" path="res://scenes/abilities/ability_data/player/nephilic/satarel.tres" id="20_satarel"]
+[ext_resource type="Resource" uid="uid://btw0gt2ylo2dd" path="res://scenes/abilities/ability_data/player/nephilic/turel.tres" id="21_turel"]
+[ext_resource type="Resource" uid="uid://b5wgi1eqr0bws" path="res://scenes/abilities/ability_data/player/nephilic/pharmaros.tres" id="22_pharmaros"]
+[ext_resource type="Resource" uid="uid://b3ncqzpf06jif" path="res://scenes/abilities/ability_data/player/nephilic/angeli.tres" id="23_angeli"]
+[ext_resource type="Resource" uid="uid://bnb0e0b46juio" path="res://scenes/abilities/ability_data/player/nephilic/principatus.tres" id="24_principatus"]
+[ext_resource type="Resource" uid="uid://b071z7kdh444g" path="res://scenes/abilities/ability_data/player/nephilic/archangeli.tres" id="25_archangeli"]
+[ext_resource type="Resource" uid="uid://bi5d4w2fwz2dk" path="res://scenes/abilities/ability_data/player/nephilic/seraphim.tres" id="26_seraphim"]
+[ext_resource type="Resource" uid="uid://bbfdwza0zpfr2" path="res://scenes/abilities/ability_data/player/nephilic/potestates.tres" id="27_potestates"]
+[ext_resource type="Resource" uid="uid://bzl3duojhewx5" path="res://scenes/abilities/ability_data/player/nephilic/virtutes.tres" id="28_virtutes"]
+[ext_resource type="Resource" uid="uid://b1mfokmmj25qf" path="res://scenes/abilities/ability_data/player/nephilic/throni.tres" id="29_throni"]
+[ext_resource type="Resource" uid="uid://bqk6h25d5wi0i" path="res://scenes/abilities/ability_data/player/nephilic/cherubim.tres" id="30_cherubim"]
+[ext_resource type="Resource" uid="uid://bz06lmkeqvmxo" path="res://scenes/abilities/ability_data/player/nephilic/dominationes.tres" id="31_dominationes"]
+[ext_resource type="Resource" uid="uid://b0yukazf540gw" path="res://scenes/abilities/ability_data/player/nephilic/azazel.tres" id="32_azazel"]
+[ext_resource type="Resource" uid="uid://bc0asfcqqwddr" path="res://scenes/abilities/ability_data/player/nephilic/gadreel.tres" id="33_gadreel"]
+[ext_resource type="Resource" uid="uid://bessnlzw2j343" path="res://scenes/abilities/ability_data/player/nephilic/shamsiel.tres" id="34_shamsiel"]
+[ext_resource type="Resource" uid="uid://bmiwwgtovrd0e" path="res://scenes/abilities/ability_data/player/nephilic/lahat.tres" id="35_lahat"]
+[ext_resource type="Resource" uid="uid://bg5ubtmjeme5y" path="res://scenes/abilities/ability_data/player/nephilic/apsinthos.tres" id="36_apsinthos"]
+[ext_resource type="Resource" uid="uid://bkbwdbuwpq5md" path="res://scenes/abilities/ability_data/player/nephilic/helkos.tres" id="37_helkos"]
+[ext_resource type="Resource" uid="uid://bc57pprryb2jk" path="res://scenes/abilities/ability_data/player/nephilic/abaddon.tres" id="38_abaddon"]
+[ext_resource type="Resource" uid="uid://bh5oe0tll0zar" path="res://scenes/abilities/ability_data/player/nephilic/phiale.tres" id="39_phiale"]
+[ext_resource type="Resource" uid="uid://buk3lli14s4nt" path="res://scenes/abilities/ability_data/player/nephilic/albedo.tres" id="40_albedo"]
+[ext_resource type="Resource" uid="uid://blrpcuk21khg5" path="res://scenes/abilities/ability_data/player/nephilic/cygnus.tres" id="41_cygnus"]
+[ext_resource type="Resource" uid="uid://bb2wb04hlhbbp" path="res://scenes/abilities/ability_data/player/nephilic/ablutio.tres" id="42_ablutio"]
+[ext_resource type="Resource" uid="uid://bvo4zs73wp1aw" path="res://scenes/abilities/ability_data/player/nephilic/luna.tres" id="43_luna"]
+[ext_resource type="Resource" uid="uid://bluokvgytk5lz" path="res://scenes/abilities/ability_data/player/nephilic/argentum.tres" id="44_argentum"]
+[ext_resource type="Resource" uid="uid://bbsiadrcmptrf" path="res://scenes/abilities/ability_data/player/nephilic/columba.tres" id="45_columba"]
+[ext_resource type="Resource" uid="uid://b0ll101gem1wy" path="res://scenes/abilities/ability_data/player/nephilic/nigredo.tres" id="46_nigredo"]
+[ext_resource type="Resource" uid="uid://bg6cvqxs45lxp" path="res://scenes/abilities/ability_data/player/nephilic/corvus.tres" id="47_corvus"]
+[ext_resource type="Resource" uid="uid://b44uiwqifst4o" path="res://scenes/abilities/ability_data/player/nephilic/putrefactio.tres" id="48_putrefactio"]
+[ext_resource type="Resource" uid="uid://bb2z7lwkjsqx5" path="res://scenes/abilities/ability_data/player/nephilic/mortificatio.tres" id="49_mortificatio"]
+[ext_resource type="Resource" uid="uid://b337qkfxmwzzs" path="res://scenes/abilities/ability_data/player/nephilic/caput_mortuum.tres" id="50_caput_mortuum"]
+[ext_resource type="Resource" uid="uid://bkdiyf3pt1oyj" path="res://scenes/abilities/ability_data/player/nephilic/sol_niger.tres" id="51_sol_niger"]
+[ext_resource type="Resource" uid="uid://bz3mojjfruea1" path="res://scenes/abilities/ability_data/player/nephilic/gibborim.tres" id="52_gibborim"]
+[ext_resource type="Resource" uid="uid://bbnv6bvqlb0eg" path="res://scenes/abilities/ability_data/player/nephilic/nimbus.tres" id="53_nimbus"]
+
+[node name="SkillTree" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_tree")
+
+[node name="Hermon" type="Control" parent="."]
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 282.0
+offset_top = 630.0
+offset_right = 318.0
+offset_bottom = 666.0
+script = ExtResource("2_node")
+ability = ExtResource("3_hermon")
+node_id = "hermon"
+parents = Array[String](["arakiba", "rameel"])
+parents_any = true
+center_position = Vector2(300, 648)
+
+[node name="Arakiba" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 245.0
+offset_top = 609.0
+offset_right = 265.0
+offset_bottom = 629.0
+script = ExtResource("2_node")
+ability = ExtResource("4_arakiba")
+node_id = "arakiba"
+size_class = 0
+parents = Array[String](["kokabiel"])
+excludes = Array[String](["rameel"])
+center_position = Vector2(255, 619)
+
+[node name="Rameel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 335.0
+offset_top = 609.0
+offset_right = 355.0
+offset_bottom = 629.0
+script = ExtResource("2_node")
+ability = ExtResource("5_rameel")
+node_id = "rameel"
+size_class = 0
+parents = Array[String](["kokabiel"])
+excludes = Array[String](["arakiba"])
+center_position = Vector2(345, 619)
+
+[node name="Kokabiel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 580.0
+offset_right = 310.0
+offset_bottom = 600.0
+script = ExtResource("2_node")
+ability = ExtResource("6_kokabiel")
+node_id = "kokabiel"
+size_class = 0
+parents = Array[String](["tamiel", "sariel"])
+parents_any = true
+center_position = Vector2(300, 590)
+
+[node name="Tamiel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 335.0
+offset_top = 551.0
+offset_right = 355.0
+offset_bottom = 571.0
+script = ExtResource("2_node")
+ability = ExtResource("7_tamiel")
+node_id = "tamiel"
+size_class = 0
+parents = Array[String](["danel"])
+excludes = Array[String](["sariel"])
+center_position = Vector2(345, 561)
+
+[node name="Sariel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 245.0
+offset_top = 551.0
+offset_right = 265.0
+offset_bottom = 571.0
+script = ExtResource("2_node")
+ability = ExtResource("8_sariel")
+node_id = "sariel"
+size_class = 0
+parents = Array[String](["danel"])
+excludes = Array[String](["tamiel"])
+center_position = Vector2(255, 561)
+
+[node name="Danel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 522.0
+offset_right = 310.0
+offset_bottom = 542.0
+script = ExtResource("2_node")
+ability = ExtResource("9_danel")
+node_id = "danel"
+size_class = 0
+parents = Array[String](["ezeqeel", "baraqiel", "kasdeja"])
+parents_any = true
+center_position = Vector2(300, 532)
+
+[node name="Ezeqeel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 245.0
+offset_top = 494.0
+offset_right = 265.0
+offset_bottom = 514.0
+script = ExtResource("2_node")
+ability = ExtResource("10_ezeqeel")
+node_id = "ezeqeel"
+size_class = 0
+parents = Array[String](["asael"])
+excludes = Array[String](["baraqiel", "kasdeja"])
+center_position = Vector2(255, 504)
+
+[node name="Baraqiel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 335.0
+offset_top = 494.0
+offset_right = 355.0
+offset_bottom = 514.0
+script = ExtResource("2_node")
+ability = ExtResource("11_baraqiel")
+node_id = "baraqiel"
+size_class = 0
+parents = Array[String](["asael"])
+excludes = Array[String](["ezeqeel", "kasdeja"])
+center_position = Vector2(345, 504)
+
+[node name="Kasdeja" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 494.0
+offset_right = 310.0
+offset_bottom = 514.0
+script = ExtResource("2_node")
+ability = ExtResource("12_kasdeja")
+node_id = "kasdeja"
+size_class = 0
+parents = Array[String](["asael"])
+excludes = Array[String](["ezeqeel", "baraqiel"])
+center_position = Vector2(300, 504)
+
+[node name="Asael" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 465.0
+offset_right = 310.0
+offset_bottom = 485.0
+script = ExtResource("2_node")
+ability = ExtResource("13_asael")
+node_id = "asael"
+size_class = 0
+parents = Array[String](["armaros", "batarel"])
+parents_any = true
+center_position = Vector2(300, 475)
+
+[node name="Armaros" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 335.0
+offset_top = 436.0
+offset_right = 355.0
+offset_bottom = 456.0
+script = ExtResource("2_node")
+ability = ExtResource("14_armaros")
+node_id = "armaros"
+size_class = 0
+parents = Array[String](["ananel"])
+excludes = Array[String](["batarel"])
+center_position = Vector2(345, 446)
+
+[node name="Batarel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 245.0
+offset_top = 436.0
+offset_right = 265.0
+offset_bottom = 456.0
+script = ExtResource("2_node")
+ability = ExtResource("15_batarel")
+node_id = "batarel"
+size_class = 0
+parents = Array[String](["ananel"])
+excludes = Array[String](["armaros"])
+center_position = Vector2(255, 446)
+
+[node name="Ananel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 407.0
+offset_right = 310.0
+offset_bottom = 427.0
+script = ExtResource("2_node")
+ability = ExtResource("16_ananel")
+node_id = "ananel"
+size_class = 0
+parents = Array[String](["zaqiel", "samsapeel"])
+parents_any = true
+center_position = Vector2(300, 417)
+
+[node name="Zaqiel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 245.0
+offset_top = 378.0
+offset_right = 265.0
+offset_bottom = 398.0
+script = ExtResource("2_node")
+ability = ExtResource("17_zaqiel")
+node_id = "zaqiel"
+size_class = 0
+parents = Array[String](["semjaza"])
+excludes = Array[String](["samsapeel"])
+center_position = Vector2(255, 388)
+
+[node name="Samsapeel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 335.0
+offset_top = 378.0
+offset_right = 355.0
+offset_bottom = 398.0
+script = ExtResource("2_node")
+ability = ExtResource("18_samsapeel")
+node_id = "samsapeel"
+size_class = 0
+parents = Array[String](["semjaza"])
+excludes = Array[String](["zaqiel"])
+center_position = Vector2(345, 388)
+
+[node name="Semjaza" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 350.0
+offset_right = 310.0
+offset_bottom = 370.0
+script = ExtResource("2_node")
+ability = ExtResource("19_semjaza")
+node_id = "semjaza"
+size_class = 0
+parents = Array[String](["satarel", "turel", "pharmaros"])
+parents_any = true
+center_position = Vector2(300, 360)
+
+[node name="Satarel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 335.0
+offset_top = 321.0
+offset_right = 355.0
+offset_bottom = 341.0
+script = ExtResource("2_node")
+ability = ExtResource("20_satarel")
+node_id = "satarel"
+size_class = 0
+parents = Array[String](["angeli"])
+excludes = Array[String](["turel", "pharmaros"])
+center_position = Vector2(345, 331)
+
+[node name="Turel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 245.0
+offset_top = 321.0
+offset_right = 265.0
+offset_bottom = 341.0
+script = ExtResource("2_node")
+ability = ExtResource("21_turel")
+node_id = "turel"
+size_class = 0
+parents = Array[String](["angeli"])
+excludes = Array[String](["satarel", "pharmaros"])
+center_position = Vector2(255, 331)
+
+[node name="Pharmaros" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 321.0
+offset_right = 310.0
+offset_bottom = 341.0
+script = ExtResource("2_node")
+ability = ExtResource("22_pharmaros")
+node_id = "pharmaros"
+size_class = 0
+parents = Array[String](["angeli"])
+excludes = Array[String](["satarel", "turel"])
+center_position = Vector2(300, 331)
+
+[node name="Angeli" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 292.0
+offset_right = 310.0
+offset_bottom = 312.0
+script = ExtResource("2_node")
+ability = ExtResource("23_angeli")
+node_id = "angeli"
+size_class = 0
+center_position = Vector2(300, 302)
+
+[node name="Principatus" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 236.0
+offset_top = 292.0
+offset_right = 256.0
+offset_bottom = 312.0
+script = ExtResource("2_node")
+ability = ExtResource("24_principatus")
+node_id = "principatus"
+size_class = 0
+parents = Array[String](["potestates", "seraphim"])
+parents_any = true
+center_position = Vector2(246, 302)
+
+[node name="Archangeli" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 344.0
+offset_top = 292.0
+offset_right = 364.0
+offset_bottom = 312.0
+script = ExtResource("2_node")
+ability = ExtResource("25_archangeli")
+node_id = "archangeli"
+size_class = 0
+parents = Array[String](["virtutes", "seraphim"])
+parents_any = true
+center_position = Vector2(354, 302)
+
+[node name="Seraphim" type="Control" parent="."]
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 282.0
+offset_top = 230.0
+offset_right = 318.0
+offset_bottom = 266.0
+script = ExtResource("2_node")
+ability = ExtResource("26_seraphim")
+node_id = "seraphim"
+parents = Array[String](["principatus", "angeli", "archangeli", "potestates", "virtutes", "throni", "cherubim", "dominationes"])
+parents_any = true
+center_position = Vector2(300, 248)
+
+[node name="Potestates" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 236.0
+offset_top = 238.0
+offset_right = 256.0
+offset_bottom = 258.0
+script = ExtResource("2_node")
+ability = ExtResource("27_potestates")
+node_id = "potestates"
+size_class = 0
+parents = Array[String](["principatus", "throni", "seraphim"])
+parents_any = true
+center_position = Vector2(246, 248)
+
+[node name="Virtutes" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 344.0
+offset_top = 238.0
+offset_right = 364.0
+offset_bottom = 258.0
+script = ExtResource("2_node")
+ability = ExtResource("28_virtutes")
+node_id = "virtutes"
+size_class = 0
+parents = Array[String](["archangeli", "dominationes", "seraphim"])
+parents_any = true
+center_position = Vector2(354, 248)
+
+[node name="Throni" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 236.0
+offset_top = 184.0
+offset_right = 256.0
+offset_bottom = 204.0
+script = ExtResource("2_node")
+ability = ExtResource("29_throni")
+node_id = "throni"
+size_class = 0
+parents = Array[String](["potestates", "cherubim", "seraphim"])
+parents_any = true
+center_position = Vector2(246, 194)
+
+[node name="Cherubim" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 184.0
+offset_right = 310.0
+offset_bottom = 204.0
+script = ExtResource("2_node")
+ability = ExtResource("30_cherubim")
+node_id = "cherubim"
+size_class = 0
+parents = Array[String](["seraphim", "throni", "dominationes"])
+parents_any = true
+center_position = Vector2(300, 194)
+
+[node name="Dominationes" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 344.0
+offset_top = 184.0
+offset_right = 364.0
+offset_bottom = 204.0
+script = ExtResource("2_node")
+ability = ExtResource("31_dominationes")
+node_id = "dominationes"
+size_class = 0
+parents = Array[String](["virtutes", "cherubim", "seraphim"])
+parents_any = true
+center_position = Vector2(354, 194)
+
+[node name="Azazel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 193.0
+offset_top = 265.0
+offset_right = 213.0
+offset_bottom = 285.0
+script = ExtResource("2_node")
+ability = ExtResource("32_azazel")
+node_id = "azazel"
+required_level = 10
+size_class = 0
+parents = Array[String](["potestates"])
+center_position = Vector2(203, 275)
+
+[node name="Gadreel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 162.0
+offset_top = 302.0
+offset_right = 182.0
+offset_bottom = 322.0
+script = ExtResource("2_node")
+ability = ExtResource("33_gadreel")
+node_id = "gadreel"
+size_class = 0
+parents = Array[String](["azazel"])
+center_position = Vector2(172, 312)
+
+[node name="Shamsiel" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 139.0
+offset_top = 344.0
+offset_right = 159.0
+offset_bottom = 364.0
+script = ExtResource("2_node")
+ability = ExtResource("34_shamsiel")
+node_id = "shamsiel"
+size_class = 0
+parents = Array[String](["gadreel"])
+center_position = Vector2(149, 354)
+
+[node name="Lahat" type="Control" parent="."]
+custom_minimum_size = Vector2(52, 52)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 104.0
+offset_top = 386.0
+offset_right = 156.0
+offset_bottom = 438.0
+script = ExtResource("2_node")
+ability = ExtResource("35_lahat")
+node_id = "lahat"
+size_class = 2
+parents = Array[String](["shamsiel"])
+center_position = Vector2(130, 412)
+
+[node name="Apsinthos" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 387.0
+offset_top = 265.0
+offset_right = 407.0
+offset_bottom = 285.0
+script = ExtResource("2_node")
+ability = ExtResource("36_apsinthos")
+node_id = "apsinthos"
+required_level = 10
+size_class = 0
+parents = Array[String](["virtutes"])
+center_position = Vector2(397, 275)
+
+[node name="Helkos" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 418.0
+offset_top = 302.0
+offset_right = 438.0
+offset_bottom = 322.0
+script = ExtResource("2_node")
+ability = ExtResource("37_helkos")
+node_id = "helkos"
+size_class = 0
+parents = Array[String](["apsinthos"])
+center_position = Vector2(428, 312)
+
+[node name="Abaddon" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 441.0
+offset_top = 344.0
+offset_right = 461.0
+offset_bottom = 364.0
+script = ExtResource("2_node")
+ability = ExtResource("38_abaddon")
+node_id = "abaddon"
+size_class = 0
+parents = Array[String](["helkos"])
+center_position = Vector2(451, 354)
+
+[node name="Phiale" type="Control" parent="."]
+custom_minimum_size = Vector2(52, 52)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 444.0
+offset_top = 386.0
+offset_right = 496.0
+offset_bottom = 438.0
+script = ExtResource("2_node")
+ability = ExtResource("39_phiale")
+node_id = "phiale"
+size_class = 2
+parents = Array[String](["abaddon"])
+center_position = Vector2(470, 412)
+
+[node name="Albedo" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 204.0
+offset_top = 157.0
+offset_right = 224.0
+offset_bottom = 177.0
+script = ExtResource("2_node")
+ability = ExtResource("40_albedo")
+node_id = "albedo"
+required_level = 10
+size_class = 0
+parents = Array[String](["throni"])
+center_position = Vector2(214, 167)
+
+[node name="Cygnus" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 164.0
+offset_top = 121.0
+offset_right = 184.0
+offset_bottom = 141.0
+script = ExtResource("2_node")
+ability = ExtResource("41_cygnus")
+node_id = "cygnus"
+size_class = 0
+parents = Array[String](["albedo"])
+center_position = Vector2(174, 131)
+
+[node name="Ablutio" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 149.0
+offset_top = 50.0
+offset_right = 169.0
+offset_bottom = 70.0
+script = ExtResource("2_node")
+ability = ExtResource("42_ablutio")
+node_id = "ablutio"
+size_class = 0
+parents = Array[String](["cygnus"])
+center_position = Vector2(159, 60)
+
+[node name="Luna" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 115.0
+offset_top = 68.0
+offset_right = 135.0
+offset_bottom = 88.0
+script = ExtResource("2_node")
+ability = ExtResource("43_luna")
+node_id = "luna"
+size_class = 0
+parents = Array[String](["cygnus"])
+center_position = Vector2(125, 78)
+
+[node name="Argentum" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 95.0
+offset_top = 101.0
+offset_right = 115.0
+offset_bottom = 121.0
+script = ExtResource("2_node")
+ability = ExtResource("44_argentum")
+node_id = "argentum"
+size_class = 0
+parents = Array[String](["cygnus"])
+center_position = Vector2(105, 111)
+
+[node name="Columba" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 94.0
+offset_top = 139.0
+offset_right = 114.0
+offset_bottom = 159.0
+script = ExtResource("2_node")
+ability = ExtResource("45_columba")
+node_id = "columba"
+size_class = 0
+parents = Array[String](["cygnus"])
+center_position = Vector2(104, 149)
+
+[node name="Nigredo" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 376.0
+offset_top = 157.0
+offset_right = 396.0
+offset_bottom = 177.0
+script = ExtResource("2_node")
+ability = ExtResource("46_nigredo")
+node_id = "nigredo"
+required_level = 10
+size_class = 0
+parents = Array[String](["dominationes"])
+center_position = Vector2(386, 167)
+
+[node name="Corvus" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 416.0
+offset_top = 121.0
+offset_right = 436.0
+offset_bottom = 141.0
+script = ExtResource("2_node")
+ability = ExtResource("47_corvus")
+node_id = "corvus"
+size_class = 0
+parents = Array[String](["nigredo"])
+center_position = Vector2(426, 131)
+
+[node name="Putrefactio" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 431.0
+offset_top = 50.0
+offset_right = 451.0
+offset_bottom = 70.0
+script = ExtResource("2_node")
+ability = ExtResource("48_putrefactio")
+node_id = "putrefactio"
+size_class = 0
+parents = Array[String](["corvus"])
+center_position = Vector2(441, 60)
+
+[node name="Mortificatio" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 465.0
+offset_top = 68.0
+offset_right = 485.0
+offset_bottom = 88.0
+script = ExtResource("2_node")
+ability = ExtResource("49_mortificatio")
+node_id = "mortificatio"
+size_class = 0
+parents = Array[String](["corvus"])
+center_position = Vector2(475, 78)
+
+[node name="CaputMortuum" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 485.0
+offset_top = 101.0
+offset_right = 505.0
+offset_bottom = 121.0
+script = ExtResource("2_node")
+ability = ExtResource("50_caput_mortuum")
+node_id = "caput_mortuum"
+size_class = 0
+parents = Array[String](["corvus"])
+center_position = Vector2(495, 111)
+
+[node name="SolNiger" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 486.0
+offset_top = 139.0
+offset_right = 506.0
+offset_bottom = 159.0
+script = ExtResource("2_node")
+ability = ExtResource("51_sol_niger")
+node_id = "sol_niger"
+size_class = 0
+parents = Array[String](["corvus"])
+center_position = Vector2(496, 149)
+
+[node name="Gibborim" type="Control" parent="."]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 290.0
+offset_top = 137.0
+offset_right = 310.0
+offset_bottom = 157.0
+script = ExtResource("2_node")
+ability = ExtResource("52_gibborim")
+node_id = "gibborim"
+required_level = 10
+size_class = 0
+parents = Array[String](["cherubim"])
+center_position = Vector2(300, 147)
+
+[node name="Nimbus" type="Control" parent="."]
+custom_minimum_size = Vector2(52, 52)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 274.0
+offset_top = 71.0
+offset_right = 326.0
+offset_bottom = 123.0
+script = ExtResource("2_node")
+ability = ExtResource("53_nimbus")
+node_id = "nimbus"
+size_class = 2
+parents = Array[String](["gibborim"])
+center_position = Vector2(300, 97)
