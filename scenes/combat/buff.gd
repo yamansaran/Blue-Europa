@@ -398,6 +398,18 @@ static func scale_potency(entry: Dictionary, mult: float) -> void:
 # ---------------------------------------------------------------------------
 # LIVE DESCRIPTION
 # ---------------------------------------------------------------------------
+## Compiled once (perf, 2026-09-25) instead of on every describe() call.
+static var _desc_re: RegEx = null
+
+static func _desc_regex() -> RegEx:
+	if _desc_re == null:
+		var re := RegEx.new()
+		# Longest alternatives first so "modpctabs" is not eaten by "mod".
+		if re.compile("\\{(modpctabs|modpct|modabs|mod|multabs|mult):([A-Za-z0-9_]+)\\}") != OK:
+			return null
+		_desc_re = re
+	return _desc_re
+
 ## An entry's description with its ACTUAL current numbers substituted in.
 ##
 ## WHY THIS EXISTS. `desc` is baked by BuffLibrary at build time from the base values,
@@ -442,9 +454,8 @@ static func describe(entry: Dictionary) -> String:
 	out = out.replace("{turns}", "permanent" if dur < 0 else "%d turn%s" % [dur, "" if dur == 1 else "s"])
 
 	# {mod:<stat>} / {modabs:<stat>} / {mult:<stat>} / {multabs:<stat>}
-	var re := RegEx.new()
-	# Longest alternatives first so "modpctabs" is not eaten by "mod".
-	if re.compile("\\{(modpctabs|modpct|modabs|mod|multabs|mult):([A-Za-z0-9_]+)\\}") != OK:
+	var re := _desc_regex()
+	if re == null:
 		return out
 	# Replace back-to-front so earlier match offsets stay valid.
 	var matches := re.search_all(out)

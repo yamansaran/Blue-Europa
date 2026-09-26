@@ -49,7 +49,7 @@ func _ready() -> void:
 	title.add_theme_font_size_override("font_size", 18)
 	head.add_child(title)
 	var x := Button.new()
-	x.text = "✕"
+	x.text = "×"
 	x.focus_mode = Control.FOCUS_NONE
 	x.pressed.connect(func(): closed.emit(); queue_free())
 	head.add_child(x)

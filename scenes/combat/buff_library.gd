@@ -1638,8 +1638,15 @@ static func _build_nephilic(id: String, caster: CharacterBase) -> Dictionary:
 	return {}
 
 ## True when `id` names a buff this library knows how to build.
+## Cached per id (perf, 2026-09-25): whether an id resolves never changes at runtime,
+## and combat asks for every buff application (_rank_clone_id), which used to build
+## and throw away a whole entry each time.
+static var _has_cache: Dictionary = {}
+
 static func has(id: String) -> bool:
-	return not build(id).is_empty()
+	if not _has_cache.has(id):
+		_has_cache[id] = not build(id).is_empty()
+	return bool(_has_cache[id])
 
 # ---------------------------------------------------------------------------
 # Generic constructors — handy for building common effects from code without a

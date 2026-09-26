@@ -377,7 +377,7 @@ func _make_stat_dict_editor() -> Dictionary:
 		sb.custom_minimum_size.x = 120
 		r.add_child(sb)
 		var del := Button.new()
-		del.text = "✕"
+		del.text = "×"
 		del.pressed.connect(func(): r.queue_free())
 		r.add_child(del)
 		rows.add_child(r)

@@ -210,10 +210,26 @@ func get_effective_int(stat: String) -> int:
 
 ## Flat stat snapshot (fully effective, incl. multipliers) for systems that still
 ## want a plain Dictionary (e.g. Ability.compute_damage(caster_stats)).
+##
+## ONE PASS (perf, 2026-09-25): sums every entry's mods / mult once, then combines per
+## stat — O(entries + stats) instead of get_effective's O(entries) for each of ~75
+## stats. Same additions in the same order, so the numbers are identical.
 func effective_stats() -> Dictionary:
+	var flat := {}
+	var mul := {}
+	for basket_name in baskets:
+		for entry in baskets[basket_name]:
+			var mods = entry.get("mods", {})
+			if typeof(mods) == TYPE_DICTIONARY:
+				for k in mods:
+					flat[k] = float(flat.get(k, 0.0)) + float(mods[k])
+			var mult = entry.get("mult", null)
+			if typeof(mult) == TYPE_DICTIONARY:
+				for k in mult:
+					mul[k] = float(mul.get(k, 0.0)) + float(mult[k])
 	var out := {}
 	for stat in base_stats:
-		out[stat] = get_effective(stat)
+		out[stat] = (float(base_stats[stat]) + float(flat.get(stat, 0.0))) * (1.0 + float(mul.get(stat, 0.0)))
 	return out
 
 # ============================================================================

@@ -15,7 +15,7 @@ class_name AIDebug
 ## combat, no units and no fight needed. QUIET WHEN HEALTHY: one PASS line. When
 ## something fails it prints the full comparison and pushes a warning.
 ##
-## HOW IT RUNS: combat calls self_test() once at battle start under
+## HOW IT RUNS: combat calls self_test_once() at battle start (first fight per session) under
 ## GameManager.is_debug(). Set SELF_TEST_ON_BATTLE_START false below to silence it
 ## once you trust it — or call AIDebug.self_test() by hand from anywhere.
 ##
@@ -31,6 +31,26 @@ const ROULETTE_DRAWS := 20000
 const TOLERANCE := 0.02
 
 # ----------------------------------------------------------------------------
+## Once per SESSION, not once per fight (perf, 2026-09-25): ~30k roulette draws are
+## tens of milliseconds of debug GDScript, and they drained AIPick's shared RNG, which
+## broke AIPick.set_seed reproducibility whenever debug was on. The self-test now draws
+## from its OWN RNG (AIPick.weighted's `gen` argument), so the AI's stream is untouched.
+static var _ran := false
+
+static var _test_rng: RandomNumberGenerator = null
+
+static func _trng() -> RandomNumberGenerator:
+	if _test_rng == null:
+		_test_rng = RandomNumberGenerator.new()
+		_test_rng.randomize()
+	return _test_rng
+
+static func self_test_once() -> void:
+	if _ran:
+		return
+	_ran = true
+	self_test()
+
 static func self_test() -> bool:
 	var fails: Array = []
 	fails += _test_gain_curve()
@@ -93,7 +113,7 @@ static func _test_roulette() -> Array:
 	var expected := [25.0 / 585.0, 60.0 / 585.0, 100.0 / 585.0, 400.0 / 585.0]
 	var counts := [0, 0, 0, 0]
 	for _i in ROULETTE_DRAWS:
-		var pick := AIPick.weighted(scores, 1.0)
+		var pick := AIPick.weighted(scores, 1.0, _trng())
 		if pick < 0 or pick >= 4:
 			out.append("roulette: returned an out-of-range index %d for four positive scores" % pick)
 			return out
@@ -106,15 +126,15 @@ static func _test_roulette() -> Array:
 	# take essentially everything (400^4 is ~4000x the 100^4 runner-up).
 	var sharp := 0
 	for _i in 2000:
-		if AIPick.weighted(scores, 4.0) == 3:
+		if AIPick.weighted(scores, 4.0, _trng()) == 3:
 			sharp += 1
 	if float(sharp) / 2000.0 < 0.98:
 		out.append("roulette: at exponent 4.0 the dominant option won only %.1f%% of the time (expected >98%%)" % [float(sharp) / 20.0])
 	# An empty or all-zero score set must FAIL, so the caller drops to its
 	# fallback ladder rather than silently acting on option zero.
-	if AIPick.weighted([], 1.5) != -1:
+	if AIPick.weighted([], 1.5, _trng()) != -1:
 		out.append("roulette: an empty score array must return -1")
-	if AIPick.weighted([0.0, 0.0, 0.0], 1.5) != -1:
+	if AIPick.weighted([0.0, 0.0, 0.0], 1.5, _trng()) != -1:
 		out.append("roulette: an all-zero score array must return -1")
 	return out
 
@@ -127,13 +147,13 @@ static func _test_zero_stays_zero() -> Array:
 	var out: Array = []
 	for exponent in [0.0, 1.0, 1.5, 8.0]:
 		for _i in 500:
-			if AIPick.weighted([0.0, 5.0], float(exponent)) != 1:
+			if AIPick.weighted([0.0, 5.0], float(exponent), _trng()) != 1:
 				out.append("zero-stays-zero: a score of 0.0 was chosen at exponent %.1f" % float(exponent))
 				break
 	# ...and at exponent 0 the NON-zero options must be uniform among themselves.
 	var counts := [0, 0, 0]
 	for _i in 6000:
-		var pick := AIPick.weighted([0.0, 5.0, 500.0], 0.0)
+		var pick := AIPick.weighted([0.0, 5.0, 500.0], 0.0, _trng())
 		if pick >= 0:
 			counts[pick] += 1
 	if counts[0] != 0:

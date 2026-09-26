@@ -84,7 +84,21 @@ func icon_size() -> Vector2:
 	return st.overhead_icon_size if compact else st.panel_icon_size
 
 
+## COALESCED (perf, 2026-09-25): combat calls refresh_buffs several times inside one
+## action (a rider, the apply, the bar refresh...), and each call used to free and
+## rebuild every chip. Now any number of calls in a frame rebuild ONCE, at the end of
+## that frame (before it is drawn), so nothing visible changes.
+var _refresh_pending := false
+
 func refresh() -> void:
+	if _refresh_pending:
+		return
+	_refresh_pending = true
+	_rebuild.call_deferred()
+
+
+func _rebuild() -> void:
+	_refresh_pending = false
 	# clear existing chips
 	for c in get_children():
 		if c is _Chip:

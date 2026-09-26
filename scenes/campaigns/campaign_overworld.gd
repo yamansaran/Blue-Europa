@@ -104,7 +104,7 @@ func _add_debug_controls() -> void:
 				_add_float_button(r, "DUMMY", "Fight the practice dummy instead of a\nrolled training fight (debug)",
 						_on_debug_dummy_pressed)
 			"campaign":
-				_add_float_button(r, "FIGHT ▾", "Choose which campaign fight is next —\nsets this zone's progress (debug)",
+				_add_float_button(r, "FIGHT ▼", "Choose which campaign fight is next —\nsets this zone's progress (debug)",
 						_on_debug_fight_picker_pressed)
 
 ## DEBUG: the small floating "DEBUG" button in the overworld's top-right corner that
@@ -332,7 +332,7 @@ func _on_debug_fight_picker_pressed() -> void:
 	# The one entry that is not a fight: everything cleared, which is what puts the
 	# campaign into its completed state and makes the advance popup testable.
 	var done := Button.new()
-	done.text = "✔  campaign complete (show the advance popup)"
+	done.text = "✓  campaign complete (show the advance popup)"
 	done.custom_minimum_size = Vector2(380, 30)
 	done.pressed.connect(_on_debug_fight_picked.bind(camp.fight_count()))
 	box.add_child(done)

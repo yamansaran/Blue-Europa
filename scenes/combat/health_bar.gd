@@ -311,16 +311,19 @@ func set_shield(total_shield: int) -> void:
 
 ## Draw the shield bar: a rounded medium-grey background + a small shield glyph at
 ## the START edge. Bound to _shield_overlay.draw, so the draws target that node.
+var _shield_sb: StyleBoxFlat = null
+
 func _draw_shield_overlay() -> void:
 	var ov := _shield_overlay
 	var w := ov.size.x
 	var h := ov.size.y
 	if w <= 0.0 or h <= 0.0:
 		return
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = SHIELD_BAR_BG
-	sb.set_corner_radius_all(3)
-	ov.draw_style_box(sb, Rect2(Vector2.ZERO, ov.size))
+	if _shield_sb == null:     # built once, not on every redraw (perf, 2026-09-25)
+		_shield_sb = StyleBoxFlat.new()
+		_shield_sb.bg_color = SHIELD_BAR_BG
+		_shield_sb.set_corner_radius_all(3)
+	ov.draw_style_box(_shield_sb, Rect2(Vector2.ZERO, ov.size))
 	# Shield glyph (flat top, pointed bottom) hugging the start edge.
 	var pad := 3.0
 	var iw := h - pad * 2.0

@@ -53,6 +53,7 @@ const MIN_FONT_SIZE := 22       # never smaller than this
 const MAX_FONT_SIZE := 68       # never larger than this
 const SIZE_PER_SQRT := 1.7      # +this much font per sqrt(amount) of damage
 const CRIT_SIZE_MULT := 1.22    # crits are additionally this much bigger
+const SIZE_STEP := 4            # sizes snap to multiples of this (fewer glyph caches)
 
 # --- fonts ------------------------------------------------------------------
 ## Inter (added under assets/fonts). Crits use the REAL italic face; everything
@@ -204,7 +205,11 @@ func _font_size_for(amount: int, is_crit: bool) -> int:
 	var fs := float(BASE_FONT_SIZE) + SIZE_PER_SQRT * sqrt(float(maxi(amount, 0)))
 	if is_crit:
 		fs *= CRIT_SIZE_MULT
-	return clampi(int(round(fs)), MIN_FONT_SIZE, MAX_FONT_SIZE)
+	# SIZE BUCKETS (perf, 2026-09-25): every distinct font size (and the outline tied
+	# to it) is a separate glyph cache rasterized on first use — the continuous curve
+	# made dozens of them. Snapping to SIZE_STEP keeps the growth readable with ~12.
+	fs = roundf(fs / float(SIZE_STEP)) * float(SIZE_STEP)
+	return clampi(int(fs), MIN_FONT_SIZE, MAX_FONT_SIZE)
 
 
 ## Horizontal centre-line of this number's box before any burst spread.

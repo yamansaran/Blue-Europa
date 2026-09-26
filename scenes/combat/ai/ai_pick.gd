@@ -60,7 +60,8 @@ static func set_seed(value: int) -> void:
 ## failed" and drop to its fallback — never as "pick the first one").
 ## Negative scores are floored at 0, so a term can never make an option cost
 ## probability from another one.
-static func weighted(scores: Array, exponent: float = 1.0) -> int:
+## `gen` (optional): draw from this RNG instead of the AI's shared one (AIDebug's self-test).
+static func weighted(scores: Array, exponent: float = 1.0, gen: RandomNumberGenerator = null) -> int:
 	var n := scores.size()
 	if n <= 0:
 		return -1
@@ -78,7 +79,7 @@ static func weighted(scores: Array, exponent: float = 1.0) -> int:
 		total += v
 	if total <= 0.0:
 		return -1
-	var roll := rng().randf() * total
+	var roll := (gen if gen != null else rng()).randf() * total
 	var acc := 0.0
 	for i in n:
 		acc += float(w[i])

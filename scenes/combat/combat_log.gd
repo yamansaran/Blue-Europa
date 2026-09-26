@@ -156,8 +156,7 @@ func _build() -> void:
 	_text.add_theme_font_size_override("bold_font_size", TEXT_SIZE)
 	# A terminal wants a terminal face. SystemFont falls back to the theme font on
 	# any machine that has none of these, so this is safe to ask for.
-	var mono := SystemFont.new()
-	mono.font_names = PackedStringArray(["Consolas", "Cascadia Mono", "DejaVu Sans Mono", "Courier New", "monospace"])
+	var mono := _mono_font()
 	_text.add_theme_font_override("normal_font", mono)
 	_text.add_theme_font_override("bold_font", mono)
 	add_child(_text)
@@ -177,6 +176,17 @@ func _build() -> void:
 	_grip.gui_input.connect(_on_grip_input)
 	_grip.draw.connect(_draw_grip)
 	add_child(_grip)
+
+## ONE SystemFont for the whole session (perf, 2026-09-25). Building a fresh one in
+## every fight meant an OS font lookup, a font-file load and new glyph caches per
+## fight, all thrown away when the fight ended.
+static var _mono: SystemFont = null
+
+static func _mono_font() -> SystemFont:
+	if _mono == null:
+		_mono = SystemFont.new()
+		_mono.font_names = PackedStringArray(["Consolas", "Cascadia Mono", "DejaVu Sans Mono", "Courier New", "monospace"])
+	return _mono
 
 func _mini_button(label: String, tip: String) -> Button:
 	var b := Button.new()
@@ -225,7 +235,7 @@ func add_action(actor_name: String, team: int, ability_name: String, detail: Str
 ## than as an undifferentiated stream.
 func add_turn_header(actor_name: String, team: int, turn_no: int, clock: float) -> void:
 	var col := speaker_color(team)
-	_append("[color=#%s]──[/color] [color=#%s]%s[/color] [color=#%s]· turn %d · clock %d[/color]" % [
+	_append("[color=#%s]——[/color] [color=#%s]%s[/color] [color=#%s]· turn %d · clock %d[/color]" % [
 		DIM_COL.to_html(false), col.to_html(false), _esc(actor_name),
 		DIM_COL.to_html(false), turn_no, int(round(clock))])
 

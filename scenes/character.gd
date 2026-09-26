@@ -1162,8 +1162,17 @@ func damage_history_fights() -> Array:
 ## the newest fight — counting only the fights in the window it took part in.
 ## Returns -1.0 when it took part in none of them (so the caller can fall back).
 ## Different AI units look at different windows (ai_memory_from / ai_memory_span).
+## The parsed history, kept until the string changes (perf, 2026-09-25): the AI's
+## reputation signal asks per target per decision, and each ask re-split the string.
+## Read-only — damage_history_fights() still hands callers a fresh copy.
+var _hist_parsed: Array = []
+var _hist_parsed_src := ""
+
 func damage_in_window(key: String, from: int, span: int) -> float:
-	var fights := damage_history_fights()
+	if _hist_parsed_src != damage_history or (damage_history != "" and _hist_parsed.is_empty()):
+		_hist_parsed = damage_history_fights()
+		_hist_parsed_src = damage_history
+	var fights := _hist_parsed
 	var total := 0.0
 	var n := 0
 	for i in range(maxi(0, from), mini(fights.size(), maxi(0, from) + maxi(0, span))):

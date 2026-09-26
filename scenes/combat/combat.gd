@@ -224,7 +224,17 @@ var _combat_log: CombatLog = null
 enum Phase { PLAYER, RESOLVING }
 var _phase: int = Phase.PLAYER
 
+## The debug flag, read ONCE per fight. Every Output-log line combat writes goes through
+## _dbg (perf, 2026-09-25): run from the editor, each print() crosses the debugger to the
+## Output panel, and a multi-hit / AoE turn printed dozens. With debug off, none of them.
+var _debug := false
+
+func _dbg(msg: String) -> void:
+	if _debug:
+		print(msg)
+
 func _ready() -> void:
+	_debug = typeof(GameManager) != TYPE_NIL and GameManager.has_method("is_debug") and GameManager.is_debug()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_layout()
 	_load_units()
@@ -772,7 +782,7 @@ func _build_turn_ui() -> void:
 	# LEAVE FIGHT — a small red square riding on the End Turn button's top-right edge.
 	# Added AFTER the round button so it draws on top and takes its own clicks.
 	_leave_btn = Button.new()
-	_leave_btn.text = "✕"
+	_leave_btn.text = "×"   # U+00D7: Inter has it; ✕ forced a slow system-font fallback
 	_leave_btn.tooltip_text = "Leave the fight"
 	_leave_btn.focus_mode = Control.FOCUS_NONE
 	_leave_btn.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -943,7 +953,7 @@ func _on_debug_applied() -> void:
 	# turn boundary.
 	_sync_intervals()
 	_refresh_turn_ui()
-	print("[combat][debug] applied new stats to %s (max_hp=%d)" % [
+	_dbg("[combat][debug] applied new stats to %s (max_hp=%d)" % [
 		_debug_target.unit_name if _debug_target else "?",
 		_debug_target.get_max_hp() if _debug_target else 0])
 
@@ -961,7 +971,7 @@ func _on_unit_health_damaged(u: BattleCharacter) -> void:
 		u.refresh_buffs()
 		u.refresh_bar()
 		_log_note("%s loses %s" % [u.unit_name, str(e.get("source", e.get("id", "?")))])
-		print("[combat] %s loses %s — took health damage." % [u.unit_name, str(e.get("id", "?"))])
+		_dbg("[combat] %s loses %s — took health damage." % [u.unit_name, str(e.get("id", "?"))])
 	var uid := u.body.get_instance_id()
 	for other in _units:
 		if other == null or other.body == null or other == u:
@@ -970,7 +980,7 @@ func _on_unit_health_damaged(u: BattleCharacter) -> void:
 			other.refresh_buffs()
 			other.refresh_bar()
 			_log_note("%s loses %s — %s was hit" % [other.unit_name, str(e.get("source", e.get("id", "?"))), u.unit_name])
-			print("[combat] %s loses %s — its caster %s took health damage." % [
+			_dbg("[combat] %s loses %s — its caster %s took health damage." % [
 				other.unit_name, str(e.get("id", "?")), u.unit_name])
 
 func _on_unit_hovered(_u: BattleCharacter) -> void:
@@ -991,7 +1001,7 @@ func _on_unit_clicked(u: BattleCharacter) -> void:
 	# so clicking a covered ally to heal it is unaffected.
 	if _player != null and _is_hostile(_player, u) and _is_covered(u):
 		u.float_covered()
-		print("[combat] %s is covered by the front row — pick a front-row target." % u.unit_name)
+		_dbg("[combat] %s is covered by the front row — pick a front-row target." % u.unit_name)
 		return
 	# The camera pans + zooms onto the clicked unit while the wheel opens over it.
 	_camera_focus(u)
@@ -1022,21 +1032,21 @@ func _on_wheel_slot_selected(index: int, ability_id: String) -> void:
 	if ability.target == Ability.Target.SELF:
 		tgt = _player
 	if not _valid_target(_player, ability, tgt):
-		print("[combat] %s can't target %s" % [ability.display_name, tgt.unit_name])
+		_dbg("[combat] %s can't target %s" % [ability.display_name, tgt.unit_name])
 		_cancel_action()
 		return
 	# Gameplay gates — ONE predicate, shared with the wheel's greying and the enemy
 	# AI's filter, so no path can resolve an ability another path would refuse.
 	var blocked := _use_blocked(_player, ability, index)
 	if blocked != "":
-		print("[combat] %s." % blocked)
+		_dbg("[combat] %s." % blocked)
 		_cancel_action()
 		return
 	await _perform_action(_player, ability, tgt, index)
 	# The budget ran out during that cast -> the player's turn is over. Ended HERE,
 	# once resolution has fully unwound, rather than from inside _use_ability.
 	if _turn_should_end and not _battle_over and is_inside_tree():
-		print("[combat] %s is out of action points — ending turn." % _player.unit_name)
+		_dbg("[combat] %s is out of action points — ending turn." % _player.unit_name)
 		end_player_turn()
 
 func _cancel_action() -> void:
@@ -1385,7 +1395,7 @@ func _resolve_attack_on(caster: BattleCharacter, ability: Ability, tgt: BattleCh
 	# Shatter, no on-hit rider. In a fan-out every other unit still rolls its own.
 	if bool(hit.get("dodged", false)):
 		tgt.float_dodge()
-		print("[combat] %s DODGED %s [chance %.0f%%]" % [
+		_dbg("[combat] %s DODGED %s [chance %.0f%%]" % [
 			tgt.unit_name, ability.display_name, float(hit.get("dodge_chance", 0.0))])
 		return {
 			"dodged": true, "damage": 0, "is_crit": false,
@@ -1441,7 +1451,7 @@ func _resolve_attack_on(caster: BattleCharacter, ability: Ability, tgt: BattleCh
 	if not tgt.is_alive():
 		_cast_ctx["killed"] = true
 	var crit_tag := " (CRIT x%.2f)" % float(hit["crit_mult"]) if hit["is_crit"] else ""
-	print("[combat] %s hits %s for %d %s damage%s [chance %.0f%%]" % [
+	_dbg("[combat] %s hits %s for %d %s damage%s [chance %.0f%%]" % [
 		ability.display_name, tgt.unit_name, dmg, ability.element_key(), crit_tag, float(hit["crit_chance"])])
 	return {
 		"dodged": false, "damage": dmg, "is_crit": bool(hit["is_crit"]),
@@ -1461,7 +1471,7 @@ func _use_ability(caster: BattleCharacter, ability: Ability, tgt: BattleCharacte
 	var rank := _ability_rank(caster, ability)
 	var sp_cost := _spirit_cost(caster, ability, rank)
 	if caster.get_spirit() < sp_cost:
-		print("[combat] not enough spirit for %s (need %d, have %d)" % [ability.display_name, sp_cost, caster.get_spirit()])
+		_dbg("[combat] not enough spirit for %s (need %d, have %d)" % [ability.display_name, sp_cost, caster.get_spirit()])
 		return
 
 	# AoE FAN-OUT (COMBAT C4.2). An ALL_ENEMIES / ALL_ALLIES ability resolves its
@@ -1545,7 +1555,7 @@ func _use_ability(caster: BattleCharacter, ability: Ability, tgt: BattleCharacte
 				var heal_amt := int(round(raw_heal * _heal_power_dealt(hbody)))
 				var restored := u.heal(heal_amt)
 				details.append("→ %s · +%d hp" % [u.unit_name, restored])
-				print("[combat] %s heals %s for %d." % [ability.display_name, u.unit_name, restored])
+				_dbg("[combat] %s heals %s for %d." % [ability.display_name, u.unit_name, restored])
 				acted = true
 
 			Ability.Kind.SHIELD:
@@ -1562,7 +1572,7 @@ func _use_ability(caster: BattleCharacter, ability: Ability, tgt: BattleCharacte
 						"decay": ability.shield_decay_spec(),
 					})
 					details.append("→ %s · +%d shield" % [u.unit_name, shield_amt])
-					print("[combat] %s shields %s for %d." % [ability.display_name, u.unit_name, shield_amt])
+					_dbg("[combat] %s shields %s for %d." % [ability.display_name, u.unit_name, shield_amt])
 				else:
 					details.append("→ %s · no shield (0)" % u.unit_name)
 				acted = true
@@ -1595,11 +1605,11 @@ func _use_ability(caster: BattleCharacter, ability: Ability, tgt: BattleCharacte
 					details.append("→ %s" % u.unit_name)
 					acted = true
 				else:
-					print("[combat] %s has no buff to apply (applies_buff is blank / unknown)." % ability.display_name)
+					_dbg("[combat] %s has no buff to apply (applies_buff is blank / unknown)." % ability.display_name)
 
 			_:
 				details.append("→ %s · kind %d not implemented" % [u.unit_name, ability.kind])
-				print("[combat] %s used on %s (kind %d not yet implemented)" % [ability.display_name, u.unit_name, ability.kind])
+				_dbg("[combat] %s used on %s (kind %d not yet implemented)" % [ability.display_name, u.unit_name, ability.kind])
 
 		first = false
 
@@ -1760,7 +1770,7 @@ func _apply_buff_instance(caster: BattleCharacter, ability: Ability, tgt: Battle
 		# for every caster. The log keeps the distinction.
 		tgt.float_resist()
 		_note_buff("%s did not proc" % bid)
-		print("[combat] %s did not proc on %s [%.0f%% chance]" % [bid, tgt.unit_name, chance * 100.0])
+		_dbg("[combat] %s did not proc on %s [%.0f%% chance]" % [bid, tgt.unit_name, chance * 100.0])
 		return true
 	# COOLDOWN HOLD (§1.16): stamp the entry with this cast's hold key, so the sweep
 	# can tell whether anything this ability applied is still standing. A string, not
@@ -1781,7 +1791,7 @@ func _apply_buff_instance(caster: BattleCharacter, ability: Ability, tgt: Battle
 		# this returns TRUE. `false` means "this ability names no buff at all".
 		tgt.float_resist()
 		_note_buff("%s RESISTED" % bid)
-		print("[combat] %s RESISTED %s [chance %.0f%%]" % [tgt.unit_name, bid, float(rep["chance"])])
+		_dbg("[combat] %s RESISTED %s [chance %.0f%%]" % [tgt.unit_name, bid, float(rep["chance"])])
 		tgt.refresh_buffs()
 		return true
 	var landed := "+%s" % bid
@@ -1791,10 +1801,10 @@ func _apply_buff_instance(caster: BattleCharacter, ability: Ability, tgt: Battle
 		# carries a lasting marker (gold under-cap + a line in its hover card).
 		tgt.float_empowered(float(rep["potency"]), int(rep["extra_turns"]))
 		landed += " (empowered)"
-		print("[combat] %s empowered by Disdain: potency x%.2f, +%d turn(s) [overpower %.2f]" % [
+		_dbg("[combat] %s empowered by Disdain: potency x%.2f, +%d turn(s) [overpower %.2f]" % [
 			bid, float(rep["potency"]), int(rep["extra_turns"]), float(rep["overpower"])])
 	_note_buff(landed)
-	print("[combat] %s applied %s to %s." % [ability.display_name, bid, tgt.unit_name])
+	_dbg("[combat] %s applied %s to %s." % [ability.display_name, bid, tgt.unit_name])
 	tgt.refresh_bar()      # a max-HP / max-Spirit buff can move the ceilings
 	tgt.refresh_buffs()
 	return true
@@ -1819,7 +1829,7 @@ func _maybe_apply_self_buff(caster: BattleCharacter, ability: Ability, rank: int
 	caster.refresh_bar()      # a max-HP / max-Spirit buff can move the ceilings
 	caster.refresh_buffs()
 	_note_buff("+%s (self)" % bid)
-	print("[combat] %s buffs %s with %s." % [ability.display_name, caster.unit_name, bid])
+	_dbg("[combat] %s buffs %s with %s." % [ability.display_name, caster.unit_name, bid])
 	return true
 
 ## Apply an ability's one-time spirit effects: the CASTER GAINS
@@ -1848,18 +1858,18 @@ func _apply_spirit_effects(caster: BattleCharacter, ability: Ability, tgt: Battl
 			caster.refresh_buffs()
 	if gain != 0 and caster != null:
 		var got := caster.change_spirit(gain)
-		print("[combat] %s gains %d spirit from %s." % [caster.unit_name, got, ability.display_name])
+		_dbg("[combat] %s gains %d spirit from %s." % [caster.unit_name, got, ability.display_name])
 	var steal := ability.spirit_steal_at(rank)
 	if steal != 0 and tgt != null:
 		var lost := tgt.change_spirit(-steal)
-		print("[combat] %s loses %d spirit to %s." % [tgt.unit_name, -lost, ability.display_name])
+		_dbg("[combat] %s loses %d spirit to %s." % [tgt.unit_name, -lost, ability.display_name])
 	# GRANT — spirit given TO the target. Applied AFTER the caster's own gain, for the
 	# same reason the gain precedes the steal: a caster running an overflow_shield
 	# converts its own over-cap remainder first, before it starts handing spirit out.
 	var grant := ability.spirit_grant_at(rank)
 	if grant != 0 and tgt != null:
 		var given := tgt.change_spirit(grant)
-		print("[combat] %s grants %s %d spirit." % [ability.display_name, tgt.unit_name, given])
+		_dbg("[combat] %s grants %s %d spirit." % [ability.display_name, tgt.unit_name, given])
 
 ## SECOND ELEMENT: the other half of an attack that is two damage types at once.
 ## After the main hit lands, deal `bonus_scaling_mult × caster[bonus_scaling_stat]`
@@ -1894,7 +1904,7 @@ func _apply_bonus_damage(caster: BattleCharacter, ability: Ability, tgt: BattleC
 		return
 	tgt.take_damage(dmg, elem, false)
 	caster.damage_dealt += float(dmg)
-	print("[combat] %s also deals %d %s damage to %s (second element)." % [
+	_dbg("[combat] %s also deals %d %s damage to %s (second element)." % [
 		ability.display_name, dmg, elem, tgt.unit_name])
 
 
@@ -1932,7 +1942,7 @@ func _apply_pct_max_hp_damage(caster: BattleCharacter, ability: Ability, tgt: Ba
 	tgt.take_damage(dmg, elem, false)
 	if caster:
 		caster.damage_dealt += float(dmg)
-	print("[combat] %s also deals %d %s damage to %s (%.0f%% of max HP)." % [
+	_dbg("[combat] %s also deals %d %s damage to %s (%.0f%% of max HP)." % [
 		ability.display_name, dmg, elem, tgt.unit_name, pct * 100.0])
 
 
@@ -1996,7 +2006,7 @@ func _apply_shatter(caster: BattleCharacter, ability: Ability, tgt: BattleCharac
 				caster.damage_dealt += float(bonus)
 	tgt.refresh_bar()
 	tgt.refresh_buffs()
-	print("[combat] %s shatters a %s debuff on %s." % [ability.display_name, elem, tgt.unit_name])
+	_dbg("[combat] %s shatters a %s debuff on %s." % [ability.display_name, elem, tgt.unit_name])
 
 # ============================================================================
 # THE NEPHILIC KIT (2026-09-24) — perks, costs and hooks
@@ -2048,7 +2058,7 @@ func _setup_player_perks() -> void:
 	CombatPerks.set_all(_player.body, perks)
 	if perks.is_empty():
 		return
-	print("[combat] player perks: %s" % str(perks.keys()))
+	_dbg("[combat] player perks: %s" % str(perks.keys()))
 	var body := _player.body
 	# GRIT: a fight-start shield, and less damage taken while it holds.
 	if perks.has("grit"):
@@ -2377,7 +2387,7 @@ func _check_defeat() -> void:
 		if _wheel:
 			_wheel.close()
 		_log_note("DEFEAT — %s has fallen." % _player.unit_name)
-		print("[combat] defeat — %s has fallen." % _player.unit_name)
+		_dbg("[combat] defeat — %s has fallen." % _player.unit_name)
 		_record_damage_history()
 		_leave_after_defeat()
 
@@ -2436,7 +2446,7 @@ func _win() -> void:
 		await _play_lines(_dialogue.take("victory"))
 		if not is_inside_tree():
 			return
-	print("[combat] victory! +%d money, +%d xp, %d items" % [BattleState.result_money, BattleState.result_xp, BattleState.result_items.size()])
+	_dbg("[combat] victory! +%d money, +%d xp, %d items" % [BattleState.result_money, BattleState.result_xp, BattleState.result_items.size()])
 	# Let the final blow / death animation read for a beat before the results screen
 	# takes over. The battle is already locked (_battle_over = true), so nothing can
 	# act during the wait.
@@ -2497,7 +2507,7 @@ func _sweep_cooldown_holds() -> void:
 			u.release_cooldown_hold(int(slot), turns)
 			if u == _player:
 				_sync_wheel_state()
-			print("[combat] %s: %s is off hold — %d turn(s) of cooldown from now." % [
+			_dbg("[combat] %s: %s is off hold — %d turn(s) of cooldown from now." % [
 				u.unit_name, ab.display_name if ab else "slot %d" % int(slot), turns])
 
 func _hold_still_standing(key: String) -> bool:
@@ -2550,8 +2560,8 @@ func _start_battle() -> void:
 		_timeline.snap_to(_clock)
 	_refresh_turn_ui()
 	_sync_wheel_state()
-	_log_note("── battle start · %d units ──" % _units.size())
-	print("[combat] battle start — %d units on the timeline." % _units.size())
+	_log_note("—— battle start · %d units ——" % _units.size())
+	_dbg("[combat] battle start — %d units on the timeline." % _units.size())
 	# AI PRIMITIVE SELF-TEST — debug builds only, and quiet when healthy (one PASS
 	# line). It checks AIGain's curve and AIPick's roulette against the numbers
 	# AI_PRIMER quotes, with no units and no fight involved, so a silently wrong
@@ -2559,7 +2569,7 @@ func _start_battle() -> void:
 	# read as "the enemies feel random" weeks later. Turn it off by setting
 	# AIDebug.SELF_TEST_ON_BATTLE_START to false.
 	if AIDebug.SELF_TEST_ON_BATTLE_START and AITurn.is_debug():
-		AIDebug.self_test()
+		AIDebug.self_test_once()
 	_run_turn_loop()
 
 ## THE TURN LOOP. Pick the living unit scheduled soonest, scroll the clock to it,
@@ -2579,7 +2589,7 @@ func _run_turn_loop() -> void:
 		_sync_intervals()
 		var nxt := _next_actor()
 		if nxt == null:
-			print("[combat] nobody left to act — turn loop stopping.")
+			_dbg("[combat] nobody left to act — turn loop stopping.")
 			break
 		await _scroll_clock_to(nxt.next_turn_at)
 		if _battle_over:
@@ -2788,7 +2798,7 @@ func _begin_unit_turn(u: BattleCharacter) -> void:
 
 	if CombatBuffs.is_stunned(u.body):
 		_log_note("%s is stunned and loses its turn." % u.unit_name)
-		print("[combat] %s is stunned and loses its turn." % u.unit_name)
+		_dbg("[combat] %s is stunned and loses its turn." % u.unit_name)
 		_finish_turn(u)
 		return
 
@@ -2797,7 +2807,7 @@ func _begin_unit_turn(u: BattleCharacter) -> void:
 
 	if u == _player:
 		_phase = Phase.PLAYER
-		print("[combat] %s's turn (turn %d for them, clock %.0f)." % [u.unit_name, u.turns_taken, _clock])
+		_dbg("[combat] %s's turn (turn %d for them, clock %.0f)." % [u.unit_name, u.turns_taken, _clock])
 		_refresh_turn_ui()
 		# Hand control to the player. end_player_turn() — the button, or the
 		# out-of-AP path in the wheel handler — emits _turn_finished.
@@ -2896,7 +2906,7 @@ func _process_turn_start(u: BattleCharacter) -> void:
 	for e in report.get("escaped", []):
 		u.float_escaped()
 		_log_note("%s broke free of %s" % [u.unit_name, str(e.get("source", e.get("id", "?")))])
-		print("[combat] %s breaks free of %s." % [u.unit_name, str(e.get("source", e.get("id", "?")))])
+		_dbg("[combat] %s breaks free of %s." % [u.unit_name, str(e.get("source", e.get("id", "?")))])
 	# 1) DoT damage (routed through take_damage so it animates + handles death)
 	for d in report["dots"]:
 		if u.is_alive():
@@ -2929,7 +2939,7 @@ func _process_turn_start(u: BattleCharacter) -> void:
 	if had_shield and not CombatShields.has_shield(u.body):
 		for e in CombatBuffs.break_on_shield_break(u.body):
 			_log_note("%s loses %s — shield gone" % [u.unit_name, str(e.get("source", e.get("id", "?")))])
-			print("[combat] %s loses %s — its shield decayed away." % [u.unit_name, str(e.get("id", "?"))])
+			_dbg("[combat] %s loses %s — its shield decayed away." % [u.unit_name, str(e.get("id", "?"))])
 	u.refresh_bar()
 	u.refresh_buffs()
 
@@ -2957,7 +2967,7 @@ func _revive_downed(u: BattleCharacter) -> void:
 	u.stand_up(1)
 	u.float_status("RISES", Color(0.95, 0.85, 0.45))
 	_log_note("%s rises (Reprieve)%s" % [u.unit_name, (" — %d debuff(s) cleansed" % cleared.size()) if not cleared.is_empty() else ""])
-	print("[combat] %s rises at 1 HP (Reprieve), %d debuff(s) cleansed." % [u.unit_name, cleared.size()])
+	_dbg("[combat] %s rises at 1 HP (Reprieve), %d debuff(s) cleansed." % [u.unit_name, cleared.size()])
 	u.refresh_buffs()
 	if u.team != TEAM_ENEMY and _loaded_ally == null:
 		_load_unit(u)
@@ -2996,7 +3006,7 @@ func _take_ai_turn(u: BattleCharacter) -> void:
 		return
 	if u.ai == "none":
 		_log_note("%s does nothing." % u.unit_name)
-		print("[combat] %s does nothing." % u.unit_name)
+		_dbg("[combat] %s does nothing." % u.unit_name)
 		return
 	await AITurn.run(self, u)
 
@@ -3026,4 +3036,4 @@ func _leave_combat() -> void:
 	if typeof(GameManager) != TYPE_NIL and GameManager.has_method("go_to_overworld"):
 		GameManager.go_to_overworld()
 	else:
-		print("[combat] no GameManager.go_to_overworld() — staying put.")
+		_dbg("[combat] no GameManager.go_to_overworld() — staying put.")

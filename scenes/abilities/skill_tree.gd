@@ -98,9 +98,13 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	# In the editor, keep the lines following the nodes as you drag them.
+	# In the editor, keep the lines following the nodes as you drag them. In the game
+	# this does nothing, so it is switched off in _enter_tree (perf, 2026-09-25).
 	if Engine.is_editor_hint():
 		queue_redraw()
+
+func _enter_tree() -> void:
+	set_process(Engine.is_editor_hint())
 
 
 func _draw() -> void:

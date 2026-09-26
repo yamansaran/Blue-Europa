@@ -66,6 +66,27 @@ func _ready() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK:
 		debug_enabled = bool(cfg.get_value("debug", "enabled", debug_enabled))
+	_disable_font_system_fallback()
+
+## NO SYSTEM-FONT FALLBACK (perf, 2026-09-25 — PERF_REVIEW §1.2). With fallback on,
+## the first time any text needs a glyph Inter lacks (the old ✕ on combat's Leave
+## button, ─, ▾, ✔) Godot searches Windows' fonts for one and loads it — a stall of up
+## to seconds on the first fight. Every such glyph in the code has been swapped for
+## one Inter has. With this off, a missing glyph draws as a small box instead of
+## stalling, so any new one is visible and can be swapped too. The imports are shared
+## resources, so this reaches the theme font and DamageNumber's preloads alike.
+const _INTER_FONTS := [
+	"res://assets/fonts/Inter-VariableFont_opsz,wght.ttf",
+	"res://assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
+]
+var _held_fonts: Array = []
+
+func _disable_font_system_fallback() -> void:
+	for p in _INTER_FONTS:
+		var f = load(p)
+		if f is FontFile:
+			(f as FontFile).allow_system_fallback = false
+			_held_fonts.append(f)   # hold it so the setting can't be lost to an unload
 
 func is_debug() -> bool:
 	return debug_enabled
@@ -164,6 +185,7 @@ func go_to_intro() -> void:
 func go_to_main_menu() -> void:
 	active_shell = null
 	get_tree().change_scene_to_file(SCENE_MAIN_MENU)
+	warm_combat()
 
 ## The slot + name chosen on the main menu, carried to the class-select screen.
 var pending_new_game: Dictionary = {}
@@ -207,6 +229,47 @@ func finish_cutscene() -> void:
 func go_to_shell() -> void:
 	active_shell = null
 	get_tree().change_scene_to_file(SCENE_SHELL)
+	warm_combat()
+
+# ---------------------------------------------------------------------------
+# THE COMBAT SCENE, KEPT LOADED (perf, 2026-09-25 — PERF_REVIEW §1.1)
+# ---------------------------------------------------------------------------
+## combat.tscn drags in ~70 scripts (~700 KB of GDScript) that nothing else uses.
+## Entering it with change_scene_to_file compiled all of them on the click, and
+## because nothing held the scene once the fight ended they unloaded again, so every
+## fight paid (part of) that compile. Now the scene is loaded ONCE per session on a
+## background thread (started from the main menu / the shell, long before anyone
+## clicks a fight) and held here for good; fights enter with change_scene_to_packed.
+## If the background load has not finished when a fight starts, _combat_scene()
+## simply waits for it — never slower than before.
+var _combat_packed: PackedScene = null
+var _combat_warming := false
+
+## Start the background load of combat.tscn. Idempotent; cheap to call often.
+func warm_combat() -> void:
+	if _combat_packed != null or _combat_warming:
+		return
+	if ResourceLoader.load_threaded_request(SCENE_COMBAT) == OK:
+		_combat_warming = true
+
+## The held combat PackedScene (finishing / falling back to a plain load if needed).
+func _combat_scene() -> PackedScene:
+	if _combat_packed != null:
+		return _combat_packed
+	if _combat_warming:
+		_combat_warming = false
+		_combat_packed = ResourceLoader.load_threaded_get(SCENE_COMBAT) as PackedScene
+	if _combat_packed == null:
+		_combat_packed = load(SCENE_COMBAT) as PackedScene
+	return _combat_packed
+
+## Every way into a fight goes through here.
+func _enter_combat() -> void:
+	var packed := _combat_scene()
+	if packed != null:
+		get_tree().change_scene_to_packed(packed)
+	else:
+		get_tree().change_scene_to_file(SCENE_COMBAT)
 
 func _show_in_shell(scene_path: String) -> void:
 	if active_shell != null and is_instance_valid(active_shell):
@@ -292,7 +355,7 @@ func go_to_training_dummy() -> void:
 	BattleState.battle_id = "training"
 	BattleState.is_campaign = false
 	# empty enemies => default Training Dummy (9999 HP, unkillable practice)
-	get_tree().change_scene_to_file(SCENE_COMBAT)
+	_enter_combat()
 
 ## Stage and start the CURRENT campaign's next fight (from CampaignDB). If the
 ## campaign is already finished there is no fight to run — bounce to the
@@ -339,4 +402,4 @@ func _stage_fight(fight: Dictionary, is_campaign: bool) -> void:
 		var camp = CampaignDB.get_current()
 		if camp != null:
 			BattleState.background_color = camp.background_color
-	get_tree().change_scene_to_file(SCENE_COMBAT)
+	_enter_combat()

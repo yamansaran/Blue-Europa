@@ -73,7 +73,12 @@ var _all: Array = []
 var units: Array = []
 ## The DISPLAY clock, in ticks. Tweened by scroll_to(); combat.gd's own _clock is
 ## the authority and this only ever chases it.
-var clock: float = 0.0
+## Redraws itself on every change (perf, 2026-09-25) so a scroll animates at full rate
+## while the idle poll in _process can run slowly.
+var clock: float = 0.0:
+	set(v):
+		clock = v
+		queue_redraw()
 ## The unit currently taking its turn, so its row can be highlighted. May be null
 ## between turns.
 var active: BattleCharacter = null
@@ -163,10 +168,22 @@ func snap_to(target: float) -> void:
 	clock = target
 	queue_redraw()
 
-func _process(_delta: float) -> void:
-	# Cheap (a handful of draw_rects) and it keeps the bars honest without
-	# combat.gd having to signal every stat change that moves an interval. Rows are
-	# re-derived here too, so a death or a revive needs no signal from combat.
+## The idle poll's period (perf, 2026-09-25). It used to redraw EVERY frame for the
+## whole fight — each redraw re-reads every unit's interval (full basket scans) and
+## redraws the names. Scrolls still animate every frame (the `clock` setter); combat's
+## _refresh_turn_ui redraws at once after every action; this poll only has to catch
+## what changes with no signal (a death, a revive, a haste landing), and 10 Hz does.
+const IDLE_REFRESH := 0.1
+var _idle_acc := 0.0
+
+func _process(delta: float) -> void:
+	_idle_acc += delta
+	if _idle_acc < IDLE_REFRESH:
+		return
+	_idle_acc = 0.0
+	# Keeps the bars honest without combat.gd having to signal every stat change that
+	# moves an interval. Rows are re-derived here too, so a death or a revive needs no
+	# signal from combat.
 	if _refresh_rows():
 		var ds := desired_size()
 		custom_minimum_size = ds
