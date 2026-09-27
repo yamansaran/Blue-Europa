@@ -1,8 +1,12 @@
 class_name BattleCharacter
 extends Control
-## Combat model, rev6: driven by a CharacterBase `body`. The placeholder model is
-## a rectangle tinted by the name-hash colour (or the character's portrait if one
-## is assigned). HP and Spirit are read from / written to the body.
+## Combat model, rev6: driven by a CharacterBase `body`. The model is, in order of
+## preference: an animated RIG (body.rig_plan set — claude/RIG_SPEC.md), the
+## character's portrait, or a rectangle tinted by the name-hash colour. HP and Spirit
+## are read from / written to the body.
+## THE CONTROL RECT IS UNCHANGED BY A RIG: it is still the click box, the anchor for
+## the overhead bars, numbers and camera. The rig is drawn inside it, feet on its
+## bottom-centre, and may spill past it (a raised weapon).
 
 signal hovered(unit: BattleCharacter)
 signal unhovered(unit: BattleCharacter)
@@ -34,6 +38,8 @@ var death_guard: Callable = Callable()
 ## it (combat._next_actor), defeat does not fire (combat._check_defeat), and at the
 ## start of its next turn combat stands it up (stand_up).
 const DOWNED := -1
+## Spawn an ImpactBurst where every sourced hit lands (RIG_SPEC §12). Presentation only.
+const IMPACT_BURSTS := true
 var downed: bool = false
 var team: int = 0
 var ai: String = "none"
@@ -144,13 +150,24 @@ var cached_interval: float = 0.0
 var _rect: ColorRect
 var _portrait: TextureRect
 var _label: Label
+## The animated body (null = rectangle / portrait). Presentation only.
+var rig: UnitRig = null
+## +1 faces right (the party), -1 faces left (the foes). Set by combat at placement.
+var facing: float = 1.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	if body != null:
 		unit_name = body.char_name
 
-	if body != null and body.portrait != null:
+	if body != null and body.rig_plan != &"" and RigPlans.has(body.rig_plan):
+		rig = UnitRig.create(body.rig_plan)
+	if rig != null:
+		add_child(rig)
+		rig.dress(body)
+		rig.set_facing(facing)
+		rig.fit_to(size)
+	elif body != null and body.portrait != null:
 		_portrait = TextureRect.new()
 		_portrait.texture = body.portrait
 		_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -199,6 +216,8 @@ func _ready() -> void:
 
 
 func _on_resized() -> void:
+	if rig:
+		rig.fit_to(size)
 	if overhead:
 		overhead.relayout()
 		if _label:
@@ -222,6 +241,22 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		clicked.emit(self)
 		accept_event()
+
+## Which way the model faces (+1 right, -1 left). Only a rig cares.
+func set_facing(dir: float) -> void:
+	facing = -1.0 if dir < 0.0 else 1.0
+	if rig:
+		rig.set_facing(facing)
+		rig.fit_to(size)
+
+## The weapon class in the main hand (&"unarmed" when empty) — picks the attack /
+## windup clip set and whether an attack is melee (CombatChoreo).
+func main_weapon_class() -> StringName:
+	if body == null or not body.rig_gear.has("weapon_main"):
+		return &"unarmed"
+	var db := get_node_or_null("/root/ItemDB")
+	var item = db.get_item(body.rig_gear["weapon_main"]) if db and db.has_method("get_item") else null
+	return RigPlans.weapon_class_of(item) if item != null else &"unarmed"
 
 func _model_color() -> Color:
 	if body != null:
@@ -251,6 +286,8 @@ func stand_up(hp: int) -> void:
 	downed = false
 	body.current_hp = clampi(hp, 1, body.max_hp())
 	modulate = Color(1, 1, 1, 1)
+	if rig and not rig.play(&"rise"):
+		rig.play_idle()
 	refresh_bar()
 
 # ---- per-turn action state --------------------------------------------
@@ -377,6 +414,9 @@ func refresh_buffs() -> void:
 		buff_bar.refresh()
 	if overhead:
 		overhead.refresh_buffs()
+	# A STUNNED rig rests in the stun loop instead of idle (RIG_SPEC §12).
+	if rig and body and is_alive():
+		rig.set_idle(&"stun" if CombatBuffs.is_stunned(body) else UnitRig.IDLE)
 
 # ---- mutations --------------------------------------------------------
 ## Apply damage and float a damage number over this unit. `element` tints the
@@ -446,11 +486,25 @@ func take_damage(amount: int, element: String = "physical", is_crit: bool = fals
 		health_damaged.emit(self)
 	refresh_bar()
 	_spawn_number(amount, element, is_crit, false)
+	# EFFECT: a burst where a SOURCED hit lands (any unit, rigged or not).
+	if IMPACT_BURSTS and source != null and amount > 0 and get_parent() != null:
+		ImpactBurst.spawn(get_parent(), position + size * 0.5, ElementColors.color(element),
+			ImpactBurst.Kind.CRIT if is_crit else ImpactBurst.Kind.HIT)
 	if _rect:
 		var base := _model_color()
 		_rect.color = Color(1, 1, 1)
 		var t := create_tween()
 		t.tween_property(_rect, "color", base, 0.25)
+	elif rig:
+		rig.flash()
+		if is_alive():
+			if amount > 0:
+				rig.play(&"hit")
+		elif hp_before > 0:
+			# THE blow that dropped it: fall (death) or slump (downed). Both clips hold
+			# their last frame; a rig without them just freezes.
+			if not rig.play(&"down" if downed else &"death"):
+				rig.hold_still()
 	if not is_alive():
 		# Downed reads lighter than dead: still greyed, but clearly not gone.
 		modulate = Color(0.65, 0.65, 0.75, 0.85) if downed else Color(0.45, 0.45, 0.45, 0.7)
@@ -527,6 +581,8 @@ func float_status(label: String, color: Color, font_size: int = DamageNumber.STA
 ## Convenience wrappers so combat.gd never has to know the palette.
 func float_dodge() -> void:
 	float_status("DODGE", DamageNumber.DODGE_COLOR)
+	if rig and is_alive():
+		rig.play(&"dodge")
 
 func float_resist() -> void:
 	float_status("RESIST", DamageNumber.RESIST_COLOR)

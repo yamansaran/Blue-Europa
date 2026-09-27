@@ -1,0 +1,308 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/rig/unit_rig.gd" id="1_unitrig"]
+[ext_resource type="Script" path="res://scenes/characters/rig/rig_part.gd" id="2_rigpart"]
+
+[node name="HumanoidRig" type="Node2D"]
+script = ExtResource("1_unitrig")
+rig_height = 198.0
+
+[node name="Skeleton2D" type="Skeleton2D" parent="."]
+
+[node name="hip" type="Bone2D" parent="Skeleton2D"]
+position = Vector2(0, -99)
+rest = Transform2D(1, 0, 0, 1, 0, -99)
+auto_calculate_length_and_angle = false
+length = 12.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip"]
+remote_path = NodePath("../../../Parts/hip")
+
+[node name="torso" type="Bone2D" parent="Skeleton2D/hip"]
+position = Vector2(0, -6)
+rotation = -1.5707963
+rest = Transform2D(0, -1, 1, 0, 0, -6)
+auto_calculate_length_and_angle = false
+length = 62.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso"]
+remote_path = NodePath("../../../../Parts/torso")
+
+[node name="head" type="Bone2D" parent="Skeleton2D/hip/torso"]
+position = Vector2(64, 2)
+rest = Transform2D(1, 0, 0, 1, 64, 2)
+auto_calculate_length_and_angle = false
+length = 28.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/head"]
+remote_path = NodePath("../../../../../Parts/head")
+
+[node name="upper_arm_near" type="Bone2D" parent="Skeleton2D/hip/torso"]
+position = Vector2(56, 3)
+rotation = 2.9915927
+rest = Transform2D(-0.988771, 0.149438, -0.149438, -0.988771, 56, 3)
+auto_calculate_length_and_angle = false
+length = 34.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_near"]
+remote_path = NodePath("../../../../../Parts/upper_arm_near")
+
+[node name="forearm_near" type="Bone2D" parent="Skeleton2D/hip/torso/upper_arm_near"]
+position = Vector2(34, 0)
+rotation = -0.3500000
+rest = Transform2D(0.939373, -0.342898, 0.342898, 0.939373, 34, 0)
+auto_calculate_length_and_angle = false
+length = 30.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_near/forearm_near"]
+remote_path = NodePath("../../../../../../Parts/forearm_near")
+
+[node name="hand_near" type="Bone2D" parent="Skeleton2D/hip/torso/upper_arm_near/forearm_near"]
+position = Vector2(30, 0)
+rest = Transform2D(1, 0, 0, 1, 30, 0)
+auto_calculate_length_and_angle = false
+length = 11.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_near/forearm_near/hand_near"]
+remote_path = NodePath("../../../../../../../Parts/hand_near")
+
+[node name="weapon_main" type="Bone2D" parent="Skeleton2D/hip/torso/upper_arm_near/forearm_near/hand_near"]
+position = Vector2(5, 0)
+rotation = -1.0707963
+rest = Transform2D(0.479426, -0.877583, 0.877583, 0.479426, 5, 0)
+auto_calculate_length_and_angle = false
+length = 20.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_near/forearm_near/hand_near/weapon_main"]
+remote_path = NodePath("../../../../../../../../Parts/weapon_main")
+
+[node name="upper_arm_far" type="Bone2D" parent="Skeleton2D/hip/torso"]
+position = Vector2(56, -3)
+rotation = 3.2615927
+rest = Transform2D(-0.992809, -0.119712, 0.119712, -0.992809, 56, -3)
+auto_calculate_length_and_angle = false
+length = 34.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_far"]
+remote_path = NodePath("../../../../../Parts/upper_arm_far")
+
+[node name="forearm_far" type="Bone2D" parent="Skeleton2D/hip/torso/upper_arm_far"]
+position = Vector2(34, 0)
+rotation = -0.2500000
+rest = Transform2D(0.968912, -0.247404, 0.247404, 0.968912, 34, 0)
+auto_calculate_length_and_angle = false
+length = 30.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_far/forearm_far"]
+remote_path = NodePath("../../../../../../Parts/forearm_far")
+
+[node name="hand_far" type="Bone2D" parent="Skeleton2D/hip/torso/upper_arm_far/forearm_far"]
+position = Vector2(30, 0)
+rest = Transform2D(1, 0, 0, 1, 30, 0)
+auto_calculate_length_and_angle = false
+length = 11.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_far/forearm_far/hand_far"]
+remote_path = NodePath("../../../../../../../Parts/hand_far")
+
+[node name="weapon_off" type="Bone2D" parent="Skeleton2D/hip/torso/upper_arm_far/forearm_far/hand_far"]
+position = Vector2(5, 0)
+rotation = -1.4407963
+rest = Transform2D(0.129634, -0.991562, 0.991562, 0.129634, 5, 0)
+auto_calculate_length_and_angle = false
+length = 20.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/torso/upper_arm_far/forearm_far/hand_far/weapon_off"]
+remote_path = NodePath("../../../../../../../../Parts/weapon_off")
+
+[node name="thigh_near" type="Bone2D" parent="Skeleton2D/hip"]
+position = Vector2(3, 6)
+rotation = 1.5107963
+rest = Transform2D(0.059964, 0.998201, -0.998201, 0.059964, 3, 6)
+auto_calculate_length_and_angle = false
+length = 44.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/thigh_near"]
+remote_path = NodePath("../../../../Parts/thigh_near")
+
+[node name="calf_near" type="Bone2D" parent="Skeleton2D/hip/thigh_near"]
+position = Vector2(44, 0)
+rotation = 0.1000000
+rest = Transform2D(0.995004, 0.0998334, -0.0998334, 0.995004, 44, 0)
+auto_calculate_length_and_angle = false
+length = 44.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/thigh_near/calf_near"]
+remote_path = NodePath("../../../../../Parts/calf_near")
+
+[node name="foot_near" type="Bone2D" parent="Skeleton2D/hip/thigh_near/calf_near"]
+position = Vector2(44, 0)
+rotation = -1.6107963
+rest = Transform2D(-0.0399893, -0.9992, 0.9992, -0.0399893, 44, 0)
+auto_calculate_length_and_angle = false
+length = 16.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/thigh_near/calf_near/foot_near"]
+remote_path = NodePath("../../../../../../Parts/foot_near")
+
+[node name="thigh_far" type="Bone2D" parent="Skeleton2D/hip"]
+position = Vector2(-3, 6)
+rotation = 1.6507963
+rest = Transform2D(-0.0799147, 0.996802, -0.996802, -0.0799147, -3, 6)
+auto_calculate_length_and_angle = false
+length = 44.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/thigh_far"]
+remote_path = NodePath("../../../../Parts/thigh_far")
+
+[node name="calf_far" type="Bone2D" parent="Skeleton2D/hip/thigh_far"]
+position = Vector2(44, 0)
+rotation = 0.0200000
+rest = Transform2D(0.9998, 0.0199987, -0.0199987, 0.9998, 44, 0)
+auto_calculate_length_and_angle = false
+length = 44.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/thigh_far/calf_far"]
+remote_path = NodePath("../../../../../Parts/calf_far")
+
+[node name="foot_far" type="Bone2D" parent="Skeleton2D/hip/thigh_far/calf_far"]
+position = Vector2(44, 0)
+rotation = -1.6707963
+rest = Transform2D(-0.0998334, -0.995004, 0.995004, -0.0998334, 44, 0)
+auto_calculate_length_and_angle = false
+length = 16.0
+bone_angle = 0.0
+
+[node name="rt" type="RemoteTransform2D" parent="Skeleton2D/hip/thigh_far/calf_far/foot_far"]
+remote_path = NodePath("../../../../../../Parts/foot_far")
+
+[node name="Parts" type="Node2D" parent="."]
+
+[node name="upper_arm_far" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"upper_arm_far"
+length = 34.0
+thickness = 12.0
+
+[node name="forearm_far" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"forearm_far"
+length = 30.0
+thickness = 10.0
+
+[node name="hand_far" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"hand_far"
+shape = 1
+length = 11.0
+thickness = 11.0
+
+[node name="weapon_off" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"weapon_off"
+shape = 3
+length = 20.0
+thickness = 4.0
+
+[node name="thigh_far" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"thigh_far"
+length = 44.0
+thickness = 16.0
+
+[node name="calf_far" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"calf_far"
+length = 44.0
+thickness = 13.0
+
+[node name="foot_far" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"foot_far"
+length = 16.0
+thickness = 9.0
+
+[node name="hip" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"hip"
+shape = 2
+length = 30.0
+thickness = 22.0
+
+[node name="torso" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"torso"
+length = 62.0
+thickness = 30.0
+inset_ends = true
+
+[node name="head" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"head"
+shape = 1
+length = 28.0
+thickness = 28.0
+face_mark = true
+
+[node name="thigh_near" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"thigh_near"
+length = 44.0
+thickness = 16.0
+
+[node name="calf_near" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"calf_near"
+length = 44.0
+thickness = 13.0
+
+[node name="foot_near" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"foot_near"
+length = 16.0
+thickness = 9.0
+
+[node name="upper_arm_near" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"upper_arm_near"
+length = 34.0
+thickness = 12.0
+
+[node name="forearm_near" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"forearm_near"
+length = 30.0
+thickness = 10.0
+
+[node name="hand_near" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"hand_near"
+shape = 1
+length = 11.0
+thickness = 11.0
+
+[node name="weapon_main" type="Sprite2D" parent="Parts"]
+script = ExtResource("2_rigpart")
+part_id = &"weapon_main"
+shape = 3
+length = 20.0
+thickness = 4.0
+preview_class = &"blade"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]

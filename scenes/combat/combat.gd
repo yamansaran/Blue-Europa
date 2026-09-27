@@ -76,6 +76,10 @@ const TEAM_ALLY := 1
 const TEAM_ENEMY := 2
 
 const UNIT_SIZE := Vector2(90, 140)
+## A RIGGED caster performs its action (run + strike, windup + projectile, cast) and
+## the ability resolves on the clip's cue (CombatChoreo, claude/RIG_SPEC.md §6).
+## false = the old instant resolve; rigs still idle, flinch, dodge and fall.
+const RIG_CHOREOGRAPHY := true
 
 # --- the formation grid (rev32) ----------------------------------------
 ## One BattleGrid per side, 5 rows x 2 columns each. Occupancy only — where a slot
@@ -124,6 +128,16 @@ const CAM_HOLD_TIME := 0.55
 var _cam_tween: Tween = null
 ## The unit the camera is currently centred on (null = centre of the battlefield).
 var _cam_target: BattleCharacter = null
+## Performs a RIGGED caster's actions (RIG_CHOREOGRAPHY).
+var _choreo: CombatChoreo = null
+## THE HIT PACER (RIG_SPEC §12). Set by CombatChoreo for the length of ONE rigged
+## cast: _resolve_hits_on awaits _hit_pacer.call(hit_index, target) before every
+## strike, so each hit lands on its own swing / shot. Invalid (the default, and every
+## unrigged cast) = no await ever happens and resolution stays synchronous.
+var _hit_pacer: Callable = Callable()
+## True once _win has run (the rig's victory pose reads it; _battle_over also covers
+## a defeat).
+var _won: bool = false
 ## True while an action is panning / resolving / holding. Blocks clicks, End Turn and
 ## a second action, so two actions can never overlap.
 var _action_busy: bool = false
@@ -237,6 +251,7 @@ func _ready() -> void:
 	_debug = typeof(GameManager) != TYPE_NIL and GameManager.has_method("is_debug") and GameManager.is_debug()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_layout()
+	_choreo = CombatChoreo.new(self, _battle_panel)
 	_load_units()
 	_apply_permanent_buffs()
 	_apply_passive_buffs()
@@ -718,6 +733,7 @@ func _apply_grid_positions() -> void:
 		u.offset_right = UNIT_SIZE.x * 0.5 * s
 		u.offset_top = -UNIT_SIZE.y * 0.5 * s
 		u.offset_bottom = UNIT_SIZE.y * 0.5 * s
+		u.set_facing(BattleGrid.facing(_side_of(u)))
 	_sort_unit_depth()
 	if _grid_overlay:
 		_grid_overlay.queue_redraw()
@@ -1067,25 +1083,44 @@ func _perform_action(caster: BattleCharacter, ability: Ability, tgt: BattleChara
 	_action_busy = true
 	_refresh_turn_ui()
 	var focus := CAMERA_ENABLED and _camera_wants(caster, ability, tgt)
-	if focus and _cam_target != tgt:
-		_camera_focus(tgt)
-		await get_tree().create_timer(CAM_IN_TIME).timeout
-	else:
+	var rigged := RIG_CHOREOGRAPHY and caster != null and caster.rig != null
+	if rigged:
+		# RIGGED (RIG_SPEC §6): the camera moves WHILE the caster runs / winds up, and
+		# the ability resolves on the clip's cue inside the choreography.
+		if focus and _cam_target != tgt:
+			_camera_focus(tgt)
 		await get_tree().process_frame
-	if not is_inside_tree():
-		return
-	if _battle_over:
-		_action_busy = false
-		return
-	_use_ability(caster, ability, tgt, slot)
-	# Resolution can end the fight and leave the scene (belt and braces — defeat and
-	# victory both defer their exit now, but nothing below may assume a tree).
-	if not is_inside_tree():
-		return
-	if focus:
-		await get_tree().create_timer(CAM_HOLD_TIME).timeout
 		if not is_inside_tree():
 			return
+		if _battle_over:
+			_action_busy = false
+			return
+		var do_resolve := func() -> void:
+			if is_inside_tree() and not _battle_over:
+				await _use_ability(caster, ability, tgt, slot)
+		await _choreo.perform(caster, ability, tgt, do_resolve)
+		if not is_inside_tree():
+			return
+	else:
+		if focus and _cam_target != tgt:
+			_camera_focus(tgt)
+			await get_tree().create_timer(CAM_IN_TIME).timeout
+		else:
+			await get_tree().process_frame
+		if not is_inside_tree():
+			return
+		if _battle_over:
+			_action_busy = false
+			return
+		await _use_ability(caster, ability, tgt, slot)
+		# Resolution can end the fight and leave the scene (belt and braces — defeat and
+		# victory both defer their exit now, but nothing below may assume a tree).
+		if not is_inside_tree():
+			return
+		if focus:
+			await get_tree().create_timer(CAM_HOLD_TIME).timeout
+			if not is_inside_tree():
+				return
 	if _cam_target != null or (_battle_panel and _battle_panel.scale != Vector2.ONE):
 		_camera_reset()
 	_action_busy = false
@@ -1294,6 +1329,10 @@ func _resolve_hits_on(caster: BattleCharacter, ability: Ability, tgt: BattleChar
 	var n := ability.hit_count_at(rank)
 	var retarget := ability.retargets_each_hit()
 	if n <= 1 and not retarget:
+		if _hit_pacer.is_valid():
+			await _hit_pacer.call(0, tgt)
+			if not is_inside_tree() or _battle_over or tgt == null or not tgt.is_alive():
+				return {"any_hit": false, "detail": ""}
 		var one := _resolve_attack_on(caster, ability, tgt, rank, scale_bonus, include_caster_gain)
 		return {"any_hit": not bool(one.get("dodged", false)), "detail": str(one.get("detail", ""))}
 
@@ -1310,6 +1349,11 @@ func _resolve_hits_on(caster: BattleCharacter, ability: Ability, tgt: BattleChar
 		var t: BattleCharacter = _random_legal_target(caster, ability) if retarget else tgt
 		if t == null or t.body == null or not t.is_alive():
 			break
+		# RIGGED: wait for this strike's swing / shot to land (see _hit_pacer).
+		if _hit_pacer.is_valid():
+			await _hit_pacer.call(i, t)
+			if not is_inside_tree() or _battle_over or not caster.is_alive() or not t.is_alive():
+				break
 		var r := _resolve_attack_on(caster, ability, t, rank, scale_bonus, include_caster_gain and i == 0, scale)
 		attempted += 1
 		if bool(r.get("dodged", false)):
@@ -1533,7 +1577,9 @@ func _use_ability(caster: BattleCharacter, ability: Ability, tgt: BattleCharacte
 				# ONE ATTACK AGAINST THIS UNIT — which may be several strikes. The
 				# fan-out is OUTSIDE the hit loop on purpose: an AoE multi-hit is
 				# "N hits on each of M units", never N hits scattered across them.
-				var res := _resolve_hits_on(caster, ability, u, rank, scale_bonus, first)
+				# AWAITED: a rigged multi-hit suspends between strikes (_hit_pacer). With no
+				# pacer nothing inside ever awaits, so this returns at once as before.
+				var res: Dictionary = await _resolve_hits_on(caster, ability, u, rank, scale_bonus, first)
 				if bool(res.get("any_hit", false)):
 					any_hit = true
 				details.append(str(res.get("detail", "")))
@@ -2405,8 +2451,13 @@ func _leave_after_defeat() -> void:
 
 func _win() -> void:
 	_battle_over = true
+	_won = true
 	if _wheel:
 		_wheel.close()
+	# Every standing rigged party member strikes the victory pose (held).
+	for u in _units:
+		if u.team != TEAM_ENEMY and u.rig != null and u.is_alive():
+			u.rig.play(&"victory")
 	_record_damage_history()
 	var ch := get_node_or_null("/root/Character")
 	var party := []

@@ -73,6 +73,16 @@ class_name CharacterBase
 ## Visual size multiplier for the on-screen model (bosses are drawn bigger). Set
 ## by a character module (or a spec's "size_scale" key); read by the combat engine.
 @export var size_scale: float = 1.0
+## RIG (claude/RIG_SPEC.md §4). The body plan this unit is drawn with (a RigPlans id,
+## e.g. &"humanoid"); &"" = no rig — the unit keeps its rectangle / portrait. Only the
+## player has one for now. Spec key "rig".
+@export var rig_plan: StringName = &""
+## The rig's base look. null = the placeholder mannequin in model_color().
+@export var skin: RigSkin = null
+## What the rig is drawn WEARING: {slot_key: item_id}. VISUAL ONLY — stats come from
+## the items basket. The player's is mirrored from Character.equipped_items; anyone
+## else's is set by its module or a fight spec's "gear" key. Not saved.
+var rig_gear: Dictionary = {}
 
 # --- permanent buffs --------------------------------------------------------
 ## BuffLibrary ids that are AUTOMATICALLY applied to this character at the START
@@ -326,6 +336,9 @@ func clone() -> CharacterBase:
 	cb.companion = companion
 	cb.figure = figure
 	cb.size_scale = size_scale
+	cb.rig_plan = rig_plan
+	cb.skin = skin
+	cb.rig_gear = rig_gear.duplicate()
 	cb.bounty_money = bounty_money
 	cb.bounty_xp = bounty_xp
 	cb.permanent_buffs = permanent_buffs.duplicate()
@@ -383,6 +396,14 @@ static func apply_spec_overrides(cb: CharacterBase, spec: Dictionary) -> void:
 		cb.companion = bool(spec["companion"])
 	if spec.has("figure"):
 		cb.figure = _parse_figure(spec["figure"])
+	# RIG: "rig" names the body plan ("" = none); "gear" {slot_key: item_id} dresses it.
+	if spec.has("rig"):
+		cb.rig_plan = StringName(str(spec["rig"]))
+	if spec.has("gear") and typeof(spec["gear"]) == TYPE_DICTIONARY:
+		var g := {}
+		for k in spec["gear"]:
+			g[str(k)] = str(spec["gear"][k])
+		cb.rig_gear = g
 
 	var overrides = spec.get("stats", {})
 	if typeof(overrides) == TYPE_DICTIONARY:

@@ -49,6 +49,7 @@ const SCENE_CUTSCENE     := "res://scenes/cutscenes/cutscene_player.tscn"
 ##     flag a second time.
 ##   - class select: LOCKED classes are pickable ("LOCKED (debug: playable)") so an
 ##     unfinished class (the Nephilic) can be started for testing.
+##   - combat: a magenta cross on every RIGGED unit's feet point (UnitRig._draw)
 ##
 ## Anything debug-only added from here on should check GameManager.is_debug()
 ## before it builds itself.

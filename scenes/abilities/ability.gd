@@ -556,6 +556,20 @@ const AI_DEBUFF := "debuff"
 ## to read. Blank (the default) = no follow-up, so every existing .tres is unaffected.
 @export var ai_follow_up: StringName = &""
 
+# --- presentation: how a RIGGED caster performs it (claude/RIG_SPEC.md §6) ----
+## MELEE runs to the target and strikes; RANGED winds up in place and sends a
+## projectile; STAY casts in place. AUTO derives it (CombatChoreo.motion_for): a
+## buff / heal / shield or anything friendly STAYs; an area or scattered ability is
+## RANGED; an ATTACK-delivery attack is MELEE unless the caster holds a gun, bow or
+## staff; everything else hostile is RANGED. Presentation only — never read by the
+## damage path or the AI. Every existing .tres inherits AUTO.
+enum Motion { AUTO, MELEE, RANGED, STAY }
+@export var motion: Motion = Motion.AUTO
+## Clip override (blank = attack_<weapon> / windup_<weapon> / cast_self by motion).
+@export var anim: StringName = &""
+## RANGED only: what flies to the target. null = an orb in the element's colour.
+@export var projectile: ProjectileLook = null
+
 ## The intents this ability serves when it declares none of its own, derived from
 ## kind + target. Deriving rather than authoring is what lets every existing .tres
 ## work with no re-save.

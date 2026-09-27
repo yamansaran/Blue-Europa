@@ -30,6 +30,11 @@ var _model_rect: ColorRect
 var _model_tex: TextureRect
 var _model_name: Label
 var _built := false
+## The LIVE rig (RIG_SPEC §12) — shown instead of the colour block when the player's
+## body has a rig_plan; re-dressed on every Character.changed, so equipping shows at
+## once. _rig_box has _model_rect's anchors; the rig stands on its bottom-centre.
+var _rig_box: Control
+var _rig: UnitRig = null
 
 
 func _ready() -> void:
@@ -85,6 +90,15 @@ func _build() -> void:
 	_model_rect.offset_bottom = 0.0
 	_model_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	model.add_child(_model_rect)
+
+	_rig_box = Control.new()
+	_rig_box.anchor_left = 0.18
+	_rig_box.anchor_top = 0.08
+	_rig_box.anchor_right = 0.82
+	_rig_box.anchor_bottom = 0.80
+	_rig_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rig_box.resized.connect(_fit_rig)
+	model.add_child(_rig_box)
 
 	_model_tex = TextureRect.new()
 	_model_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -148,6 +162,21 @@ func _add_slot(key: String, l: float, t: float, r: float, b: float) -> void:
 func _on_changed() -> void:
 	refresh()
 
+func _show_rig(body) -> void:
+	if _rig == null or _rig.plan != body.rig_plan:
+		if _rig:
+			_rig.queue_free()
+		_rig = UnitRig.create(body.rig_plan)
+		if _rig == null:
+			return
+		_rig_box.add_child(_rig)
+		_fit_rig()
+	_rig.dress(body)
+
+func _fit_rig() -> void:
+	if _rig:
+		_rig.fit_to(_rig_box.size)
+
 
 func refresh() -> void:
 	if not _built:
@@ -157,7 +186,11 @@ func refresh() -> void:
 	if ch and ch.has_method("get_body"):
 		var body = ch.get_body()
 		if body != null:
-			if body.portrait != null:
+			if body.rig_plan != &"" and RigPlans.has(body.rig_plan):
+				_show_rig(body)
+				_model_rect.visible = false
+				_model_tex.visible = false
+			elif body.portrait != null:
 				_model_tex.texture = body.portrait
 				_model_tex.visible = true
 				_model_rect.visible = false

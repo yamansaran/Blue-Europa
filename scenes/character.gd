@@ -250,6 +250,10 @@ func _rebuild_attribute_basket() -> void:
 ## `mods` snapshot on the equip dict as a fallback if ItemDB is unavailable.
 func _rebuild_item_basket() -> void:
 	body.clear_basket("items")
+	# The rig draws what is equipped (RIG_SPEC §4) — rebuilt here with the basket, so
+	# every equip / unequip / load reaches it with no extra call.
+	var gear := {}
+	body.rig_gear = gear
 	for slot_key in equipped_items.keys():
 		var entry = equipped_items[slot_key]
 		if typeof(entry) != TYPE_DICTIONARY:
@@ -257,6 +261,7 @@ func _rebuild_item_basket() -> void:
 		var iid := str(entry.get("id", ""))
 		if iid == "":
 			continue
+		gear[str(slot_key)] = iid
 		var mods := {}
 		var item := _resolve_item(iid)
 		if item != null and typeof(item.stats) == TYPE_DICTIONARY:

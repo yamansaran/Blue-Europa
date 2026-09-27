@@ -107,8 +107,12 @@ const NO_ICON_COLOR := Color(1.0, 0.31, 0.72)
 ## Stat mods applied while equipped: { stat_key(String): amount(float) }. Keys
 ## come from the Stats vocabulary (e.g. "vigor", "fire_amp", "physical_defense").
 @export var stats: Dictionary = {}
-## Optional character-model piece shown on the rig when equipped (future art).
+## UNUSED — superseded by `look` below (kept so existing .tres files still load).
 @export var model: PackedScene = null
+## How this item is DRAWN on a rig when equipped (armour pieces, or a weapon image +
+## grip + class). null = a placeholder: armour tints the parts its slot covers, a
+## weapon draws the shape its item_type implies. claude/RIG_SPEC.md §4.
+@export var look: ItemLook = null
 
 # --- economy ----------------------------------------------------------------
 @export var value: int = 10          # buy price
